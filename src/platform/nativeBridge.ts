@@ -5,6 +5,13 @@ export interface NativeCapabilities {
   mpv: { available: boolean; version: string | null };
 }
 
+export interface ConfiguredAddon {
+  id: string;
+  name: string;
+  supportsStreams: boolean;
+  supportsSubtitles: boolean;
+}
+
 export type NativePlayerEvent =
   | { kind: 'ready' }
   | { kind: 'file-loaded' }
@@ -72,4 +79,34 @@ export async function readNativePlayerEvents(): Promise<NativePlayerEvent[]> {
 export async function shutdownNativePlayer(): Promise<void> {
   if (!isNativeShell()) return;
   return invoke('player_shutdown');
+}
+
+export async function readMediaConfiguration(): Promise<ConfiguredAddon[]> {
+  if (!isNativeShell()) return [];
+  return invoke<ConfiguredAddon[]>('media_configuration_status');
+}
+
+export async function addMediaConfiguration(manifestUrl: string): Promise<ConfiguredAddon[]> {
+  if (!isNativeShell()) throw new Error('Protected media configuration is available in the desktop app');
+  return invoke<ConfiguredAddon[]>('media_configuration_add', { manifestUrl });
+}
+
+export async function removeMediaConfiguration(addonId: string): Promise<ConfiguredAddon[]> {
+  if (!isNativeShell()) throw new Error('Protected media configuration is available in the desktop app');
+  return invoke<ConfiguredAddon[]>('media_configuration_remove', { addonId });
+}
+
+export async function disconnectMediaConfiguration(): Promise<void> {
+  if (!isNativeShell()) return;
+  return invoke('media_configuration_disconnect');
+}
+
+export async function fetchConfiguredAddonResource(request: {
+  addonId: string;
+  resource: 'stream' | 'subtitles' | 'meta';
+  contentType: ContentType;
+  id: string;
+}): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Protected media configuration is available in the desktop app');
+  return invoke('fetch_configured_addon_resource', { request });
 }

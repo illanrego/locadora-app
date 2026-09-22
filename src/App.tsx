@@ -3,6 +3,7 @@ import type { ContentType, DiscoveryTitle } from './domain/content';
 import { GENRES, copy, type Locale } from './locadora/catalog';
 import { loadShelf, type ShelfPage } from './locadora/discovery';
 import { SidePanel } from './components/SidePanel';
+import { MediaSettings } from './components/MediaSettings';
 import { TitleInspection } from './components/TitleInspection';
 import { VhsTape } from './components/VhsTape';
 import { readNativeCapabilities, type NativeCapabilities } from './platform/nativeBridge';
@@ -28,6 +29,7 @@ export default function App() {
   const [basket, setBasket] = useState<DiscoveryTitle[]>([]);
   const [panel, setPanel] = useState<Panel>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mediaSettingsOpen, setMediaSettingsOpen] = useState(false);
   const [nativeCapabilities, setNativeCapabilities] = useState<NativeCapabilities | null>(null);
   const t = copy[locale];
   const genre = GENRES[genreIndex];
@@ -140,6 +142,9 @@ export default function App() {
                 {locale === 'pt-BR' ? 'English' : 'Português'}
               </button>
             </div>
+            <button type="button" onClick={() => setMediaSettingsOpen(true)}>
+              {locale === 'pt-BR' ? 'Fontes de mídia' : 'Media sources'}
+            </button>
             <p>
               <strong>Player:</strong>{' '}
               {nativeCapabilities?.mpv.available
@@ -203,6 +208,7 @@ export default function App() {
         />
       )}
       {panel && <SidePanel kind={panel} locale={locale} basket={basket} onRemove={toggleBasket} onClose={() => setPanel(null)} />}
+      {mediaSettingsOpen && <MediaSettings locale={locale} onClose={() => setMediaSettingsOpen(false)} />}
     </div>
   );
 }

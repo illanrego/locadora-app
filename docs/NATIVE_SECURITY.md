@@ -13,6 +13,9 @@ commands are the complete privileged interface.
 - `fetch_addon_json` — accepts one manifest plus an allowlisted protocol
   resource (`manifest`, `meta`, `stream`, or `subtitles`). The native core
   constructs resource URLs itself.
+- `media_configuration_*` and `fetch_configured_addon_resource` — validate,
+  store, summarize, use, remove, or delete compatible add-ons. A stored URL is
+  selected by sanitized add-on ID and is never returned to the webview.
 - `fetch_public_shelf` — calls the fixed Locadora public API origin with bounded,
   validated genre/year/type/stand fields.
 - `player_start`, `player_load`, `player_control`, `player_events`, and

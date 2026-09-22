@@ -18,6 +18,7 @@ Packaging work must refresh this file from the final dependency graph.
 | jsdom | DOM test environment | MIT | Development only. |
 | Tauri 2 | Native application boundary | MIT OR Apache-2.0 | Candidate shell; final Rust graph must be audited. |
 | reqwest + rustls | Bounded native HTTPS transport | MIT OR Apache-2.0 | Redirects are manually revalidated; TLS uses platform-verifier-backed rustls. |
+| keyring-rs | OS-protected media configuration | MIT OR Apache-2.0 | Stores secret-bearing manifest configuration through the platform credential service. |
 | Stremio Core | Potential core integration | MIT | Not copied or linked in the initial protocol spike. |
 | Stremio add-on protocol | Compatible HTTP contract | Documentation/protocol | Implemented cleanly from the public resource contract. |
 | mpv / libmpv | Native playback candidate | GPL-2.0-or-later by default; an LGPL-2.1-or-later build mode exists with caveats | Initial spike targets a separately installed system mpv. No mpv binary is bundled. Packaging remains blocked on a final license/build review. |

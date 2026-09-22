@@ -12,12 +12,12 @@ fixtures, with a separately configurable public discovery adapter. The pure
 media layer includes add-on protocol validation, stream normalization, movie
 Quick Watch v1, subtitle prioritization/fingerprints, and log redaction.
 
-Next task: implement protected local media configuration using the operating
-system credential store, with add/validate/list-sanitized/disconnect actions.
-Then add the secondary Settings surface for configured manifests. Do not expose
-or connect the Watch action until configuration, identity resolution, stream
-loading, normalization, Quick Watch, manual fallback, and player events form a
-single tested path.
+Next task: implement the configured-media resolution service. Given a confirmed
+IMDb title identity, it must query all compatible stored add-ons by sanitized
+ID, normalize their candidates, run movie Quick Watch, and return either one
+explained winner or the manual picker model. Keep the Watch action disabled
+until this service, cancellation/timeouts, source switching, and player events
+form a single tested path.
 
 ## Phase board
 
@@ -42,6 +42,13 @@ single tested path.
   - [ ] Meet all Phase 1 exit criteria and receive user visual approval.
 - [ ] Phase 2 — Locadora member services
 - [ ] Phase 3 — media engine and add-on configuration
+  - [x] Store secret-bearing manifest configuration in the OS credential store.
+  - [x] Validate manifests natively and return sanitized capabilities only.
+  - [x] Add individual removal and full local disconnect actions.
+  - [x] Fetch stored add-on resources by sanitized ID without returning URLs.
+  - [ ] Resolve one selected title across configured stream/subtitle add-ons.
+  - [ ] Add bounded cancellation and sanitized diagnostic aggregation.
+  - [ ] Meet all Phase 3 exit criteria.
 - [ ] Phase 4 — Quick Watch movies
 - [ ] Phase 5 — native playback, audio, and subtitles
 - [ ] Phase 6 — Linux packaging
@@ -82,6 +89,13 @@ when they need user or real-environment confirmation.
 - 2026-09-22: the Tauri shell tests passed, strict Clippy passed for both Rust
   crates, and `npm run check` passed with 54 tests in 9 files plus the production
   web build. No browser/manual visual or audible playback check was performed.
+- 2026-09-22: the ignored live keyring integration test successfully wrote,
+  read, deleted, and confirmed deletion of a synthetic credential through the
+  Linux Secret Service. No user manifest or production credential was used.
+- 2026-09-22: protected media configuration passed 55 shared tests, 4 regular
+  Tauri tests, strict Clippy, and another optimized no-bundle Tauri build. The
+  settings UI displays only sanitized add-on metadata and keeps manifest input
+  desktop-only.
 
 ## Known blockers and risks
 
@@ -90,8 +104,8 @@ when they need user or real-environment confirmation.
   for implementation but cannot close that Phase 0 criterion.
 - The synthetic add-on fixture proves deterministic code behavior but does not
   count as the user-configured sanitized response required by Phase 0.
-- Protected local manifest storage is not implemented, so no configuration UI
-  is exposed yet.
+- A real user-configured sanitized response is still required before parser
+  field reliability and Phase 0 can be closed.
 - Series Quick Watch rules are deliberately undefined.
 - Public release licensing must be re-reviewed after the final native/player
   dependency graph is locked.

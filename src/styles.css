@@ -156,6 +156,18 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .counter-action { width: 100%; }
 .phase-note { font-size: .7rem; text-align: center; }
 .phase-placeholder span { display: block; color: var(--yellow); font-size: 3rem; }
+.manifest-form { display: grid; gap: .55rem; margin: 1.2rem 0; }
+.manifest-form label { color: var(--yellow); font: 800 .65rem/1 "Courier New", monospace; text-transform: uppercase; }
+.manifest-form input { min-height: 44px; padding: .65rem; border: 2px solid #3f526b; color: var(--cream); background: #080d15; font-family: "Courier New", monospace; }
+.addon-list { display: grid; gap: .65rem; padding: 0; list-style: none; }
+.addon-list li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem; border: 1px solid #ffffff2f; background: #ffffff08; }
+.addon-list li span { display: grid; gap: .25rem; min-width: 0; }
+.addon-list small { overflow: hidden; color: var(--muted); font: 700 .62rem "Courier New", monospace; text-overflow: ellipsis; white-space: nowrap; }
+.danger-zone { margin-top: 2rem; padding: 1rem; border: 2px solid #a73c31; background: #44181155; }
+.danger-zone h3 { margin: 0 0 .4rem; color: #ff9784; font: 900 1rem "Arial Narrow", Arial, sans-serif; text-transform: uppercase; }
+.danger-zone p, .configuration-status { color: var(--muted); font-size: .72rem; line-height: 1.5; }
+.danger-zone button { border-color: #ff7c66; background: #7c251d; }
+.configuration-status { min-height: 1.2em; }
 
 @media (max-width: 900px) {
   .masthead { align-items: flex-start; }

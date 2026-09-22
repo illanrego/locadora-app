@@ -58,4 +58,14 @@ describe('accessible Locadora shelf', () => {
     expect(await screen.findByRole('button', { name: /The Great Train Robbery/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Agent 327/i })).not.toBeInTheDocument();
   });
+
+  it('keeps media configuration in secondary settings and desktop-only', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Ajustes' }));
+    await user.click(screen.getByRole('button', { name: 'Fontes de mídia' }));
+    const dialog = screen.getByRole('dialog', { name: 'Fontes de mídia' });
+    expect(within(dialog).getByText('Abra o aplicativo desktop para usar o cofre do sistema.')).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Manifest URL')).not.toBeInTheDocument();
+  });
 });
