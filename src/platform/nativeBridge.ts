@@ -58,6 +58,16 @@ export async function signInMember(identifier: string, password: string): Promis
   return invoke<MemberSessionStatus>('member_sign_in', { credentials: { identifier, password } });
 }
 
+export async function signUpMember(email: string, username: string, password: string): Promise<MemberSessionStatus> {
+  if (!isNativeShell()) throw new Error('Locadora accounts are available in the desktop app');
+  return invoke<MemberSessionStatus>('member_sign_up', { signup: { email, username, password } });
+}
+
+export async function updateMemberProfile(username: string): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Locadora accounts are available in the desktop app');
+  return invoke('member_update_profile', { update: { username } });
+}
+
 export async function signOutMember(): Promise<MemberSessionStatus> {
   if (!isNativeShell()) return { configured: false, signedIn: false, user: null };
   return invoke<MemberSessionStatus>('member_sign_out');

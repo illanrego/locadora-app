@@ -25,10 +25,16 @@ sign-out, and normalized profile, active-rental, saved-title, favorite, and
 history summaries. Anonymous browsing and all media configuration remain
 independent.
 
-Next task: add desktop-safe Better Auth account creation and the private
-`PUT /v1/profile` username-onboarding flow, then expose that onboarding in the
-existing account panel. Keep endpoint selection native-allowlisted and do not
-return session material to React.
+Desktop account creation now uses the existing Better Auth email-signup
+contract with a fixed, already trusted public Locadora verification callback.
+The account panel collects confirmation locally and completes the separate
+private `PUT /v1/profile` username-onboarding flow. Callback selection remains
+native-allowlisted and session material never reaches React.
+
+Next task: connect the existing “Salvos” panel to the member collection state
+and add fixed native commands for saving/removing `watch_later` and `favorite`
+memberships. Preserve anonymous local staging and never let collection writes
+change playback or rental state.
 
 ## Phase board
 
@@ -55,7 +61,7 @@ return session material to React.
   - [x] Store the Locadora bearer session separately in the OS credential store.
   - [x] Restore, sign in, and sign out through the existing Better Auth contract.
   - [x] Load and normalize profile, active rental, collections, and initial history.
-  - [ ] Add account creation and profile onboarding.
+  - [x] Add account creation and profile onboarding.
   - [ ] Add history pagination, collection, rental, return, and review actions.
   - [ ] Integrate donations without coupling payment and rental state.
 - [ ] Phase 3 — media engine and add-on configuration
@@ -191,6 +197,14 @@ when they need user or real-environment confirmation.
   private-mpv IPC tests; those two mpv tests cannot open a Unix control socket
   inside the sandbox. No live member credentials, browser/manual testing, or
   production member mutation was used.
+- 2026-09-22: added Better Auth desktop account creation with bounded
+  email/username/password validation and a fixed trusted verification callback,
+  plus private Worker profile onboarding. The account UI supports sign-in versus
+  signup modes, password confirmation, public-name completion, and clears
+  password fields after use. `npm run typecheck`, 63 Vitest tests in 15 files,
+  and the production build passed; the Tauri shell passed 10 tests with 1
+  ignored keyring integration test and strict Clippy. No live signup, email,
+  browser/manual, or production member write was performed.
 
 ## Known blockers and risks
 

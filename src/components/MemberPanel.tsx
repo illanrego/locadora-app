@@ -5,7 +5,9 @@ import {
   readMemberSession,
   signInMember,
   signOutMember,
+  signUpMember,
   type MemberSessionStatus,
+  updateMemberProfile,
 } from '../platform/nativeBridge';
 import type { Locale } from '../locadora/catalog';
 
@@ -42,6 +44,10 @@ export function MemberPanel({ locale }: MemberPanelProps) {
   const [member, setMember] = useState<MemberState | null>(null);
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const [signupUsername, setSignupUsername] = useState('');
+  const [profileUsername, setProfileUsername] = useState('');
+  const [signup, setSignup] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const pt = locale === 'pt-BR';
@@ -57,6 +63,7 @@ export function MemberPanel({ locale }: MemberPanelProps) {
       .then(async (next) => {
         if (!active) return;
         setSession(next);
+        if (next.user?.username) setProfileUsername(next.user.username);
         if (next.signedIn) {
           const value = await fetchMemberState();
           if (active) setMember(normalizeMemberState(value));
@@ -76,10 +83,25 @@ export function MemberPanel({ locale }: MemberPanelProps) {
     setBusy(true);
     setError('');
     try {
-      const next = await signInMember(identifier.trim(), password);
+      if (signup && password !== passwordConfirmation) {
+        throw new Error(pt ? 'As senhas precisam ser iguais.' : 'Passwords must match.');
+      }
+      const next = signup
+        ? await signUpMember(identifier.trim(), signupUsername.trim().toLowerCase(), password)
+        : await signInMember(identifier.trim(), password);
       setSession(next);
       setPassword('');
-      await loadState();
+      setPasswordConfirmation('');
+      if (signup) {
+        setProfileUsername(signupUsername.trim().toLowerCase());
+        try {
+          await updateMemberProfile(signupUsername.trim().toLowerCase());
+        } finally {
+          await loadState();
+        }
+      } else {
+        await loadState();
+      }
     } catch (cause) {
       setError(messageFrom(cause, pt ? 'Não foi possível entrar.' : 'Could not sign in.'));
     } finally {
@@ -96,8 +118,24 @@ export function MemberPanel({ locale }: MemberPanelProps) {
       setMember(null);
       setIdentifier('');
       setPassword('');
+      setPasswordConfirmation('');
+      setSignupUsername('');
     } catch (cause) {
       setError(messageFrom(cause, pt ? 'Não foi possível sair com segurança.' : 'Could not sign out safely.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await updateMemberProfile(profileUsername.trim().toLowerCase());
+      await loadState();
+    } catch (cause) {
+      setError(messageFrom(cause, pt ? 'Não foi possível salvar seu nome público.' : 'Could not save your public username.'));
     } finally {
       setBusy(false);
     }
@@ -117,13 +155,32 @@ export function MemberPanel({ locale }: MemberPanelProps) {
   if (!session.signedIn) {
     return (
       <form className="member-sign-in" onSubmit={submit}>
-        <p>{pt ? 'Entre só quando quiser alugar, salvar ou rever seu histórico.' : 'Sign in only when you want to rent, save, or revisit your history.'}</p>
-        <label htmlFor="member-identifier">{pt ? 'Email ou nome de usuário' : 'Email or username'}</label>
-        <input id="member-identifier" value={identifier} onChange={(event) => setIdentifier(event.target.value)} autoComplete="username" minLength={3} maxLength={254} required />
+        <p>{signup
+          ? (pt ? 'Crie sua Carteirinha para alugar, salvar e avaliar fitas.' : 'Create your membership to rent, save, and review tapes.')
+          : (pt ? 'Entre só quando quiser alugar, salvar ou rever seu histórico.' : 'Sign in only when you want to rent, save, or revisit your history.')}</p>
+        <label htmlFor="member-identifier">{signup ? 'Email' : (pt ? 'Email ou nome de usuário' : 'Email or username')}</label>
+        <input id="member-identifier" type={signup ? 'email' : 'text'} value={identifier} onChange={(event) => setIdentifier(event.target.value)} autoComplete={signup ? 'email' : 'username'} minLength={3} maxLength={254} required />
+        {signup && (
+          <>
+            <label htmlFor="member-signup-username">{pt ? 'Nome público' : 'Public username'}</label>
+            <input id="member-signup-username" value={signupUsername} onChange={(event) => setSignupUsername(event.target.value)} autoComplete="nickname" minLength={3} maxLength={24} pattern="[A-Za-z0-9_-]{3,24}" required />
+          </>
+        )}
         <label htmlFor="member-password">{pt ? 'Senha' : 'Password'}</label>
-        <input id="member-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" minLength={6} maxLength={128} required />
+        <input id="member-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={signup ? 'new-password' : 'current-password'} minLength={6} maxLength={128} required />
+        {signup && (
+          <>
+            <label htmlFor="member-password-confirmation">{pt ? 'Confirmar senha' : 'Confirm password'}</label>
+            <input id="member-password-confirmation" type="password" value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} autoComplete="new-password" minLength={6} maxLength={128} required />
+          </>
+        )}
         {error && <p className="member-error" role="alert">{error}</p>}
-        <button type="submit" className="primary-action" disabled={busy}>{busy ? (pt ? 'Entrando…' : 'Signing in…') : (pt ? 'Entrar' : 'Sign in')}</button>
+        <button type="submit" className="primary-action" disabled={busy}>{busy
+          ? (signup ? (pt ? 'Criando…' : 'Creating…') : (pt ? 'Entrando…' : 'Signing in…'))
+          : (signup ? (pt ? 'Criar Carteirinha' : 'Create membership') : (pt ? 'Entrar' : 'Sign in'))}</button>
+        <button type="button" className="text-action" disabled={busy} onClick={() => { setSignup((current) => !current); setError(''); setPassword(''); setPasswordConfirmation(''); }}>
+          {signup ? (pt ? 'Já tenho conta' : 'I already have an account') : (pt ? 'Criar conta' : 'Create account')}
+        </button>
         <p className="member-privacy">{pt ? 'A sessão fica no cofre do sistema e nunca é compartilhada com suas fontes de mídia.' : 'Your session stays in the system vault and is never shared with media sources.'}</p>
       </form>
     );
@@ -145,6 +202,13 @@ export function MemberPanel({ locale }: MemberPanelProps) {
       {error && <p className="member-error" role="alert">{error}</p>}
       {!member ? (
         <button type="button" disabled={busy} onClick={() => { setBusy(true); setError(''); void loadState().catch((cause) => setError(messageFrom(cause, pt ? 'Não foi possível carregar sua conta.' : 'Could not load your account.'))).finally(() => setBusy(false)); }}>{pt ? 'Tentar novamente' : 'Try again'}</button>
+      ) : !member.profile ? (
+        <form className="member-sign-in member-profile-form" onSubmit={saveProfile}>
+          <p>{pt ? 'Escolha seu nome público para terminar a Carteirinha.' : 'Choose your public username to finish your membership.'}</p>
+          <label htmlFor="member-profile-username">{pt ? 'Nome público' : 'Public username'}</label>
+          <input id="member-profile-username" value={profileUsername} onChange={(event) => setProfileUsername(event.target.value)} autoComplete="nickname" minLength={3} maxLength={24} pattern="[A-Za-z0-9_-]{3,24}" required />
+          <button type="submit" className="primary-action" disabled={busy}>{busy ? (pt ? 'Salvando…' : 'Saving…') : (pt ? 'Concluir Carteirinha' : 'Finish membership')}</button>
+        </form>
       ) : (
         <>
           <dl className="member-counts">

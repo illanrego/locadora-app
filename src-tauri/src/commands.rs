@@ -13,6 +13,7 @@ use urlencoding::encode;
 
 const PUBLIC_API_BASE: &str = "https://locadora-api.willstartpage.workers.dev/v1";
 const MEMBER_API_BASE: &str = "https://locadora-data.willstartpage.workers.dev";
+const MEMBER_SIGNUP_CALLBACK: &str = "https://willslocadora.sitedoillan.com.br/?verified=1";
 const ALLOWED_GENRES: &[&str] = &[
     "Action",
     "Adventure",
@@ -71,6 +72,19 @@ pub struct PublicShelfRequest {
 pub struct MemberCredentials {
     identifier: String,
     password: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberSignup {
+    email: String,
+    username: String,
+    password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MemberProfileUpdate {
+    username: String,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -219,6 +233,39 @@ fn validate_member_credentials(credentials: &MemberCredentials) -> Result<(), St
         return Err("Password must contain 6 to 128 characters".into());
     }
     Ok(())
+}
+
+fn normalized_member_username(value: &str) -> Result<String, String> {
+    let username = value.trim().to_ascii_lowercase();
+    if !(3..=24).contains(&username.len())
+        || !username
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_-".contains(&byte))
+    {
+        return Err("Username must be 3 to 24 lowercase letters, numbers, _ or -".into());
+    }
+    Ok(username)
+}
+
+fn validate_member_signup(signup: &MemberSignup) -> Result<String, String> {
+    let email = signup.email.trim();
+    let Some((local, domain)) = email.split_once('@') else {
+        return Err("Enter a valid email address".into());
+    };
+    if local.is_empty()
+        || domain.is_empty()
+        || !domain.contains('.')
+        || email.len() > 254
+        || email.chars().any(char::is_whitespace)
+        || email.chars().any(char::is_control)
+    {
+        return Err("Enter a valid email address".into());
+    }
+    validate_member_credentials(&MemberCredentials {
+        identifier: email.into(),
+        password: signup.password.clone(),
+    })?;
+    normalized_member_username(&signup.username)
 }
 
 fn member_service_error(status: u16) -> String {
@@ -505,6 +552,62 @@ pub async fn member_sign_in(credentials: MemberCredentials) -> Result<MemberSess
 }
 
 #[tauri::command]
+pub async fn member_sign_up(signup: MemberSignup) -> Result<MemberSessionStatus, String> {
+    let username = validate_member_signup(&signup)?;
+    let body = serde_json::json!({
+        "name": username,
+        "email": signup.email.trim(),
+        "password": signup.password,
+        "username": username,
+        "callbackURL": MEMBER_SIGNUP_CALLBACK,
+    });
+    let response = fetch_bounded_https_json_request(
+        &format!("{MEMBER_API_BASE}/api/auth/sign-up/email"),
+        JsonRequestMethod::Post,
+        Some(&body),
+        None,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    let token = response
+        .refreshed_token
+        .ok_or("Member service did not create a desktop session")?;
+    let status = member_session_from_body(&response.body)
+        .ok_or("Member service returned an invalid session")?;
+    store_member_token(&token)?;
+    Ok(status)
+}
+
+#[tauri::command]
+pub async fn member_update_profile(update: MemberProfileUpdate) -> Result<Value, String> {
+    let username = normalized_member_username(&update.username)?;
+    let token = load_member_token()?.ok_or("Sign in to use your personal Locadora")?;
+    let body = serde_json::json!({ "username": username });
+    let response = fetch_bounded_https_json_request(
+        &format!("{MEMBER_API_BASE}/v1/profile"),
+        JsonRequestMethod::Put,
+        Some(&body),
+        Some(&token),
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if matches!(response.status, 401 | 403) {
+        delete_member_token()?;
+        return Err("Member session expired. Sign in again".into());
+    }
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    if let Some(refreshed_token) = response.refreshed_token {
+        store_member_token(&refreshed_token)?;
+    }
+    Ok(response.body)
+}
+
+#[tauri::command]
 pub async fn member_sign_out() -> Result<MemberSessionStatus, String> {
     if let Some(token) = load_member_token()? {
         let body = serde_json::json!({});
@@ -740,6 +843,10 @@ mod tests {
         );
         assert_ne!(KEYRING_SERVICE, MEMBER_KEYRING_SERVICE);
         assert_ne!(KEYRING_ACCOUNT, MEMBER_KEYRING_ACCOUNT);
+        assert_eq!(
+            MEMBER_SIGNUP_CALLBACK,
+            "https://willslocadora.sitedoillan.com.br/?verified=1"
+        );
     }
 
     #[test]
@@ -765,6 +872,28 @@ mod tests {
             })
             .is_err()
         );
+    }
+
+    #[test]
+    fn member_signup_normalizes_username_and_rejects_bad_identity_fields() {
+        assert_eq!(
+            validate_member_signup(&MemberSignup {
+                email: "member@example.invalid".into(),
+                username: "Will_Rego".into(),
+                password: "correct horse".into(),
+            })
+            .unwrap(),
+            "will_rego"
+        );
+        assert!(
+            validate_member_signup(&MemberSignup {
+                email: "not-an-email".into(),
+                username: "will_rego".into(),
+                password: "correct horse".into(),
+            })
+            .is_err()
+        );
+        assert!(normalized_member_username("no spaces allowed").is_err());
     }
 
     #[test]
