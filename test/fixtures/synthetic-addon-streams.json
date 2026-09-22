@@ -1,0 +1,17 @@
+{
+  "fixtureKind": "synthetic",
+  "notice": "Protocol-shaped test data only. It was not captured from a user account or configured add-on.",
+  "streams": [
+    {
+      "name": "Example 1080p",
+      "title": "YTS · 1.4 GB · 👤 80",
+      "url": "https://media.example.invalid/public-domain/movie-1080p.mp4"
+    },
+    {
+      "name": "Example 720p",
+      "title": "TPB · 900 MB · Seeders: 120",
+      "infoHash": "0000000000000000000000000000000000000001",
+      "fileIdx": 0
+    }
+  ]
+}
