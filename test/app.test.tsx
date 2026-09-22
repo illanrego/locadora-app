@@ -49,8 +49,8 @@ describe('accessible Locadora shelf', () => {
     await user.click(within(inspection).getByRole('button', { name: 'Fechar' }));
     await user.click(screen.getByRole('button', { name: /Cesta/ }));
     const basket = screen.getByRole('dialog', { name: 'Cesta' });
-    await user.click(within(basket).getByRole('button', { name: 'Balcão' }));
-    expect(await within(basket).findByText('Entre na sua Carteirinha para passar no Balcão.')).toBeInTheDocument();
+    await user.click(within(basket).getByRole('button', { name: /^Alugar/ }));
+    expect(await within(basket).findByText('Entre na sua Carteirinha para alugar.')).toBeInTheDocument();
     await user.click(within(basket).getByRole('button', { name: 'Abrir Carteirinha' }));
     expect(await screen.findByRole('dialog', { name: 'Conta' })).toBeInTheDocument();
   });
@@ -123,11 +123,9 @@ describe('accessible Locadora shelf', () => {
     expect(screen.getByRole('button', { name: 'Quick Watch automático' })).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('keeps immersive browsing optional and the 2D shelf as the default', async () => {
-    const user = userEvent.setup();
+  it('exposes the immersive toggle in the header and keeps the 2D shelf usable', async () => {
     render(<App />);
-    await user.click(screen.getByRole('button', { name: 'Ajustes' }));
-    expect(screen.getByRole('button', { name: 'Modo imersivo' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Modo imersivo' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /Inspecionar Agent 327/i })).toBeInTheDocument();
   });
 

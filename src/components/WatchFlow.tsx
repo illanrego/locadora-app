@@ -304,19 +304,28 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
         </p>
       )}
 
-      {(manualVisible || phase === 'failed') && candidates.length > 0 && (
+      {(candidates.length > 0) && (
         <section className="manual-picker">
           <div className="manual-picker-heading">
-            <h3>{locale === 'pt-BR' ? 'Escolher outra fonte' : 'Choose another source'}</h3>
+            <h3>{locale === 'pt-BR' ? 'Fontes disponíveis' : 'Available sources'}</h3>
             <span>{candidates.length}</span>
           </div>
           <ol>
             {candidates.map((candidate) => (
               <li key={candidate.stableId}>
-                <button type="button" disabled={!playable(candidate)} onClick={() => void play(candidate)}>
+                <button
+                  type="button"
+                  aria-current={candidate.stableId === candidateId ? 'true' : undefined}
+                  disabled={!playable(candidate) || candidate.stableId === candidateId}
+                  onClick={() => void play(candidate)}
+                >
                   <strong>{candidate.resolution ? `${candidate.resolution}p` : '—'} · {candidate.sourceName}</strong>
                   <span>{formatBytes(candidate.sizeBytes, locale)} · {candidate.seeders ?? '—'} seeders</span>
-                  <small>{playable(candidate) ? candidate.displayName : (locale === 'pt-BR' ? 'Transporte ainda indisponível' : 'Transport not available yet')}</small>
+                  <small>{candidate.stableId === candidateId
+                    ? (locale === 'pt-BR' ? 'Tocando agora' : 'Playing now')
+                    : playable(candidate)
+                      ? candidate.displayName
+                      : (locale === 'pt-BR' ? 'Transporte ainda indisponível' : 'Transport not available yet')}</small>
                 </button>
               </li>
             ))}

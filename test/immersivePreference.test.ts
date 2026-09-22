@@ -6,7 +6,9 @@ import { readImmersiveEnabled, writeImmersiveEnabled } from '../src/locadora/imm
 beforeEach(() => window.localStorage.clear());
 
 describe('Locadora immersive preference', () => {
-  it('defaults to the accessible 2D shelf and persists explicit enhancement use', () => {
+  it('starts on the immersive shelf and remembers an explicit opt-out', () => {
+    expect(readImmersiveEnabled()).toBe(true);
+    writeImmersiveEnabled(false);
     expect(readImmersiveEnabled()).toBe(false);
     writeImmersiveEnabled(true);
     expect(readImmersiveEnabled()).toBe(true);

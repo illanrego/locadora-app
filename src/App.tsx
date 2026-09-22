@@ -158,6 +158,9 @@ export default function App() {
           <nav className="header-actions" aria-label={locale === 'pt-BR' ? 'Ações da loja' : 'Store actions'}>
             <button type="button" onClick={() => setPanel('saved')}>{locale === 'pt-BR' ? 'Salvos' : 'Saved'}</button>
             <button type="button" onClick={() => setPanel('account')}>{t.account}</button>
+            <button type="button" aria-pressed={immersiveEnabled} onClick={toggleImmersive}>
+              {locale === 'pt-BR' ? 'Modo imersivo' : 'Immersive mode'}
+            </button>
             <button type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}>{t.settings}</button>
             <button type="button" className="basket-button" onClick={() => setPanel('basket')}>
               {t.basket}<span aria-label={`${basket.length} / 3`}>{basket.length}</span>
@@ -210,9 +213,6 @@ export default function App() {
               })}
             >
               {locale === 'pt-BR' ? 'Quick Watch automático' : 'Automatic Quick Watch'}
-            </button>
-            <button type="button" aria-pressed={immersiveEnabled} onClick={toggleImmersive}>
-              {locale === 'pt-BR' ? 'Modo imersivo' : 'Immersive mode'}
             </button>
             <p>
               <strong>Player:</strong>{' '}
@@ -305,7 +305,7 @@ export default function App() {
         saved={saved}
         onRemove={toggleBasket}
         onSetSaved={setSavedTitle}
-        onBasketComplete={() => setBasket([])}
+        onBasketComplete={(rented) => setBasket((current) => current.filter((item) => !rented.some((title) => title.identity.canonicalKey === item.identity.canonicalKey)))}
         onOpenAccount={() => setPanel('account')}
         onClose={() => setPanel(null)}
       />}

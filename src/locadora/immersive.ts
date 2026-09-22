@@ -25,9 +25,11 @@ const IMMERSIVE_KEY = 'locadora:immersive:v1:enabled';
 
 export function readImmersiveEnabled(): boolean {
   try {
-    return window.localStorage.getItem(IMMERSIVE_KEY) === 'true';
+    // The 3D shelf is the intended surface; the 2D shelf stays as the accessible
+    // fallback and is restored automatically when WebGL cannot start.
+    return window.localStorage.getItem(IMMERSIVE_KEY) !== 'false';
   } catch {
-    return false;
+    return true;
   }
 }
 

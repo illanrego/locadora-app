@@ -134,7 +134,8 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   repeating-linear-gradient(135deg, transparent 0 22px, #ffffff08 22px 26px),
   linear-gradient(145deg, var(--genre-accent, #e24730), #152943 58%, #090d13); border-right: 8px solid #080b10; }
 .inspection-art::before { content: "FRONT COVER"; position: absolute; top: 1.1rem; left: 1.1rem; font: 700 .58rem "Courier New", monospace; letter-spacing: .12em; }
-.inspection-art span { font: 900 clamp(4rem, 10vw, 8rem)/.8 Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; text-shadow: 7px 7px 0 #05080d; transform: rotate(-7deg); }
+.inspection-art span { font: 900 clamp(4rem, 10vw, 8rem)/.8 Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; transform: rotate(-7deg); text-shadow: 7px 7px #05080d; }
+.inspection-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .inspection-copy { padding: clamp(1.4rem, 4vw, 3.5rem); }
 .eyebrow { margin: 0 0 .45rem; color: var(--yellow); font: 800 .64rem/1.4 "Courier New", monospace; letter-spacing: .12em; text-transform: uppercase; }
 .inspection-copy h2, .panel-header h2 { margin: 0 0 .6rem; font: 900 clamp(2.2rem, 6vw, 4.2rem)/.9 Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; letter-spacing: .03em; text-transform: uppercase; }
@@ -169,6 +170,10 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .basket-list li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem; border: 1px solid #ffffff2d; background: #ffffff08; }
 .basket-list li span { display: grid; gap: .2rem; }
 .basket-list small, .phase-note { color: var(--muted); }
+.basket-rent-hint { color: var(--muted); font-size: .72rem; margin: .2rem 0 .6rem; }
+.basket-pick { display: flex; align-items: center; gap: .6rem; min-width: 0; cursor: pointer; }
+.basket-pick input { width: 20px; height: 20px; flex: none; accent-color: var(--red); }
+.manual-picker li button[aria-current='true'] { background: var(--blue-deep); border-color: var(--yellow); cursor: default; }
 .basket-list button { min-height: 34px; padding: .45rem; font-size: .56rem; }
 .panel-empty, .phase-placeholder { margin: 2rem 0; padding: 2rem; border: 2px dashed #ffffff38; color: var(--muted); text-align: center; }
 .counter-action { width: 100%; }

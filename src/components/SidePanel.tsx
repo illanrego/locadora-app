@@ -13,7 +13,7 @@ interface SidePanelProps {
   saved: LocalSavedCollections;
   onRemove: (title: DiscoveryTitle) => void;
   onSetSaved: (title: DiscoveryTitle, collection: SavedCollection, enabled: boolean) => Promise<boolean>;
-  onBasketComplete: () => void;
+  onBasketComplete: (rented: DiscoveryTitle[]) => void;
   onOpenAccount: () => void;
   onClose: () => void;
 }
