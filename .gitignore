@@ -1,0 +1,18 @@
+node_modules/
+dist/
+target/
+src-tauri/target/
+.env
+.env.*
+!.env.example
+*.log
+*.swp
+.DS_Store
+coverage/
+playwright-report/
+test-results/
+
+# Local media configuration and native secrets
+.local/
+*.manifest-url
+
