@@ -30,6 +30,8 @@ pub enum PlayerError {
     ControlUnavailable,
     #[error("The playback descriptor is not allowed")]
     InvalidDescriptor,
+    #[error("The playback descriptor is not allowed ({0})")]
+    DescriptorRejected(String),
     #[error("The player command failed")]
     CommandFailed,
     #[error("The private player socket path is too long")]
@@ -289,6 +291,13 @@ fn public_remote_url(value: &str) -> Result<(), PlayerError> {
     }
 }
 
+/// The official Stremio streaming service is the only loopback endpoint the
+/// player may load from.
+///
+/// Stremio Video owns the shape of the URLs it hands the shell (torrent info
+/// hashes, proxied direct streams, and whatever it adds next), so this checks
+/// the origin and the bounds instead of re-deriving that contract. Every path
+/// under the official origin is reachable; anything else is not.
 fn stremio_service_stream_url(value: &str) -> Result<(), PlayerError> {
     if value.len() > 16_384 {
         return Err(PlayerError::InvalidDescriptor);
@@ -307,39 +316,56 @@ fn stremio_service_stream_url(value: &str) -> Result<(), PlayerError> {
         .path_segments()
         .ok_or(PlayerError::InvalidDescriptor)?
         .collect::<Vec<_>>();
-    if segments
-        .iter()
-        .any(|segment| matches!(*segment, "" | "." | ".."))
-    {
-        return Err(PlayerError::InvalidDescriptor);
-    }
-    // A direct stream that needs request headers is proxied by the official
-    // service, which hands the player a `/proxy/<options><original path>` URL.
-    // Only that one endpoint is reachable; arbitrary service paths are not.
-    if segments.first() == Some(&"proxy") {
-        return if segments.len() >= 2 {
-            Ok(())
-        } else {
-            Err(PlayerError::InvalidDescriptor)
-        };
-    }
-    // Torrent streams are addressed by info hash and file index.
-    if segments.len() != 2
-        || segments[0].len() != 40
-        || !segments[0].bytes().all(|byte| byte.is_ascii_hexdigit())
-        || segments[1].parse::<u16>().is_err()
-    {
-        return Err(PlayerError::InvalidDescriptor);
-    }
-    let query = url.query_pairs().collect::<Vec<_>>();
-    if query.len() > 64
-        || query
+    if segments.iter().all(|segment| segment.is_empty())
+        || segments
             .iter()
-            .any(|(name, value)| name != "tr" || value.is_empty() || value.len() > 2_048)
+            .any(|segment| matches!(*segment, "." | ".."))
     {
         return Err(PlayerError::InvalidDescriptor);
     }
     Ok(())
+}
+
+/// Redacted shape of a rejected descriptor. Never the URL itself: only the
+/// scheme, a host class, the port, and the query parameter names.
+fn descriptor_shape(value: &str) -> String {
+    let Ok(url) = Url::parse(value) else {
+        return "unparsable".into();
+    };
+    let host = match url.host() {
+        Some(Host::Domain(host))
+            if host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost") =>
+        {
+            "loopback-name".to_string()
+        }
+        Some(Host::Domain(_)) => "public-name".to_string(),
+        Some(Host::Ipv4(ip)) if ip.is_loopback() => "loopback".to_string(),
+        Some(Host::Ipv4(ip)) if ip.is_private() => "private".to_string(),
+        Some(Host::Ipv4(_)) => "public-ip".to_string(),
+        Some(Host::Ipv6(ip)) if ip.is_loopback() => "loopback".to_string(),
+        Some(Host::Ipv6(_)) => "ipv6".to_string(),
+        None => "none".to_string(),
+    };
+    let mut parameters = url
+        .query_pairs()
+        .map(|(name, _)| name.to_string())
+        .collect::<Vec<_>>();
+    parameters.sort();
+    parameters.dedup();
+    format!(
+        "scheme={} host={} port={} segments={} params={}",
+        url.scheme(),
+        host,
+        url.port()
+            .map(|port| port.to_string())
+            .unwrap_or_else(|| "default".into()),
+        url.path_segments().map(Iterator::count).unwrap_or(0),
+        if parameters.is_empty() {
+            "none".to_string()
+        } else {
+            parameters.join(",")
+        }
+    )
 }
 
 impl MpvSession {
@@ -435,7 +461,8 @@ impl MpvSession {
 
     pub fn load_remote(&mut self, descriptor: &str) -> Result<(), PlayerError> {
         if stremio_service_stream_url(descriptor).is_err() {
-            public_remote_url(descriptor)?;
+            public_remote_url(descriptor)
+                .map_err(|_| PlayerError::DescriptorRejected(descriptor_shape(descriptor)))?;
         }
         self.load_internal(descriptor)
     }
@@ -593,19 +620,37 @@ mod tests {
     }
 
     #[test]
-    fn official_stremio_service_paths_are_narrowly_allowlisted() {
+    fn the_official_service_origin_is_the_only_loopback_endpoint_allowed() {
         let hash = "a".repeat(40);
+        // Stremio Video owns the URL shapes it hands the shell: torrent info
+        // hashes, proxied direct streams, and whatever it adds next. Only the
+        // official origin is checked, so a new shape cannot break playback.
+        for value in [
+            format!("http://127.0.0.1:11470/{hash}/7?tr=udp%3A%2F%2Ftracker.example"),
+            "http://127.0.0.1:11470/proxy/d=https%3A%2F%2Fmedia.example.com&h=User-Agent%3Aok/movie.mkv"
+                .to_string(),
+            "http://127.0.0.1:11470/subtitles.vtt?from=https%3A%2F%2Fmedia.example.com%2Fa.srt"
+                .to_string(),
+            format!("http://127.0.0.1:11470/{hash}/7/stats.json"),
+        ] {
+            assert!(
+                stremio_service_stream_url(&value).is_ok(),
+                "rejected {value}"
+            );
+        }
+        // The URL parser normalizes `..` away before this runs, so a traversal
+        // attempt lands on a plain path of the same allowed origin.
         assert!(
-            stremio_service_stream_url(&format!(
-                "http://127.0.0.1:11470/{hash}/7?tr=udp%3A%2F%2Ftracker.example"
-            ))
-            .is_ok()
+            stremio_service_stream_url(&format!("http://127.0.0.1:11470/{hash}/../settings"))
+                .is_ok()
         );
         for value in [
             format!("http://localhost:11470/{hash}/7"),
-            format!("http://127.0.0.1:11470/{hash}/../settings"),
-            format!("http://127.0.0.1:11470/{hash}/7/stats.json"),
-            format!("http://127.0.0.1:11470/{hash}/7?token=secret"),
+            format!("http://127.0.0.1:11471/{hash}/7"),
+            "https://127.0.0.1:11470/stream".to_string(),
+            "http://127.0.0.1:11470/".to_string(),
+            format!("http://user:password@127.0.0.1:11470/{hash}/7"),
+            "http://[::1]:11470/stream".to_string(),
         ] {
             assert!(
                 stremio_service_stream_url(&value).is_err(),
@@ -615,26 +660,18 @@ mod tests {
     }
 
     #[test]
-    fn official_stremio_service_proxy_streams_are_allowlisted() {
-        // withStreamingServer routes a direct stream through the official
-        // service whenever the add-on supplies request headers, and hands the
-        // player a /proxy/ URL. Refusing it fails playback as a rejected
-        // command.
-        assert!(
-            stremio_service_stream_url(
-                "http://127.0.0.1:11470/proxy/d=https%3A%2F%2Fmedia.example.com&h=User-Agent%3Aok/movie.mkv?token=secret"
-            )
-            .is_ok()
+    fn rejected_descriptor_shapes_never_carry_the_url() {
+        let shape = descriptor_shape(
+            "https://user:password@media.example.com/private/video.mp4?token=secret",
         );
-        for value in [
-            "http://127.0.0.1:11470/proxy/../settings",
-            "http://127.0.0.1:11470/other/path",
-            "http://127.0.0.1:11470/proxy/d=x/movie.mkv#fragment",
-        ] {
-            assert!(
-                stremio_service_stream_url(value).is_err(),
-                "accepted {value}"
-            );
+        assert!(shape.contains("scheme=https"));
+        assert!(shape.contains("host=public-name"));
+        assert!(
+            shape.contains("params=token"),
+            "parameter names are kept on purpose: {shape}"
+        );
+        for secret in ["media.example.com", "private", "password", "secret"] {
+            assert!(!shape.contains(secret), "shape leaked {secret}: {shape}");
         }
     }
 
