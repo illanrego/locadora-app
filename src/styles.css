@@ -185,6 +185,9 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .member-tape-list strong { overflow: hidden; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
 .member-tape-list small, .member-tape-list em, .member-empty { color: var(--muted); font: 700 .6rem "Courier New", monospace; }
 .member-tape-list em { color: #ff9b88; }
+.member-return-list li { align-items: flex-start; flex-direction: column; }
+.return-actions { display: flex; flex-wrap: wrap; gap: .35rem; width: 100%; }
+.return-actions button { min-height: 32px; padding: .4rem; font-size: .54rem; }
 .member-empty { margin: 0; padding: .65rem; border: 1px dashed #ffffff24; }
 .saved-panel { margin-top: 1rem; }
 .saved-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }

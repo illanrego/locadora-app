@@ -6,6 +6,7 @@ import {
   signInMember,
   signOutMember,
   signUpMember,
+  returnMemberRental,
   type MemberSessionStatus,
   updateMemberProfile,
 } from '../platform/nativeBridge';
@@ -49,7 +50,9 @@ export function MemberPanel({ locale }: MemberPanelProps) {
   const [profileUsername, setProfileUsername] = useState('');
   const [signup, setSignup] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [returningId, setReturningId] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const pt = locale === 'pt-BR';
 
   async function loadState() {
@@ -82,6 +85,7 @@ export function MemberPanel({ locale }: MemberPanelProps) {
     event.preventDefault();
     setBusy(true);
     setError('');
+    setNotice('');
     try {
       if (signup && password !== passwordConfirmation) {
         throw new Error(pt ? 'As senhas precisam ser iguais.' : 'Passwords must match.');
@@ -112,6 +116,7 @@ export function MemberPanel({ locale }: MemberPanelProps) {
   async function signOut() {
     setBusy(true);
     setError('');
+    setNotice('');
     try {
       const next = await signOutMember();
       setSession(next);
@@ -131,6 +136,7 @@ export function MemberPanel({ locale }: MemberPanelProps) {
     event.preventDefault();
     setBusy(true);
     setError('');
+    setNotice('');
     try {
       await updateMemberProfile(profileUsername.trim().toLowerCase());
       await loadState();
@@ -138,6 +144,21 @@ export function MemberPanel({ locale }: MemberPanelProps) {
       setError(messageFrom(cause, pt ? 'Não foi possível salvar seu nome público.' : 'Could not save your public username.'));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function returnTape(itemId: string, watchedStatus: 'watched' | 'not_watched' | 'unknown') {
+    setReturningId(itemId);
+    setError('');
+    setNotice('');
+    try {
+      await returnMemberRental(itemId, watchedStatus);
+      await loadState();
+      setNotice(pt ? 'Fita devolvida e histórico atualizado.' : 'Tape returned and history updated.');
+    } catch (cause) {
+      setError(messageFrom(cause, pt ? 'Não foi possível devolver a fita.' : 'Could not return the tape.'));
+    } finally {
+      setReturningId('');
     }
   }
 
@@ -200,6 +221,7 @@ export function MemberPanel({ locale }: MemberPanelProps) {
         <small>{pt ? 'desde' : 'since'} {formatDate(member?.profile?.createdAt ?? null, locale)}</small>
       </div>
       {error && <p className="member-error" role="alert">{error}</p>}
+      {notice && <p className="member-success" role="status">{notice}</p>}
       {!member ? (
         <button type="button" disabled={busy} onClick={() => { setBusy(true); setError(''); void loadState().catch((cause) => setError(messageFrom(cause, pt ? 'Não foi possível carregar sua conta.' : 'Could not load your account.'))).finally(() => setBusy(false)); }}>{pt ? 'Tentar novamente' : 'Try again'}</button>
       ) : !member.profile ? (
@@ -218,7 +240,20 @@ export function MemberPanel({ locale }: MemberPanelProps) {
           </dl>
           <section className="member-section">
             <h3>{pt ? 'Com você agora' : 'With you now'}</h3>
-            <TapeList items={member.activeRental?.items ?? []} locale={locale} empty={pt ? 'Nenhuma fita alugada agora.' : 'No tapes currently rented.'} />
+            {member.activeRental?.items.length ? (
+              <ul className="member-tape-list member-return-list">
+                {member.activeRental.items.map((item) => (
+                  <li key={item.id}>
+                    <span><strong>{item.name}</strong><small>{item.year ?? '—'}</small></span>
+                    <div className="return-actions" aria-label={pt ? `Devolver ${item.name}` : `Return ${item.name}`}>
+                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item.id, 'watched')}>{pt ? 'Assisti' : 'Watched'}</button>
+                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item.id, 'not_watched')}>{pt ? 'Não assisti' : 'Not watched'}</button>
+                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item.id, 'unknown')}>{pt ? 'Não dizer' : 'Skip'}</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="member-empty">{pt ? 'Nenhuma fita alugada agora.' : 'No tapes currently rented.'}</p>}
           </section>
           <section className="member-section">
             <h3>{pt ? 'Salvas para depois' : 'Saved for later'}</h3>

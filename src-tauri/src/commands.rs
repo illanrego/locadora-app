@@ -112,6 +112,13 @@ pub struct MemberRentalRequest {
     titles: Vec<MemberRentalTitle>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberReturnRequest {
+    item_id: String,
+    watched_status: String,
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MemberUser {
@@ -325,6 +332,36 @@ fn validate_member_rental(request: &MemberRentalRequest) -> Result<(), String> {
         {
             return Err("Choose one to three distinct titles".into());
         }
+    }
+    Ok(())
+}
+
+fn is_member_uuid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 36
+        || bytes[8] != b'-'
+        || bytes[13] != b'-'
+        || bytes[18] != b'-'
+        || bytes[23] != b'-'
+        || !(b'1'..=b'5').contains(&bytes[14])
+        || !matches!(bytes[19].to_ascii_lowercase(), b'8' | b'9' | b'a' | b'b')
+    {
+        return false;
+    }
+    bytes
+        .iter()
+        .enumerate()
+        .all(|(index, byte)| matches!(index, 8 | 13 | 18 | 23) || byte.is_ascii_hexdigit())
+}
+
+fn validate_member_return(request: &MemberReturnRequest) -> Result<(), String> {
+    if !is_member_uuid(&request.item_id)
+        || !matches!(
+            request.watched_status.as_str(),
+            "watched" | "not_watched" | "unknown"
+        )
+    {
+        return Err("Invalid rental return".into());
     }
     Ok(())
 }
@@ -752,6 +789,35 @@ pub async fn member_create_rental(request: MemberRentalRequest) -> Result<Value,
 }
 
 #[tauri::command]
+pub async fn member_return_rental(request: MemberReturnRequest) -> Result<Value, String> {
+    validate_member_return(&request)?;
+    let token = load_member_token()?.ok_or("Sign in to return your tapes")?;
+    let body = serde_json::json!({ "watchedStatus": request.watched_status });
+    let response = fetch_bounded_https_json_request(
+        &format!(
+            "{MEMBER_API_BASE}/v1/rental-items/{}/return",
+            request.item_id
+        ),
+        JsonRequestMethod::Post,
+        Some(&body),
+        Some(&token),
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if matches!(response.status, 401 | 403) {
+        delete_member_token()?;
+        return Err("Member session expired. Sign in again".into());
+    }
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    if let Some(refreshed_token) = response.refreshed_token {
+        store_member_token(&refreshed_token)?;
+    }
+    Ok(response.body)
+}
+
+#[tauri::command]
 pub async fn member_sign_out() -> Result<MemberSessionStatus, String> {
     if let Some(token) = load_member_token()? {
         let body = serde_json::json!({});
@@ -1101,6 +1167,33 @@ mod tests {
                         ..title()
                     })
                     .collect(),
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn member_returns_require_uuid_and_explicit_existing_outcome() {
+        for watched_status in ["watched", "not_watched", "unknown"] {
+            assert!(
+                validate_member_return(&MemberReturnRequest {
+                    item_id: "11111111-1111-4111-8111-111111111111".into(),
+                    watched_status: watched_status.into(),
+                })
+                .is_ok()
+            );
+        }
+        assert!(
+            validate_member_return(&MemberReturnRequest {
+                item_id: "../../admin".into(),
+                watched_status: "watched".into(),
+            })
+            .is_err()
+        );
+        assert!(
+            validate_member_return(&MemberReturnRequest {
+                item_id: "11111111-1111-4111-8111-111111111111".into(),
+                watched_status: "autoplayed".into(),
             })
             .is_err()
         );

@@ -11,6 +11,7 @@ const native = vi.hoisted(() => ({
   signUpMember: vi.fn(),
   updateMemberProfile: vi.fn(),
   signOutMember: vi.fn(),
+  returnMemberRental: vi.fn(),
   fetchMemberState: vi.fn(),
 }));
 
@@ -49,5 +50,29 @@ describe('Locadora member panel', () => {
     expect(native.updateMemberProfile).toHaveBeenCalledWith('will');
     expect(await screen.findByText('@will')).toBeInTheDocument();
     expect(screen.queryByDisplayValue('secret-password')).not.toBeInTheDocument();
+  });
+
+  it('returns a tape only after an explicit watched-status choice', async () => {
+    const item = {
+      id: '11111111-1111-4111-8111-111111111111',
+      canonicalKey: 'movie:603',
+      tmdbId: 603,
+      type: 'movie',
+      name: 'The Matrix',
+      year: 1999,
+    };
+    native.readMemberSession.mockResolvedValue({ configured: true, signedIn: true, user: { id: 'user-1', username: 'will' } });
+    native.fetchMemberState
+      .mockResolvedValueOnce({ profile: { userId: 'user-1', username: 'will' }, activeRental: { id: 'rental-1', items: [item] }, collections: {}, history: [] })
+      .mockResolvedValueOnce({ profile: { userId: 'user-1', username: 'will' }, activeRental: null, collections: {}, history: [{ ...item, returnedAt: '2026-09-22T00:00:00Z', watchedStatus: 'watched' }] });
+    native.returnMemberRental.mockResolvedValue({ rentalItem: { id: item.id, watchedStatus: 'watched' } });
+    const user = userEvent.setup();
+    render(<MemberPanel locale="pt-BR" />);
+
+    await user.click(await screen.findByRole('button', { name: 'Assisti' }));
+
+    expect(native.returnMemberRental).toHaveBeenCalledWith(item.id, 'watched');
+    expect(await screen.findByText('Fita devolvida e histórico atualizado.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Assisti' })).not.toBeInTheDocument();
   });
 });

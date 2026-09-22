@@ -43,10 +43,15 @@ It submits one to three distinct canonical snapshots through the fixed native
 `POST /v1/rentals` route, refreshes member state after success, and clears only
 the Cesta. No playback event participates in the rental transition.
 
-Next task: add the account return-desk flow through fixed
-`POST /v1/rental-items/:id/return` commands with the three existing watched
-outcomes, then refresh active rentals and history without marking anything
-watched from player events.
+The account return desk now requires one explicit existing outcome—watched, not
+watched, or undisclosed—before calling a fixed native
+`POST /v1/rental-items/:id/return` route. Rental item IDs must be UUIDs. A
+successful return reloads active rentals and history; no player event can
+trigger or choose the outcome.
+
+Next task: add bounded account-history pagination through the fixed
+`GET /v1/history?offset=N` contract, deduplicating entries by rental-item ID and
+respecting the Worker's `hasMore` response.
 
 ## Phase board
 
@@ -76,7 +81,8 @@ watched from player events.
   - [x] Add account creation and profile onboarding.
   - [x] Add independent device-local and account collection actions.
   - [x] Add participation-time Balcão rental checkout.
-  - [ ] Add history pagination, return, and review actions.
+  - [x] Add explicit return-desk outcomes independent from playback.
+  - [ ] Add history pagination and review actions.
   - [ ] Integrate donations without coupling payment and rental state.
 - [ ] Phase 3 — media engine and add-on configuration
   - [x] Store secret-bearing manifest configuration in the OS credential store.
@@ -235,6 +241,14 @@ when they need user or real-environment confirmation.
   typecheck`, 68 Vitest tests in 17 files, and the production build passed; the
   Tauri shell passed 12 tests with 1 ignored keyring integration test and strict
   Clippy. No browser/manual or live rental write was performed.
+- 2026-09-22: added explicit account return actions for watched, not watched,
+  and undisclosed outcomes. Native commands accept only validated UUID rental
+  items and the three Worker-defined values; success reloads account state and
+  history, while playback events remain incapable of returning or marking a
+  title. `npm run typecheck`, 69 Vitest tests in 17 files, and the production
+  build passed; the Tauri shell passed 13 tests with 1 ignored keyring
+  integration test and strict Clippy. No browser/manual or live return write was
+  performed.
 
 ## Known blockers and risks
 

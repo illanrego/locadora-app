@@ -90,6 +90,11 @@ export async function createMemberRental(titles: Array<{
   return invoke('member_create_rental', { request: { titles } });
 }
 
+export async function returnMemberRental(itemId: string, watchedStatus: 'watched' | 'not_watched' | 'unknown'): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Locadora returns are available in the desktop app');
+  return invoke('member_return_rental', { request: { itemId, watchedStatus } });
+}
+
 export async function signOutMember(): Promise<MemberSessionStatus> {
   if (!isNativeShell()) return { configured: false, signedIn: false, user: null };
   return invoke<MemberSessionStatus>('member_sign_out');
