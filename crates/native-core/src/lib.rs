@@ -1,9 +1,13 @@
 mod network;
+#[cfg(unix)]
+mod player;
 
 pub use network::{
     MAX_JSON_BYTES, NativeNetworkError, build_addon_resource_url, fetch_bounded_https_json,
     validate_manifest_url,
 };
+#[cfg(unix)]
+pub use player::{MpvSession, PlayerError, PlayerEvent, VideoOutput};
 
 use serde::Serialize;
 use std::process::Command;
