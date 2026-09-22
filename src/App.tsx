@@ -8,6 +8,7 @@ import { TitleInspection } from './components/TitleInspection';
 import { VhsTape } from './components/VhsTape';
 import { WatchFlow } from './components/WatchFlow';
 import { readNativeCapabilities, type NativeCapabilities } from './platform/nativeBridge';
+import { readQuickWatchEnabled, writeQuickWatchEnabled } from './media/quickWatchPreference';
 import './styles.css';
 
 type Panel = 'basket' | 'saved' | 'account' | null;
@@ -33,6 +34,7 @@ export default function App() {
   const [mediaSettingsOpen, setMediaSettingsOpen] = useState(false);
   const [watchTitle, setWatchTitle] = useState<DiscoveryTitle | null>(null);
   const [nativeCapabilities, setNativeCapabilities] = useState<NativeCapabilities | null>(null);
+  const [quickWatchEnabled, setQuickWatchEnabled] = useState(readQuickWatchEnabled);
   const t = copy[locale];
   const genre = GENRES[genreIndex];
 
@@ -147,6 +149,16 @@ export default function App() {
             <button type="button" onClick={() => setMediaSettingsOpen(true)}>
               {locale === 'pt-BR' ? 'Fontes de mídia' : 'Media sources'}
             </button>
+            <button
+              type="button"
+              aria-pressed={quickWatchEnabled}
+              onClick={() => setQuickWatchEnabled((enabled) => {
+                writeQuickWatchEnabled(!enabled);
+                return !enabled;
+              })}
+            >
+              {locale === 'pt-BR' ? 'Quick Watch automático' : 'Automatic Quick Watch'}
+            </button>
             <p>
               <strong>Player:</strong>{' '}
               {nativeCapabilities?.mpv.available
@@ -218,6 +230,7 @@ export default function App() {
           title={watchTitle}
           locale={locale}
           mpvVersion={nativeCapabilities?.mpv.version ?? null}
+          quickWatchEnabled={quickWatchEnabled}
           onClose={() => setWatchTitle(null)}
         />
       )}

@@ -15,6 +15,7 @@ interface WatchFlowProps {
   title: DiscoveryTitle;
   locale: Locale;
   mpvVersion: string | null;
+  quickWatchEnabled: boolean;
   onClose: () => void;
 }
 
@@ -43,7 +44,7 @@ function explanation(resolution: MediaResolution | null, locale: Locale): string
   return messages[resolution.status][locale];
 }
 
-export function WatchFlow({ title, locale, mpvVersion, onClose }: WatchFlowProps) {
+export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClose }: WatchFlowProps) {
   const t = copy[locale];
   const video = useStremioVideo(mpvVersion);
   const [resolution, setResolution] = useState<MediaResolution | null>(null);
@@ -90,7 +91,7 @@ export function WatchFlow({ title, locale, mpvVersion, onClose }: WatchFlowProps
         setResolution(result);
         setLookupState('ready');
         const winner = result.quickWatch?.winner;
-        if (winner && toStremioPlayableStream(winner)) {
+        if (quickWatchEnabled && winner && toStremioPlayableStream(winner)) {
           await play(winner);
         } else if (result.status === 'manual-selection-required' || winner) {
           setManualVisible(true);
@@ -109,7 +110,7 @@ export function WatchFlow({ title, locale, mpvVersion, onClose }: WatchFlowProps
       controller.abort();
       if (abortRef.current === controller) abortRef.current = null;
     };
-  }, [locale, play, title]);
+  }, [locale, play, quickWatchEnabled, title]);
 
   const close = useCallback(() => {
     abortRef.current?.abort();
@@ -194,6 +195,14 @@ export function WatchFlow({ title, locale, mpvVersion, onClose }: WatchFlowProps
         <p>{playerError ?? explanation(resolution, locale)}</p>
         {current && <p className="current-source">{current.resolution}p · {formatBytes(current.sizeBytes, locale)} · {current.seeders ?? '—'} seeders · {current.sourceName}</p>}
       </section>
+
+      {!quickWatchEnabled && resolution?.quickWatch?.winner && (
+        <p className="transport-warning">
+          {locale === 'pt-BR'
+            ? 'Quick Watch automático está desligado. Escolha a fonte avaliada abaixo.'
+            : 'Automatic Quick Watch is off. Choose an evaluated source below.'}
+        </p>
+      )}
 
       {playerError && current && (
         <button type="button" className="retry-playback" onClick={() => void play(current)}>

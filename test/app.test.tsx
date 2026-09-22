@@ -3,7 +3,7 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import App from '../src/App';
 
 beforeAll(() => {
@@ -18,6 +18,7 @@ beforeAll(() => {
 });
 
 afterEach(() => cleanup());
+beforeEach(() => window.localStorage.clear());
 
 describe('accessible Locadora shelf', () => {
   it('renders the normal shelf without provider or Stremio catalogue controls', async () => {
@@ -67,5 +68,20 @@ describe('accessible Locadora shelf', () => {
     const dialog = screen.getByRole('dialog', { name: 'Fontes de mídia' });
     expect(within(dialog).getByText('Abra o aplicativo desktop para usar o cofre do sistema.')).toBeInTheDocument();
     expect(within(dialog).queryByLabelText('Manifest URL')).not.toBeInTheDocument();
+  });
+
+  it('keeps Quick Watch automatic by default and persists an explicit opt-out', async () => {
+    const user = userEvent.setup();
+    const first = render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Ajustes' }));
+    const toggle = screen.getByRole('button', { name: 'Quick Watch automático' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    first.unmount();
+
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Ajustes' }));
+    expect(screen.getByRole('button', { name: 'Quick Watch automático' })).toHaveAttribute('aria-pressed', 'false');
   });
 });

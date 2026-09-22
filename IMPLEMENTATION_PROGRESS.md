@@ -17,9 +17,10 @@ player reducer were removed. The native environment supplies bounded HTTPS and
 a deny-by-default mpv adapter while private transport URLs remain in the OS
 credential store.
 
-Next task: add the user setting that disables Quick Watch without changing its
-default rules, then tighten add-on response-size/time bounds and the
-source-failure diagnostics. Keep settings secondary to Locadora browsing.
+Next task: audit the read-only Locadora React/Three components and port the
+reusable visual behavior needed for immersive browsing, with the current
+accessible 2D shelf as the mandatory fallback. Do not copy media behavior back
+into the public Locadora repository.
 
 ## Phase board
 
@@ -57,7 +58,7 @@ source-failure diagnostics. Keep settings secondary to Locadora browsing.
 - [ ] Phase 4 — Quick Watch movies
   - [x] Implement and boundary-test the versioned deterministic movie evaluator.
   - [x] Connect a safe direct-URL winner and manual fallback picker to title inspection.
-  - [ ] Add a setting to disable Quick Watch without changing the default rules.
+  - [x] Add a setting to disable Quick Watch without changing the default rules.
   - [ ] Meet all Phase 4 exit criteria with a real sanitized add-on fixture.
 - [ ] Phase 5 — native playback, audio, and subtitles
   - [x] Connect native start/load/events/control/shutdown to the Watch flow.
@@ -150,6 +151,11 @@ when they need user or real-environment confirmation.
   adjustment, release-and-track-scoped delay persistence, and source retry.
   `npm run check` passed with 55 tests in 11 files and a production build. No
   browser/manual visual, audible, subtitle-rendering, or playback test was
+  performed.
+- 2026-09-22: added the secondary Automatic Quick Watch preference. It defaults
+  on, persists locally, and when disabled retains the same versioned evaluation
+  and manual candidates while suppressing autoplay only. `npm run check` passed
+  with 57 tests in 12 files and a production build. No manual testing was
   performed.
 
 ## Known blockers and risks
