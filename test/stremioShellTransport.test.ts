@@ -72,6 +72,16 @@ describe('official Stremio video shell adapter', () => {
     await transport.destroy();
   });
 
+  it('asks the shell for zero-copy decoding instead of copy-back', async () => {
+    const transport = new StremioShellTransport('0.35.1');
+    await transport.start();
+    transport.send('mpv-set-prop', ['hwdec', 'auto-copy']);
+
+    await waitFor(() => expect(native.setProperty).toHaveBeenCalledOnce());
+    expect(native.setProperty).toHaveBeenCalledWith('hwdec', 'auto');
+    await transport.destroy();
+  });
+
   it('reports the native reason for a rejected load and ignores rejected properties', async () => {
     const transport = new StremioShellTransport('0.35.1');
     const ended = vi.fn();

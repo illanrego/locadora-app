@@ -21,6 +21,16 @@ function nativeCommandError(value: unknown): string {
   return 'The native player command failed';
 }
 
+function nativePropertyValue(property: string, value: unknown): unknown {
+  // Stremio's own shell asks for copy-back decoding because it renders through
+  // the libmpv render API. We render through a real vo=gpu window, where
+  // zero-copy interop is available. Copy-back is unavailable on some Linux
+  // drivers, and mpv then falls back to software decoding, which cannot keep up
+  // with real 1080p content on a weak CPU.
+  if (property === 'hwdec' && value === 'auto-copy') return 'auto';
+  return value;
+}
+
 export class StremioShellTransport {
   readonly capabilities = { nativeAssSubtitles: false };
 
@@ -101,7 +111,7 @@ export class StremioShellTransport {
         && (rawValue === 'yes' || rawValue === 'no')
         ? rawValue === 'yes'
         : rawValue;
-      await setNativePlayerProperty(property, value);
+      await setNativePlayerProperty(property, nativePropertyValue(property, value));
     }
   }
 

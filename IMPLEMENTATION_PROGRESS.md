@@ -358,8 +358,21 @@ when they need user or real-environment confirmation.
   `127.0.0.1:11470` origin, no credentials, fragment, or path traversal), and
   the transport reports the native reason for a rejected load while ignoring
   rejected cosmetic properties, which no longer end playback. `npm run check`
-  passed with 80 tests in 21 files; native-core passed 16 tests. Playback inside
+  passed 80 tests in 21 files; native-core passed 16 tests. Playback inside
   the app is still unconfirmed.
+- 2026-09-22: desktop playback worked but stuttered badly. Measured the live
+  session through mpv's own IPC socket (the app's socket accepts a second,
+  read-only client): the stream was 1920x800 23.976 yuv420p with a six-minute
+  demuxer cache, no underruns, and zero decoder drops, while the video output
+  discarded about 13 frames per second. Decoding was running in software,
+  because Stremio Video asks for `hwdec=auto-copy` and every copy-back driver is
+  refused on this machine ("Not using this for auto-copy"). Zero-copy VAAPI does
+  work here: measured on film-like 1080p content it costs 9% of a core against
+  48% for software. The shell now translates that request to `hwdec=auto`
+  (zero-copy first, copy-back as fallback), which is correct for a shell that
+  renders through a real `vo=gpu` window rather than the libmpv render API.
+  `npm run check` passed with 81 tests in 21 files. Smooth playback is not yet
+  confirmed by the user.
 
 ## Known blockers and risks
 
