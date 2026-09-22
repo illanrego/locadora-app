@@ -85,11 +85,25 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: user-run MVP acceptance. The optimized no-bundle Tauri binary now
-mounts its interface. Launch it, open Media Sources, import the installed
-Stremio collection, confirm the 32 safe entries are listed with Local Files
-reported as skipped, then try one Locadora movie through Watch. Do not claim
-visual or playback acceptance until the user reports it.
+Next task: player UX parity with the web version, in this order.
+
+1. Done: the 3D shelf is the default surface (2D stays as the WebGL fallback),
+   the counter action is "Alugar" and rents only the tapes selected at checkout,
+   and every stream candidate is listed while watching so sources can be
+   switched without waiting for a failure. The inspection shows poster art,
+   type, year, genres, synopsis, and identifiers.
+2. In progress: the 3D tape inspection (port of the reference web inspector),
+   which also needs the remaining reference details for the counter flow.
+3. Pending: subtitles. Add-on subtitle tracks are fetched and handed to Stremio
+   Video, but with the player in its own window its HTML subtitle renderer draws
+   into a hidden container, so those tracks never appear. Fix by handing the
+   track to mpv, or by embedding the player (next item).
+4. Pending: embed the player. Stremio Video asks the shell for `vo=libmpv` and
+   the shell currently ignores it and runs a separate mpv window. Implementing
+   the render API into a GL widget inside the Tauri window removes the extra
+   window and makes HTML subtitle rendering work.
+
+Do not claim visual or playback acceptance until the user reports it.
 
 ## Phase board
 
@@ -373,6 +387,14 @@ when they need user or real-environment confirmation.
   renders through a real `vo=gpu` window rather than the libmpv render API.
   `npm run check` passed with 81 tests in 21 files. Smooth playback is not yet
   confirmed by the user.
+- 2026-09-22: the stutter was traced to the chosen stream itself, not the player
+  configuration. Started the player UX parity work: 3D shelf by default with the
+  toggle in the header, the counter action renamed to "Alugar" with per-tape
+  selection at checkout, every stream candidate listed while watching with the
+  current one marked, and real inspection data (poster art, type, year, genres,
+  synopsis, identifiers). `npm run check` passed with 82 tests in 21 files. The
+  3D tape inspection, subtitles, and player embedding remain open; no visual
+  acceptance was claimed.
 
 ## Known blockers and risks
 
