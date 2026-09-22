@@ -1,6 +1,7 @@
 import type { DiscoveryTitle } from '../domain/content';
 import { copy, type Locale } from '../locadora/catalog';
 import { Modal } from './Modal';
+import { MemberPanel } from './MemberPanel';
 
 interface SidePanelProps {
   kind: 'basket' | 'saved' | 'account';
@@ -36,6 +37,8 @@ export function SidePanel({ kind, locale, basket, onRemove, onClose }: SidePanel
           <button type="button" className="counter-action" disabled={!basket.length}>{t.counter} · {t.development}</button>
           <p className="phase-note">{t.checkoutLater}</p>
         </>
+      ) : kind === 'account' ? (
+        <MemberPanel locale={locale} />
       ) : (
         <div className="phase-placeholder">
           <span aria-hidden="true">▣</span>

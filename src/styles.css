@@ -160,6 +160,31 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .counter-action { width: 100%; }
 .phase-note { font-size: .7rem; text-align: center; }
 .phase-placeholder span { display: block; color: var(--yellow); font-size: 3rem; }
+.member-sign-in { display: grid; gap: .7rem; margin-top: 1.25rem; }
+.member-sign-in > p:first-child { color: #d6ccb7; line-height: 1.5; }
+.member-sign-in label { color: var(--yellow); font: 800 .65rem/1 "Courier New", monospace; letter-spacing: .06em; text-transform: uppercase; }
+.member-sign-in input { min-height: 44px; padding: .65rem; border: 2px solid #3f526b; color: var(--cream); background: #080d15; }
+.member-error { padding: .7rem; border: 1px solid #e36a5b; color: #ffd0c9; background: #5b201a; font-size: .75rem; line-height: 1.45; }
+.member-privacy { color: var(--muted); font-size: .68rem; line-height: 1.5; text-align: center; }
+.member-overview { display: grid; gap: 1rem; margin-top: 1.25rem; }
+.membership-card { position: relative; display: grid; gap: .2rem; padding: 1rem 1.15rem; overflow: hidden; border: 3px solid var(--paper); color: var(--ink); background: var(--yellow); box-shadow: 5px 6px 0 #080d15; transform: rotate(-.6deg); }
+.membership-card::after { content: "◼ REWIND CLUB"; position: absolute; right: -1.2rem; bottom: .7rem; color: #172c4930; font: 900 1.15rem Impact, sans-serif; transform: rotate(-8deg); }
+.membership-card span { color: var(--red); font: 900 .66rem "Courier New", monospace; letter-spacing: .14em; }
+.membership-card strong { font: 900 1.8rem/1 Impact, "Arial Narrow", sans-serif; letter-spacing: .03em; }
+.membership-card small { position: relative; z-index: 1; font: 700 .62rem "Courier New", monospace; text-transform: uppercase; }
+.member-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: .55rem; margin: 0; }
+.member-counts div { padding: .7rem; border: 1px dashed #ffffff38; text-align: center; }
+.member-counts dt { color: var(--muted); font: 700 .58rem "Courier New", monospace; text-transform: uppercase; }
+.member-counts dd { margin: .25rem 0 0; color: var(--yellow); font: 900 1.25rem "Courier New", monospace; }
+.member-section { border-top: 2px solid #ffffff25; }
+.member-section h3 { margin: .9rem 0 .6rem; color: var(--cyan); font: 900 .85rem "Arial Narrow", Arial, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+.member-tape-list { display: grid; gap: .45rem; margin: 0; padding: 0; list-style: none; }
+.member-tape-list li { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .6rem .7rem; background: #ffffff08; border-left: 4px solid var(--red); }
+.member-tape-list li span { display: grid; min-width: 0; gap: .15rem; }
+.member-tape-list strong { overflow: hidden; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.member-tape-list small, .member-tape-list em, .member-empty { color: var(--muted); font: 700 .6rem "Courier New", monospace; }
+.member-tape-list em { color: #ff9b88; }
+.member-empty { margin: 0; padding: .65rem; border: 1px dashed #ffffff24; }
 .manifest-form { display: grid; gap: .55rem; margin: 1.2rem 0; }
 .manifest-form label { color: var(--yellow); font: 800 .65rem/1 "Courier New", monospace; text-transform: uppercase; }
 .manifest-form input { min-height: 44px; padding: .65rem; border: 2px solid #3f526b; color: var(--cream); background: #080d15; font-family: "Courier New", monospace; }

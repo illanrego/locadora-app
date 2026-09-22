@@ -1,5 +1,5 @@
 use futures_util::StreamExt;
-use reqwest::{Client, StatusCode, header};
+use reqwest::{Client, Method, StatusCode, header};
 use serde_json::Value;
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
@@ -11,6 +11,33 @@ use url::{Host, Url};
 pub const MAX_JSON_BYTES: usize = 1024 * 1024;
 const MAX_REDIRECTS: usize = 3;
 const TIMEOUT: Duration = Duration::from_secs(8);
+const MAX_AUTH_TOKEN_BYTES: usize = 16 * 1024;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JsonRequestMethod {
+    Get,
+    Post,
+    Put,
+    Delete,
+}
+
+impl JsonRequestMethod {
+    fn as_reqwest(self) -> Method {
+        match self {
+            Self::Get => Method::GET,
+            Self::Post => Method::POST,
+            Self::Put => Method::PUT,
+            Self::Delete => Method::DELETE,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct BoundedJsonResponse {
+    pub status: u16,
+    pub body: Value,
+    pub refreshed_token: Option<String>,
+}
 
 #[derive(Debug, Error)]
 pub enum NativeNetworkError {
@@ -132,6 +159,80 @@ fn pinned_client(host: &str, addresses: &[SocketAddr]) -> Result<Client, NativeN
         .map_err(|_| NativeNetworkError::RequestFailed)
 }
 
+async fn bounded_json_body(response: reqwest::Response) -> Result<Value, NativeNetworkError> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_JSON_BYTES as u64)
+    {
+        return Err(NativeNetworkError::ResponseTooLarge);
+    }
+
+    let mut bytes = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|_| NativeNetworkError::RequestFailed)?;
+        if bytes.len() + chunk.len() > MAX_JSON_BYTES {
+            return Err(NativeNetworkError::ResponseTooLarge);
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    if bytes.is_empty() {
+        return Ok(Value::Null);
+    }
+    serde_json::from_slice(&bytes).map_err(|_| NativeNetworkError::InvalidJson)
+}
+
+pub async fn fetch_bounded_https_json_request(
+    input: &str,
+    method: JsonRequestMethod,
+    body: Option<&Value>,
+    bearer: Option<&str>,
+) -> Result<BoundedJsonResponse, NativeNetworkError> {
+    let target = validate_https_url(input)?;
+    let (host, addresses) = resolve_public_addresses(&target)?;
+    let client = pinned_client(&host, &addresses)?;
+    let mut request = client
+        .request(method.as_reqwest(), target)
+        .header(header::ACCEPT, "application/json")
+        .header(header::USER_AGENT, "WillsLocadoraPlayer/0.1");
+    if let Some(token) = bearer {
+        if token.is_empty()
+            || token.len() > MAX_AUTH_TOKEN_BYTES
+            || token.chars().any(char::is_control)
+        {
+            return Err(NativeNetworkError::RequestFailed);
+        }
+        request = request.bearer_auth(token);
+    }
+    if let Some(body) = body {
+        request = request.json(body);
+    }
+    let response = request.send().await.map_err(|error| {
+        if error.is_timeout() {
+            NativeNetworkError::Timeout
+        } else {
+            NativeNetworkError::RequestFailed
+        }
+    })?;
+    let status = response.status().as_u16();
+    let refreshed_token = response
+        .headers()
+        .get("set-auth-token")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= MAX_AUTH_TOKEN_BYTES
+                && !value.chars().any(char::is_control)
+        })
+        .map(ToOwned::to_owned);
+    let body = bounded_json_body(response).await?;
+    Ok(BoundedJsonResponse {
+        status,
+        body,
+        refreshed_token,
+    })
+}
+
 pub async fn fetch_bounded_https_json(input: &str) -> Result<Value, NativeNetworkError> {
     let mut target = validate_https_url(input)?;
     for redirect_count in 0..=MAX_REDIRECTS {
@@ -170,23 +271,7 @@ pub async fn fetch_bounded_https_json(input: &str) -> Result<Value, NativeNetwor
         if response.status() != StatusCode::OK {
             return Err(NativeNetworkError::RequestFailed);
         }
-        if response
-            .content_length()
-            .is_some_and(|length| length > MAX_JSON_BYTES as u64)
-        {
-            return Err(NativeNetworkError::ResponseTooLarge);
-        }
-
-        let mut bytes = Vec::new();
-        let mut stream = response.bytes_stream();
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|_| NativeNetworkError::RequestFailed)?;
-            if bytes.len() + chunk.len() > MAX_JSON_BYTES {
-                return Err(NativeNetworkError::ResponseTooLarge);
-            }
-            bytes.extend_from_slice(&chunk);
-        }
-        return serde_json::from_slice(&bytes).map_err(|_| NativeNetworkError::InvalidJson);
+        return bounded_json_body(response).await;
     }
     Err(NativeNetworkError::TooManyRedirects)
 }
@@ -223,5 +308,13 @@ mod tests {
         let secret = "not-a-url-with-a-secret";
         let error = validate_manifest_url(secret).unwrap_err().to_string();
         assert!(!error.contains(secret));
+    }
+
+    #[test]
+    fn request_methods_are_explicitly_allowlisted() {
+        assert_eq!(JsonRequestMethod::Get.as_reqwest(), Method::GET);
+        assert_eq!(JsonRequestMethod::Post.as_reqwest(), Method::POST);
+        assert_eq!(JsonRequestMethod::Put.as_reqwest(), Method::PUT);
+        assert_eq!(JsonRequestMethod::Delete.as_reqwest(), Method::DELETE);
     }
 }

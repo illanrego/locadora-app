@@ -70,6 +70,15 @@ describe('accessible Locadora shelf', () => {
     expect(within(dialog).queryByLabelText('Manifest URL')).not.toBeInTheDocument();
   });
 
+  it('keeps anonymous browsing while making member login participation-time and desktop-only', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Ação e aventura' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Conta' }));
+    const dialog = screen.getByRole('dialog', { name: 'Conta' });
+    expect(await within(dialog).findByText('Abra o aplicativo desktop para entrar na sua Locadora.')).toBeInTheDocument();
+  });
+
   it('keeps Quick Watch automatic by default and persists an explicit opt-out', async () => {
     const user = userEvent.setup();
     const first = render(<App />);

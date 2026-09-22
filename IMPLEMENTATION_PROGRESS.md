@@ -1,7 +1,7 @@
 # Implementation progress
 
 Last updated: 2026-09-22
-Current milestone: official Stremio application integration
+Current milestone: Phase 2 Locadora member services
 Status: in progress
 
 ## Resume checkpoint
@@ -17,10 +17,18 @@ player reducer were removed. The native environment supplies bounded HTTPS and
 a deny-by-default mpv adapter while private transport URLs remain in the OS
 credential store.
 
-Next task: implement the Phase 2 Locadora member-service adapter from the
-read-only web application's existing Better Auth/private Worker contracts,
-keeping its session completely independent from media configuration and
-playback. Do not add direct Supabase access or mutate the reference repository.
+The first Phase 2 slice now calls the existing Better Auth and private Worker
+contracts through the bounded native HTTPS transport. Locadora bearer material
+is stored in its own OS-keyring service/account and is never returned to React.
+The account panel supports participation-time sign-in, session restoration,
+sign-out, and normalized profile, active-rental, saved-title, favorite, and
+history summaries. Anonymous browsing and all media configuration remain
+independent.
+
+Next task: add desktop-safe Better Auth account creation and the private
+`PUT /v1/profile` username-onboarding flow, then expose that onboarding in the
+existing account panel. Keep endpoint selection native-allowlisted and do not
+return session material to React.
 
 ## Phase board
 
@@ -44,6 +52,12 @@ playback. Do not add direct Supabase access or mutate the reference repository.
   - [x] Implement the immersive enhancement and 2D failure fallback.
   - [ ] Meet all Phase 1 exit criteria and receive user visual approval.
 - [ ] Phase 2 — Locadora member services
+  - [x] Store the Locadora bearer session separately in the OS credential store.
+  - [x] Restore, sign in, and sign out through the existing Better Auth contract.
+  - [x] Load and normalize profile, active rental, collections, and initial history.
+  - [ ] Add account creation and profile onboarding.
+  - [ ] Add history pagination, collection, rental, return, and review actions.
+  - [ ] Integrate donations without coupling payment and rental state.
 - [ ] Phase 3 — media engine and add-on configuration
   - [x] Store secret-bearing manifest configuration in the OS credential store.
   - [x] Validate manifests natively and return sanitized capabilities only.
@@ -164,6 +178,19 @@ when they need user or real-environment confirmation.
   and manual candidates while suppressing autoplay only. `npm run check` passed
   with 57 tests in 12 files and a production build. No manual testing was
   performed.
+- 2026-09-22: added the first Locadora member-service slice using the existing
+  Better Auth/private Worker contracts through fixed native endpoints. Member
+  bearer material uses a dedicated OS-keyring namespace, is not returned to
+  React, and is unaffected by media disconnect. The account panel now restores
+  sessions, signs in/out, and presents normalized profile, active-rental,
+  collection, and initial-history state while browser builds remain anonymous.
+  `npm run check` passed with 62 tests in 14 files and a production build; the
+  Tauri shell passed 9 tests with 1 ignored credential-store integration test;
+  both Rust crates passed strict Clippy and formatting checks. Native-core
+  passed all 13 tests outside the filesystem sandbox, including its synthetic
+  private-mpv IPC tests; those two mpv tests cannot open a Unix control socket
+  inside the sandbox. No live member credentials, browser/manual testing, or
+  production member mutation was used.
 
 ## Known blockers and risks
 

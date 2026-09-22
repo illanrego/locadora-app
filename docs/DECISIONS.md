@@ -65,6 +65,15 @@ service's canonical hash/file playback path; arbitrary localhost URLs remain
 blocked. Stremio Service is detected at runtime and is not silently installed,
 started, linked, or bundled by this milestone.
 
+### D-010 — Desktop Locadora session boundary
+
+The desktop app reuses the existing Better Auth and private member-Worker
+contracts through fixed, native-allowlisted HTTPS endpoints. Its bearer token is
+stored in an OS-keyring service/account distinct from media configuration and is
+never returned to the React layer. Browser builds remain anonymous, member
+login stays optional until participation, and local logout succeeds even when
+the remote sign-out request is unavailable.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

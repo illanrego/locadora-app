@@ -1,7 +1,8 @@
 use locadora_native_core::{
-    Manifest, ManifestResource, MpvSession, NativeCapabilities, PlayerEvent, ResourcePath,
-    VideoOutput, fetch_bounded_https_json, native_capabilities as read_native_capabilities,
-    stremio_manifest, stremio_resource, validate_manifest_url,
+    JsonRequestMethod, Manifest, ManifestResource, MpvSession, NativeCapabilities, PlayerEvent,
+    ResourcePath, VideoOutput, fetch_bounded_https_json, fetch_bounded_https_json_request,
+    native_capabilities as read_native_capabilities, stremio_manifest, stremio_resource,
+    validate_manifest_url,
 };
 use serde::Deserialize;
 use serde::Serialize;
@@ -11,6 +12,7 @@ use tauri::{AppHandle, Manager, State};
 use urlencoding::encode;
 
 const PUBLIC_API_BASE: &str = "https://locadora-api.willstartpage.workers.dev/v1";
+const MEMBER_API_BASE: &str = "https://locadora-data.willstartpage.workers.dev";
 const ALLOWED_GENRES: &[&str] = &[
     "Action",
     "Adventure",
@@ -29,6 +31,8 @@ const ALLOWED_GENRES: &[&str] = &[
 ];
 const KEYRING_SERVICE: &str = "com.illanrego.willslocadora.media";
 const KEYRING_ACCOUNT: &str = "addon-manifests-v1";
+const MEMBER_KEYRING_SERVICE: &str = "com.illanrego.willslocadora.member";
+const MEMBER_KEYRING_ACCOUNT: &str = "better-auth-session-v1";
 const MEDIA_CONFIGURATION_VERSION: u8 = 3;
 const MAX_CONFIGURED_ADDONS: usize = 12;
 const MAX_MANIFEST_RESOURCES: usize = 64;
@@ -60,6 +64,28 @@ pub struct PublicShelfRequest {
     year: u16,
     content_type: String,
     stand: u8,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberCredentials {
+    identifier: String,
+    password: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberUser {
+    id: String,
+    username: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberSessionStatus {
+    configured: bool,
+    signed_in: bool,
+    user: Option<MemberUser>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,6 +146,124 @@ fn keyring_entry() -> Result<keyring::Entry, String> {
 fn keyring_entry_for(account: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new(KEYRING_SERVICE, account)
         .map_err(|_| "Protected media storage is unavailable".into())
+}
+
+fn member_keyring_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(MEMBER_KEYRING_SERVICE, MEMBER_KEYRING_ACCOUNT)
+        .map_err(|_| "Protected member storage is unavailable".into())
+}
+
+fn load_member_token() -> Result<Option<String>, String> {
+    match member_keyring_entry()?.get_password() {
+        Ok(token) if !token.is_empty() && token.len() <= 16 * 1024 => Ok(Some(token)),
+        Ok(_) => Err("Protected member session is invalid".into()),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(_) => Err("Protected member storage is unavailable".into()),
+    }
+}
+
+fn store_member_token(token: &str) -> Result<(), String> {
+    if token.is_empty() || token.len() > 16 * 1024 || token.chars().any(char::is_control) {
+        return Err("Member service returned an invalid session".into());
+    }
+    member_keyring_entry()?
+        .set_password(token)
+        .map_err(|_| "Protected member storage is unavailable".into())
+}
+
+fn delete_member_token() -> Result<(), String> {
+    match member_keyring_entry()?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(_) => Err("Protected member storage is unavailable".into()),
+    }
+}
+
+fn signed_out_member_status() -> MemberSessionStatus {
+    MemberSessionStatus {
+        configured: true,
+        signed_in: false,
+        user: None,
+    }
+}
+
+fn member_user(body: &Value) -> Option<MemberUser> {
+    let user = body.get("user")?;
+    let id = user.get("id")?.as_str()?.trim();
+    if id.is_empty() || id.len() > 160 {
+        return None;
+    }
+    let username = user
+        .get("username")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.len() <= 24)
+        .map(ToOwned::to_owned);
+    Some(MemberUser {
+        id: id.to_owned(),
+        username,
+    })
+}
+
+fn validate_member_credentials(credentials: &MemberCredentials) -> Result<(), String> {
+    let identifier = credentials.identifier.trim();
+    if identifier.len() < 3
+        || identifier.len() > 254
+        || identifier.chars().any(|character| character.is_control())
+    {
+        return Err("Enter a valid email or username".into());
+    }
+    if credentials.password.len() < 6
+        || credentials.password.len() > 128
+        || credentials.password.chars().any(char::is_control)
+    {
+        return Err("Password must contain 6 to 128 characters".into());
+    }
+    Ok(())
+}
+
+fn member_service_error(status: u16) -> String {
+    match status {
+        401 | 403 => "Invalid login or password".into(),
+        429 => "Too many attempts. Wait a moment and try again".into(),
+        500..=599 => "The Locadora member service is temporarily unavailable".into(),
+        _ => "The Locadora member action could not be completed".into(),
+    }
+}
+
+fn member_session_from_body(body: &Value) -> Option<MemberSessionStatus> {
+    member_user(body).map(|user| MemberSessionStatus {
+        configured: true,
+        signed_in: true,
+        user: Some(user),
+    })
+}
+
+async fn member_get_session(token: &str) -> Result<MemberSessionStatus, String> {
+    let response = fetch_bounded_https_json_request(
+        &format!("{MEMBER_API_BASE}/api/auth/get-session"),
+        JsonRequestMethod::Get,
+        None,
+        Some(token),
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if matches!(response.status, 401 | 403) {
+        delete_member_token()?;
+        return Ok(signed_out_member_status());
+    }
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    if let Some(refreshed_token) = response.refreshed_token {
+        store_member_token(&refreshed_token)?;
+    }
+    match member_session_from_body(&response.body) {
+        Some(status) => Ok(status),
+        None => {
+            delete_member_token()?;
+            Ok(signed_out_member_status())
+        }
+    }
 }
 
 fn migrate_media_configuration(configuration: &mut StoredMediaConfiguration) {
@@ -318,6 +462,89 @@ pub fn native_capabilities() -> NativeCapabilities {
 }
 
 #[tauri::command]
+pub async fn member_session_status() -> Result<MemberSessionStatus, String> {
+    match load_member_token()? {
+        Some(token) => member_get_session(&token).await,
+        None => Ok(signed_out_member_status()),
+    }
+}
+
+#[tauri::command]
+pub async fn member_sign_in(credentials: MemberCredentials) -> Result<MemberSessionStatus, String> {
+    validate_member_credentials(&credentials)?;
+    let identifier = credentials.identifier.trim();
+    let (path, body) = if identifier.contains('@') {
+        (
+            "sign-in/email",
+            serde_json::json!({ "email": identifier, "password": credentials.password }),
+        )
+    } else {
+        (
+            "sign-in/username",
+            serde_json::json!({ "username": identifier, "password": credentials.password }),
+        )
+    };
+    let response = fetch_bounded_https_json_request(
+        &format!("{MEMBER_API_BASE}/api/auth/{path}"),
+        JsonRequestMethod::Post,
+        Some(&body),
+        None,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    let token = response
+        .refreshed_token
+        .ok_or("Member service did not create a desktop session")?;
+    let status = member_session_from_body(&response.body)
+        .ok_or("Member service returned an invalid session")?;
+    store_member_token(&token)?;
+    Ok(status)
+}
+
+#[tauri::command]
+pub async fn member_sign_out() -> Result<MemberSessionStatus, String> {
+    if let Some(token) = load_member_token()? {
+        let body = serde_json::json!({});
+        let _ = fetch_bounded_https_json_request(
+            &format!("{MEMBER_API_BASE}/api/auth/sign-out"),
+            JsonRequestMethod::Post,
+            Some(&body),
+            Some(&token),
+        )
+        .await;
+    }
+    delete_member_token()?;
+    Ok(signed_out_member_status())
+}
+
+#[tauri::command]
+pub async fn member_state() -> Result<Value, String> {
+    let token = load_member_token()?.ok_or("Sign in to use your personal Locadora")?;
+    let response = fetch_bounded_https_json_request(
+        &format!("{MEMBER_API_BASE}/v1/state"),
+        JsonRequestMethod::Get,
+        None,
+        Some(&token),
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if matches!(response.status, 401 | 403) {
+        delete_member_token()?;
+        return Err("Member session expired. Sign in again".into());
+    }
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    if let Some(refreshed_token) = response.refreshed_token {
+        store_member_token(&refreshed_token)?;
+    }
+    Ok(response.body)
+}
+
+#[tauri::command]
 pub fn media_configuration_status() -> Result<Vec<ConfiguredAddon>, String> {
     load_media_configuration().map(|configuration| sanitized_configuration(&configuration))
 }
@@ -503,6 +730,60 @@ mod tests {
             PUBLIC_API_BASE,
             "https://locadora-api.willstartpage.workers.dev/v1"
         );
+    }
+
+    #[test]
+    fn member_contract_has_a_fixed_origin_and_separate_keyring_namespace() {
+        assert_eq!(
+            MEMBER_API_BASE,
+            "https://locadora-data.willstartpage.workers.dev"
+        );
+        assert_ne!(KEYRING_SERVICE, MEMBER_KEYRING_SERVICE);
+        assert_ne!(KEYRING_ACCOUNT, MEMBER_KEYRING_ACCOUNT);
+    }
+
+    #[test]
+    fn member_credentials_are_bounded_before_network_access() {
+        assert!(
+            validate_member_credentials(&MemberCredentials {
+                identifier: "member_name".into(),
+                password: "correct horse".into(),
+            })
+            .is_ok()
+        );
+        assert!(
+            validate_member_credentials(&MemberCredentials {
+                identifier: "x".into(),
+                password: "correct horse".into(),
+            })
+            .is_err()
+        );
+        assert!(
+            validate_member_credentials(&MemberCredentials {
+                identifier: "member_name".into(),
+                password: "short".into(),
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn member_session_exposes_only_bounded_identity_fields() {
+        let body = serde_json::json!({
+            "user": {
+                "id": "member-id",
+                "username": "will",
+                "email": "private@example.invalid",
+                "token": "must-not-leak"
+            },
+            "session": { "token": "also-private" }
+        });
+        let status = member_session_from_body(&body).unwrap();
+        let serialized = serde_json::to_string(&status).unwrap();
+        assert_eq!(status.user.unwrap().username.as_deref(), Some("will"));
+        assert!(!serialized.contains("private@example.invalid"));
+        assert!(!serialized.contains("must-not-leak"));
+        assert!(!serialized.contains("also-private"));
     }
 
     #[test]

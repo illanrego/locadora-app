@@ -12,6 +12,17 @@ export interface ConfiguredAddon {
   supportsSubtitles: boolean;
 }
 
+export interface MemberUser {
+  id: string;
+  username: string | null;
+}
+
+export interface MemberSessionStatus {
+  configured: boolean;
+  signedIn: boolean;
+  user: MemberUser | null;
+}
+
 export type NativePlayerEvent =
   | { kind: 'ready' }
   | { kind: 'file-loaded' }
@@ -35,6 +46,26 @@ export function isNativeShell(): boolean {
 export async function readNativeCapabilities(): Promise<NativeCapabilities> {
   if (!isNativeShell()) return { mpv: { available: false, version: null } };
   return invoke<NativeCapabilities>('native_capabilities');
+}
+
+export async function readMemberSession(): Promise<MemberSessionStatus> {
+  if (!isNativeShell()) return { configured: false, signedIn: false, user: null };
+  return invoke<MemberSessionStatus>('member_session_status');
+}
+
+export async function signInMember(identifier: string, password: string): Promise<MemberSessionStatus> {
+  if (!isNativeShell()) throw new Error('Locadora accounts are available in the desktop app');
+  return invoke<MemberSessionStatus>('member_sign_in', { credentials: { identifier, password } });
+}
+
+export async function signOutMember(): Promise<MemberSessionStatus> {
+  if (!isNativeShell()) return { configured: false, signedIn: false, user: null };
+  return invoke<MemberSessionStatus>('member_sign_out');
+}
+
+export async function fetchMemberState(): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Locadora accounts are available in the desktop app');
+  return invoke('member_state');
 }
 
 export async function fetchNativePublicShelf(request: {
