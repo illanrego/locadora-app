@@ -130,4 +130,13 @@ describe('accessible Locadora shelf', () => {
     expect(screen.getByRole('button', { name: 'Modo imersivo' })).toHaveAttribute('aria-pressed', 'false');
     expect(await screen.findByRole('button', { name: /Inspecionar Agent 327/i })).toBeInTheDocument();
   });
+
+  it('keeps voluntary support separate from Cesta and account state', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Me pague um café' }));
+    const dialog = screen.getByRole('dialog', { name: 'Me pague um café' });
+    expect(within(dialog).getByText('A LOCADORA É GRÁTIS')).toBeInTheDocument();
+    expect(screen.getByLabelText('0 / 3')).toBeInTheDocument();
+  });
 });

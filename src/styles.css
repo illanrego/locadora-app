@@ -125,6 +125,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .empty-tape { display: block; width: 150px; height: 85px; margin: 0 auto 1.5rem; border: 8px solid #090807; border-radius: 8px; background: radial-gradient(circle at 30% 50%, #111 0 16px, #777 17px 20px, transparent 21px), radial-gradient(circle at 70% 50%, #111 0 16px, #777 17px 20px, transparent 21px), #26221f; transform: rotate(-4deg); }
 
 footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem clamp(1rem, 4vw, 4rem); color: #8f8573; background: #090706; font: 700 .62rem/1.4 "Courier New", monospace; letter-spacing: .09em; text-transform: uppercase; }
+.support-link { padding: .2rem; border: 0; color: var(--yellow); background: transparent; font: inherit; text-decoration: underline; text-underline-offset: .25em; }
 
 .modal { width: min(920px, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); margin: auto; padding: 0; overflow: auto; border: 4px solid var(--paper); color: var(--cream); background: #111925; box-shadow: 14px 16px 0 #0008; }
 .modal::backdrop { background: #050403d9; backdrop-filter: blur(3px); }
@@ -174,6 +175,10 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .member-success { padding: .7rem; border: 1px solid #60d399; color: #baf3d3; background: #133d2a; font-size: .75rem; line-height: 1.45; }
 .phase-note { font-size: .7rem; text-align: center; }
 .phase-placeholder span { display: block; color: var(--yellow); font-size: 3rem; }
+.donation-modal { display: grid; gap: .8rem; }
+.donation-free { width: max-content; max-width: 100%; margin: .4rem auto 0; padding: .4rem .7rem; border: 2px solid var(--yellow); color: var(--ink); background: var(--yellow); box-shadow: 3px 3px 0 var(--red); font: 900 .75rem "Courier New", monospace; }
+.pix-label { color: var(--yellow); font: 800 .65rem "Courier New", monospace; text-transform: uppercase; }
+.donation-modal textarea { width: 100%; padding: .7rem; resize: vertical; border: 2px solid #b49d79; color: var(--blue-deep); background: var(--cream); font: 700 .68rem/1.35 "Courier New", monospace; overflow-wrap: anywhere; }
 .member-sign-in { display: grid; gap: .7rem; margin-top: 1.25rem; }
 .member-sign-in > p:first-child { color: #d6ccb7; line-height: 1.5; }
 .member-sign-in label { color: var(--yellow); font: 800 .65rem/1 "Courier New", monospace; letter-spacing: .06em; text-transform: uppercase; }

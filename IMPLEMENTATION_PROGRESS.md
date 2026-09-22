@@ -60,9 +60,16 @@ eligible member can submit a half-star rating plus 1–1,000 characters through
 the fixed review route. Review state is attached only to the canonical Locadora
 title and never to a media source or playback event.
 
-Next task: inspect and implement the Phase 2 voluntary-donation presentation
-without persisting payment state or coupling donations to Cesta, rentals,
-returns, reviews, media configuration, or playback.
+Voluntary support now uses the same intentionally public Pix copy-and-paste
+payload as the Locadora website in a standalone footer modal. It has no payment
+API, confirmation, persistence, analytics, or relationship to Cesta, rentals,
+returns, reviews, member/media sessions, or playback. Phase 2 implementation is
+complete; its exit criteria still need a live user-session acceptance check.
+
+Next task: begin Phase 6 Linux delivery with a reproducible Flatpak manifest
+and build instructions for the existing Tauri binary, documenting system mpv,
+WebKitGTK/codecs, Stremio Service, source, and license boundaries. Do not claim
+runtime acceptance until the package is actually built and exercised.
 
 ## Phase board
 
@@ -95,7 +102,7 @@ returns, reviews, media configuration, or playback.
   - [x] Add explicit return-desk outcomes independent from playback.
   - [x] Add bounded, deduplicated history pagination.
   - [x] Add public review reading and eligible member review writes.
-  - [ ] Integrate donations without coupling payment and rental state.
+  - [x] Integrate donations without coupling payment and rental state.
 - [ ] Phase 3 — media engine and add-on configuration
   - [x] Store secret-bearing manifest configuration in the OS credential store.
   - [x] Validate manifests natively and return sanitized capabilities only.
@@ -276,6 +283,12 @@ when they need user or real-environment confirmation.
   files, and the production build passed; the Tauri shell passed 15 tests with
   1 ignored keyring integration test and strict Clippy. No browser/manual or
   live review write was performed.
+- 2026-09-22: added a standalone voluntary-support modal using the same
+  intentionally public Pix copy-and-paste payload as the Locadora website. It
+  stores no payment or confirmation state and has no path into rentals, member
+  state, media configuration, or playback. `npm run check` passed with 76 tests
+  in 20 files and a production build. No browser/manual or payment test was
+  performed.
 
 ## Known blockers and risks
 
@@ -292,3 +305,6 @@ when they need user or real-environment confirmation.
 - Series Quick Watch rules are deliberately undefined.
 - Public release licensing must be re-reviewed after the final native/player
   dependency graph is locked.
+- Phase 2 contract/UI tests use synthetic data; a real member login, account
+  state comparison, collection/rental/return/review round trip, and email signup
+  remain required before the phase exit criteria can be closed.

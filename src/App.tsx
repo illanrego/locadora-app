@@ -7,6 +7,7 @@ import { MediaSettings } from './components/MediaSettings';
 import { TitleInspection } from './components/TitleInspection';
 import { VhsTape } from './components/VhsTape';
 import { WatchFlow } from './components/WatchFlow';
+import { DonationPanel } from './components/DonationPanel';
 import { readMemberSession, readNativeCapabilities, updateMemberCollection, type NativeCapabilities } from './platform/nativeBridge';
 import { readQuickWatchEnabled, writeQuickWatchEnabled } from './media/quickWatchPreference';
 import { readImmersiveEnabled, writeImmersiveEnabled } from './locadora/immersive';
@@ -38,6 +39,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mediaSettingsOpen, setMediaSettingsOpen] = useState(false);
   const [watchTitle, setWatchTitle] = useState<DiscoveryTitle | null>(null);
+  const [donationOpen, setDonationOpen] = useState(false);
   const [nativeCapabilities, setNativeCapabilities] = useState<NativeCapabilities | null>(null);
   const [quickWatchEnabled, setQuickWatchEnabled] = useState(readQuickWatchEnabled);
   const [immersiveEnabled, setImmersiveEnabled] = useState(readImmersiveEnabled);
@@ -277,7 +279,7 @@ export default function App() {
 
       <footer>
         <span>Be kind, rewind.</span>
-        <span>Phase 1 · accessible 2D shelf</span>
+        <button type="button" className="support-link" onClick={() => setDonationOpen(true)}>{locale === 'pt-BR' ? 'Me pague um café' : 'Buy me a coffee'}</button>
       </footer>
 
       {selected && (
@@ -307,6 +309,7 @@ export default function App() {
         onClose={() => setPanel(null)}
       />}
       {mediaSettingsOpen && <MediaSettings locale={locale} onClose={() => setMediaSettingsOpen(false)} />}
+      {donationOpen && <DonationPanel locale={locale} onClose={() => setDonationOpen(false)} />}
       {watchTitle && (
         <WatchFlow
           title={watchTitle}
