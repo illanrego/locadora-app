@@ -101,29 +101,6 @@ pub fn validate_manifest_url(value: &str) -> Result<Url, NativeNetworkError> {
     Ok(url)
 }
 
-pub fn build_addon_resource_url(
-    manifest_url: &str,
-    resource: &str,
-    content_type: &str,
-    id: &str,
-) -> Result<Url, NativeNetworkError> {
-    if !matches!(resource, "stream" | "subtitles" | "meta")
-        || !matches!(content_type, "movie" | "series")
-        || id.is_empty()
-        || id.len() > 180
-    {
-        return Err(NativeNetworkError::InvalidUrl);
-    }
-    let mut url = validate_manifest_url(manifest_url)?;
-    let root = url.path().trim_end_matches("/manifest.json");
-    let encoded_id: String = url::form_urlencoded::byte_serialize(id.as_bytes()).collect();
-    url.set_path(&format!(
-        "{root}/{resource}/{content_type}/{encoded_id}.json"
-    ));
-    url.set_query(None);
-    Ok(url)
-}
-
 fn resolve_public_addresses(url: &Url) -> Result<(String, Vec<SocketAddr>), NativeNetworkError> {
     let host = match url.host().ok_or(NativeNetworkError::InvalidUrl)? {
         Host::Domain(host) => host.to_owned(),
@@ -225,30 +202,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(url.scheme(), "https");
-    }
-
-    #[test]
-    fn builds_only_allowlisted_addon_resources() {
-        let url = build_addon_resource_url(
-            "https://addon.example.invalid/config/manifest.json?token=secret",
-            "stream",
-            "movie",
-            "tt1254207",
-        )
-        .unwrap();
-        assert_eq!(
-            url.as_str(),
-            "https://addon.example.invalid/config/stream/movie/tt1254207.json"
-        );
-        assert!(
-            build_addon_resource_url(
-                "https://addon.example.invalid/manifest.json",
-                "proxy",
-                "movie",
-                "tt1"
-            )
-            .is_err()
-        );
     }
 
     #[test]

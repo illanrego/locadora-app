@@ -19,14 +19,16 @@ Packaging work must refresh this file from the final dependency graph.
 | Tauri 2 | Native application boundary | MIT OR Apache-2.0 | Candidate shell; final Rust graph must be audited. |
 | reqwest + rustls | Bounded native HTTPS transport | MIT OR Apache-2.0 | Redirects are manually revalidated; TLS uses platform-verifier-backed rustls. |
 | keyring-rs | OS-protected media configuration | MIT OR Apache-2.0 | Stores secret-bearing manifest configuration through the platform credential service. |
-| Stremio Core | Potential core integration | MIT | Not copied or linked in the initial protocol spike. |
-| Stremio add-on protocol | Compatible HTTP contract | Documentation/protocol | Implemented cleanly from the public resource contract. |
+| Stremio Core | Add-on types, compatibility, transport, and response parsing | MIT | Linked from the official repository at pinned revision `b3062f7fa790223540022f9a62c12067b646c179`; retain its license and notices. |
+| Stremio official add-ons | Transitive Core data dependency | MIT | Version 2.1.2 through the pinned Core dependency. |
+| Stremio local-search | Transitive Core search dependency | MIT | Cargo locks the resolved official repository revision. |
+| Stremio add-on protocol | Compatible HTTP contract | Documentation/protocol | Requests and responses are now handled by official Stremio Core over the bounded native environment. |
 | mpv / libmpv | Native playback candidate | GPL-2.0-or-later by default; an LGPL-2.1-or-later build mode exists with caveats | Initial spike targets a separately installed system mpv. No mpv binary is bundled. Packaging remains blocked on a final license/build review. |
 
 ## Explicit exclusions
 
-- No Stremio Web UI code is copied. Its UI license and product choreography are
-  outside this implementation.
+- No Stremio Web visual UI code is copied. Its frontend media behavior is a
+  reference for connecting official Core/player modules beneath Locadora's UI.
 - No Stremio `server.js` distribution is included.
 - No code from a repository without a clear license is included.
 - No third-party credentials, manifest URLs, or playback URLs are included.
@@ -41,9 +43,10 @@ Packaging work must refresh this file from the final dependency graph.
 
 ## Current conclusion
 
-The original source in this repository is MIT-licensed. The initial shared UI,
-protocol client, and deterministic rules can remain MIT. Tauri is compatible
-with that choice. Public binary distribution is not approved yet: native mpv,
+The original source in this repository is MIT-licensed. Official Stremio Core
+is now a pinned MIT dependency, so the Locadora UI and deterministic Quick Watch
+rules can remain MIT. Tauri is compatible with that choice. Public binary
+distribution is not approved yet: Stremio frontend/player modules, native mpv,
 FFmpeg/codecs, WebKitGTK, installer, and Flatpak dependency obligations must be
 inventoried from the actual builds first.
 

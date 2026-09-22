@@ -1,13 +1,15 @@
 mod network;
 #[cfg(unix)]
 mod player;
+mod stremio;
 
 pub use network::{
-    MAX_JSON_BYTES, NativeNetworkError, build_addon_resource_url, fetch_bounded_https_json,
-    validate_manifest_url,
+    MAX_JSON_BYTES, NativeNetworkError, fetch_bounded_https_json, validate_manifest_url,
 };
 #[cfg(unix)]
 pub use player::{MpvSession, PlayerError, PlayerEvent, VideoOutput};
+pub use stremio::{StremioCoreError, stremio_manifest, stremio_resource};
+pub use stremio_core::types::addon::{Manifest, ManifestResource, ResourcePath, ResourceResponse};
 
 use serde::Serialize;
 use std::process::Command;

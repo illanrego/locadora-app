@@ -6,7 +6,6 @@ pub fn run() {
         .manage(commands::PlayerState::default())
         .invoke_handler(tauri::generate_handler![
             commands::native_capabilities,
-            commands::fetch_addon_json,
             commands::fetch_public_shelf,
             commands::media_configuration_status,
             commands::media_configuration_add,

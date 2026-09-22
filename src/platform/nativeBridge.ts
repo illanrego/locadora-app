@@ -36,16 +36,6 @@ export async function readNativeCapabilities(): Promise<NativeCapabilities> {
   return invoke<NativeCapabilities>('native_capabilities');
 }
 
-export async function fetchNativeAddonJson(request: {
-  manifestUrl: string;
-  resource: 'manifest' | 'stream' | 'subtitles' | 'meta';
-  contentType?: ContentType;
-  id?: string;
-}): Promise<unknown> {
-  if (!isNativeShell()) throw new Error('Native add-on transport is unavailable');
-  return invoke('fetch_addon_json', { request });
-}
-
 export async function fetchNativePublicShelf(request: {
   genres: string[];
   year: number;

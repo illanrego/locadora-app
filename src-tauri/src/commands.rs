@@ -1,7 +1,7 @@
 use locadora_native_core::{
-    MpvSession, NativeCapabilities, PlayerEvent, VideoOutput, build_addon_resource_url,
-    fetch_bounded_https_json, native_capabilities as read_native_capabilities,
-    validate_manifest_url,
+    Manifest, ManifestResource, MpvSession, NativeCapabilities, PlayerEvent, ResourcePath,
+    VideoOutput, fetch_bounded_https_json, native_capabilities as read_native_capabilities,
+    stremio_manifest, stremio_resource, validate_manifest_url,
 };
 use serde::Deserialize;
 use serde::Serialize;
@@ -29,22 +29,13 @@ const ALLOWED_GENRES: &[&str] = &[
 ];
 const KEYRING_SERVICE: &str = "com.illanrego.willslocadora.media";
 const KEYRING_ACCOUNT: &str = "addon-manifests-v1";
-const MEDIA_CONFIGURATION_VERSION: u8 = 2;
+const MEDIA_CONFIGURATION_VERSION: u8 = 3;
 const MAX_CONFIGURED_ADDONS: usize = 12;
 const MAX_MANIFEST_RESOURCES: usize = 64;
 const MAX_RESOURCE_FILTERS: usize = 64;
 
 #[derive(Default)]
 pub struct PlayerState(Mutex<Option<MpvSession>>);
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AddonJsonRequest {
-    manifest_url: String,
-    resource: String,
-    content_type: Option<String>,
-    id: Option<String>,
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -91,6 +82,8 @@ struct StoredAddon {
     name: String,
     #[serde(default)]
     resources: Vec<StoredResource>,
+    #[serde(default)]
+    manifest: Option<Manifest>,
     #[serde(default, skip_serializing)]
     supports_streams: bool,
     #[serde(default, skip_serializing)]
@@ -123,28 +116,30 @@ fn keyring_entry_for(account: &str) -> Result<keyring::Entry, String> {
 }
 
 fn migrate_media_configuration(configuration: &mut StoredMediaConfiguration) {
-    if configuration.version != 1 {
-        return;
-    }
-    for addon in &mut configuration.addons {
-        if addon.resources.is_empty() {
-            if addon.supports_streams {
-                addon.resources.push(StoredResource {
-                    name: "stream".into(),
-                    types: vec![],
-                    id_prefixes: vec![],
-                });
-            }
-            if addon.supports_subtitles {
-                addon.resources.push(StoredResource {
-                    name: "subtitles".into(),
-                    types: vec![],
-                    id_prefixes: vec![],
-                });
+    if configuration.version == 1 {
+        for addon in &mut configuration.addons {
+            if addon.resources.is_empty() {
+                if addon.supports_streams {
+                    addon.resources.push(StoredResource {
+                        name: "stream".into(),
+                        types: vec![],
+                        id_prefixes: vec![],
+                    });
+                }
+                if addon.supports_subtitles {
+                    addon.resources.push(StoredResource {
+                        name: "subtitles".into(),
+                        types: vec![],
+                        id_prefixes: vec![],
+                    });
+                }
             }
         }
+        configuration.version = 2;
     }
-    configuration.version = MEDIA_CONFIGURATION_VERSION;
+    if configuration.version == 2 {
+        configuration.version = MEDIA_CONFIGURATION_VERSION;
+    }
 }
 
 fn load_media_configuration() -> Result<StoredMediaConfiguration, String> {
@@ -193,79 +188,85 @@ fn sanitized_configuration(configuration: &StoredMediaConfiguration) -> Vec<Conf
         .map(|addon| ConfiguredAddon {
             id: addon.id.clone(),
             name: addon.name.clone(),
-            supports_streams: addon
-                .resources
-                .iter()
-                .any(|resource| resource.name == "stream"),
-            supports_subtitles: addon
-                .resources
-                .iter()
-                .any(|resource| resource.name == "subtitles"),
+            supports_streams: addon_supports_resource_name(addon, "stream"),
+            supports_subtitles: addon_supports_resource_name(addon, "subtitles"),
         })
         .collect()
 }
 
-fn string_array(value: Option<&Value>) -> Vec<String> {
-    value
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_str)
-                .filter(|item| !item.is_empty() && item.len() <= 160)
-                .take(MAX_RESOURCE_FILTERS)
-                .map(ToOwned::to_owned)
-                .collect()
-        })
-        .unwrap_or_default()
+fn bounded_strings(values: &[String]) -> Vec<String> {
+    values
+        .iter()
+        .filter(|item| !item.is_empty() && item.len() <= 160)
+        .take(MAX_RESOURCE_FILTERS)
+        .cloned()
+        .collect()
 }
 
-fn manifest_resources(value: &Value) -> Vec<StoredResource> {
-    let default_types = string_array(value.get("types"));
-    let default_prefixes = string_array(value.get("idPrefixes"));
-    value
-        .get("resources")
-        .and_then(Value::as_array)
-        .map(|resources| {
-            resources
-                .iter()
-                .filter_map(|resource| {
-                    if let Some(name) = resource.as_str() {
-                        return matches!(name, "stream" | "subtitles" | "meta").then(|| {
-                            StoredResource {
-                                name: name.into(),
-                                types: default_types.clone(),
-                                id_prefixes: default_prefixes.clone(),
-                            }
-                        });
-                    }
-                    let name = resource.get("name").and_then(Value::as_str)?;
-                    if !matches!(name, "stream" | "subtitles" | "meta") {
-                        return None;
-                    }
-                    let types = string_array(resource.get("types"));
-                    let id_prefixes = string_array(resource.get("idPrefixes"));
-                    Some(StoredResource {
-                        name: name.into(),
-                        types: if types.is_empty() {
-                            default_types.clone()
-                        } else {
-                            types
-                        },
-                        id_prefixes: if id_prefixes.is_empty() {
-                            default_prefixes.clone()
-                        } else {
-                            id_prefixes
-                        },
-                    })
-                })
-                .take(MAX_MANIFEST_RESOURCES)
-                .collect()
+fn manifest_resources(manifest: &Manifest) -> Vec<StoredResource> {
+    let default_types = bounded_strings(&manifest.types);
+    let default_prefixes = bounded_strings(manifest.id_prefixes.as_deref().unwrap_or_default());
+    manifest
+        .resources
+        .iter()
+        .filter_map(|resource| {
+            let (name, types, id_prefixes) = match resource {
+                ManifestResource::Short(name) => {
+                    (name, default_types.clone(), default_prefixes.clone())
+                }
+                ManifestResource::Full {
+                    name,
+                    types,
+                    id_prefixes,
+                } => (
+                    name,
+                    types
+                        .as_deref()
+                        .map(bounded_strings)
+                        .unwrap_or_else(|| default_types.clone()),
+                    id_prefixes
+                        .as_deref()
+                        .map(bounded_strings)
+                        .unwrap_or_else(|| default_prefixes.clone()),
+                ),
+            };
+            matches!(name.as_str(), "stream" | "subtitles" | "meta").then(|| StoredResource {
+                name: name.clone(),
+                types,
+                id_prefixes,
+            })
         })
-        .unwrap_or_default()
+        .take(MAX_MANIFEST_RESOURCES)
+        .collect()
+}
+
+fn addon_supports_resource_name(addon: &StoredAddon, resource_name: &str) -> bool {
+    addon
+        .manifest
+        .as_ref()
+        .map(|manifest| {
+            manifest.resources.iter().any(|resource| match resource {
+                ManifestResource::Short(name) | ManifestResource::Full { name, .. } => {
+                    name == resource_name
+                }
+            })
+        })
+        .unwrap_or_else(|| {
+            addon
+                .resources
+                .iter()
+                .any(|resource| resource.name == resource_name)
+        })
 }
 
 fn addon_supports(addon: &StoredAddon, resource_name: &str, content_type: &str, id: &str) -> bool {
+    if let Some(manifest) = &addon.manifest {
+        return manifest.is_resource_supported(&ResourcePath::without_extra(
+            resource_name,
+            content_type,
+            id,
+        ));
+    }
     addon.resources.iter().any(|resource| {
         resource.name == resource_name
             && (resource.types.is_empty() || resource.types.iter().any(|item| item == content_type))
@@ -277,21 +278,16 @@ fn addon_supports(addon: &StoredAddon, resource_name: &str, content_type: &str, 
     })
 }
 
-fn stored_addon_from_manifest(manifest_url: String, value: &Value) -> Result<StoredAddon, String> {
-    let id = value
-        .get("id")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim();
-    let name = value
-        .get("name")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim();
+fn stored_addon_from_manifest(
+    manifest_url: String,
+    manifest: Manifest,
+) -> Result<StoredAddon, String> {
+    let id = manifest.id.trim();
+    let name = manifest.name.trim();
     if id.is_empty() || id.len() > 160 || name.is_empty() || name.len() > 160 {
         return Err("Add-on manifest is invalid".into());
     }
-    let resources = manifest_resources(value);
+    let resources = manifest_resources(&manifest);
     if !resources
         .iter()
         .any(|resource| matches!(resource.name.as_str(), "stream" | "subtitles"))
@@ -303,6 +299,7 @@ fn stored_addon_from_manifest(manifest_url: String, value: &Value) -> Result<Sto
         id: id.into(),
         name: name.into(),
         resources,
+        manifest: Some(manifest),
         supports_streams: false,
         supports_subtitles: false,
     })
@@ -321,10 +318,10 @@ pub fn media_configuration_status() -> Result<Vec<ConfiguredAddon>, String> {
 #[tauri::command]
 pub async fn media_configuration_add(manifest_url: String) -> Result<Vec<ConfiguredAddon>, String> {
     let validated = validate_manifest_url(&manifest_url).map_err(|error| error.to_string())?;
-    let manifest = fetch_bounded_https_json(validated.as_str())
+    let manifest = stremio_manifest(validated.clone())
         .await
         .map_err(|error| error.to_string())?;
-    let addon = stored_addon_from_manifest(validated.into(), &manifest)?;
+    let addon = stored_addon_from_manifest(validated.into(), manifest)?;
     let mut configuration = load_media_configuration()?;
     configuration
         .addons
@@ -358,16 +355,13 @@ pub async fn fetch_configured_addon_resource(
     if !addon_supports(addon, &request.resource, &request.content_type, &request.id) {
         return Err("Configured add-on does not provide that resource".into());
     }
-    let url = build_addon_resource_url(
-        &addon.manifest_url,
-        &request.resource,
-        &request.content_type,
-        &request.id,
-    )
-    .map_err(|error| error.to_string())?;
-    fetch_bounded_https_json(url.as_str())
+    let transport_url = validate_manifest_url(&addon.manifest_url)
+        .map_err(|_| "Protected media configuration is invalid")?;
+    let path = ResourcePath::without_extra(&request.resource, &request.content_type, &request.id);
+    let response = stremio_resource(transport_url, &path)
         .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    serde_json::to_value(response).map_err(|_| "Stremio response could not be serialized".into())
 }
 
 #[tauri::command]
@@ -447,24 +441,6 @@ pub fn player_shutdown(state: State<'_, PlayerState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn fetch_addon_json(request: AddonJsonRequest) -> Result<Value, String> {
-    let url = match request.resource.as_str() {
-        "manifest" => validate_manifest_url(&request.manifest_url),
-        "stream" | "subtitles" | "meta" => build_addon_resource_url(
-            &request.manifest_url,
-            &request.resource,
-            request.content_type.as_deref().unwrap_or_default(),
-            request.id.as_deref().unwrap_or_default(),
-        ),
-        _ => return Err("Unsupported add-on resource".into()),
-    }
-    .map_err(|error| error.to_string())?;
-    fetch_bounded_https_json(url.as_str())
-        .await
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
 pub async fn fetch_public_shelf(request: PublicShelfRequest) -> Result<Value, String> {
     if request.genres.is_empty()
         || request.genres.len() > 3
@@ -497,6 +473,10 @@ pub async fn fetch_public_shelf(request: PublicShelfRequest) -> Result<Value, St
 mod tests {
     use super::*;
 
+    fn fixture_manifest(value: Value) -> Manifest {
+        serde_json::from_value(value).expect("valid official Stremio manifest fixture")
+    }
+
     #[test]
     fn public_shelf_contract_has_a_fixed_origin() {
         assert_eq!(
@@ -515,11 +495,13 @@ mod tests {
     fn manifest_summary_never_contains_the_manifest_url() {
         let stored = stored_addon_from_manifest(
             "https://example.invalid/private/manifest.json?token=secret".into(),
-            &serde_json::json!({
+            fixture_manifest(serde_json::json!({
                 "id": "org.example.safe",
                 "name": "Fixture",
+                "version": "1.0.0",
+                "types": ["movie", "series"],
                 "resources": ["stream", { "name": "subtitles" }]
-            }),
+            })),
         )
         .unwrap();
         let sanitized = sanitized_configuration(&StoredMediaConfiguration {
@@ -536,7 +518,13 @@ mod tests {
     fn manifest_must_supply_media_resources() {
         let result = stored_addon_from_manifest(
             "https://example.invalid/manifest.json".into(),
-            &serde_json::json!({ "id": "org.example.catalog", "name": "Catalog only", "resources": ["catalog"] }),
+            fixture_manifest(serde_json::json!({
+                "id": "org.example.catalog",
+                "name": "Catalog only",
+                "version": "1.0.0",
+                "types": ["movie"],
+                "resources": ["catalog"]
+            })),
         );
         assert!(result.is_err());
     }
@@ -545,15 +533,16 @@ mod tests {
     fn resource_filters_preserve_type_and_id_prefix_compatibility() {
         let stored = stored_addon_from_manifest(
             "https://example.invalid/manifest.json".into(),
-            &serde_json::json!({
+            fixture_manifest(serde_json::json!({
                 "id": "org.example.filters",
                 "name": "Filtered",
+                "version": "1.0.0",
                 "types": ["movie", "series"],
                 "resources": [
                     { "name": "stream", "types": ["movie"], "idPrefixes": ["tt"] },
                     { "name": "subtitles", "types": ["series"] }
                 ]
-            }),
+            })),
         )
         .unwrap();
         assert!(addon_supports(&stored, "stream", "movie", "tt1254207"));

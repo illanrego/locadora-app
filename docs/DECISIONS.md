@@ -40,11 +40,21 @@ season-pack selection, or reuse of movie size rules before Phase 8 approval.
 
 ### D-007 — Initial application stack
 
-Use React + TypeScript for the shared interface and pure engines. Use Tauri 2 as
-the initial native boundary candidate, with a narrowly allowlisted Rust command
-layer and an external/libmpv feasibility spike. This decision remains subject
-to the Phase 0 license and platform proof; UI/domain code must not depend on
-Tauri APIs directly.
+Use the existing Locadora React presentation for the visible product. Reuse the
+official Stremio application modules for media behavior: pinned `stremio-core`
+for add-on protocol/types/models and `stremio-video` for frontend player
+coordination. Tauri remains the current narrowly allowlisted platform adapter,
+not a replacement media engine. Locadora domain code must not depend directly
+on either Tauri or Stremio state.
+
+### D-008 — Stremio reuse boundary
+
+The absence of Stremio catalogue UI does not mean reimplementing Stremio.
+Stremio's visual routes are not exposed, while its official modular engine and
+frontend media behavior are reused beneath the Locadora interface. Handwritten
+protocol, media-state, or playback coordination code must be removed when an
+appropriate licensed Stremio module supplies that behavior. This corrects the
+overly narrow interpretation used in the initial spike.
 
 ## Non-negotiable boundaries
 
@@ -54,4 +64,3 @@ Tauri APIs directly.
   reports, analytics, screenshots, or Locadora services.
 - Playback never changes a rental or watched state automatically.
 - Normal accessible browsing remains fully functional without WebGL.
-

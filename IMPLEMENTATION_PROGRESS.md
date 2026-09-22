@@ -1,24 +1,23 @@
 # Implementation progress
 
 Last updated: 2026-09-22
-Current milestone: Phase 3 media resolution + Phase 4 Quick Watch
+Current milestone: official Stremio application integration
 Status: in progress
 
 ## Resume checkpoint
 
-The tested desktop path now goes from a selected Locadora title and confirmed
-IMDb identity through all compatible protected add-on configurations, stream
-normalization, deterministic movie Quick Watch, a manual fallback picker, and
-the private mpv IPC lifecycle. Direct HTTPS stream winners can start mpv;
-torrent descriptors remain visible but disabled until a reviewed transport
-resolver exists. Add-on URLs remain in the OS credential store and are never
-returned to the webview.
+The architecture has been corrected to reuse Stremio rather than reproduce it.
+Official `stremio-core` is pinned at revision
+`b3062f7fa790223540022f9a62c12067b646c179`. It now owns manifest parsing,
+resource compatibility, request construction, and typed stream/subtitle
+response parsing. The handwritten TypeScript add-on client and native resource
+URL builder were removed. The native environment supplies bounded HTTPS while
+private transport URLs remain in the OS credential store.
 
-Next task: resolve subtitle resources for the active release, present PT/EN
-tracks first with an explicit other-languages disclosure, and connect subtitle
-selection to mpv. Open the delay control immediately after selection and persist
-the delay only under the existing video-plus-track fingerprint. Do not add
-torrent transport, member-state writes, or resume history as part of that task.
+Next task: replace the custom frontend player state/coordination with official
+`@stremio/stremio-video`, adapting its shell transport to the deny-by-default
+Tauri/mpv boundary. Preserve the Locadora React presentation and Quick Watch
+policy; do not copy Stremio's visual routes.
 
 ## Phase board
 
@@ -26,7 +25,7 @@ torrent transport, member-state writes, or resume history as part of that task.
   - [x] Initialize a separate repository with no production credentials.
   - [x] Add durable progress and decision tracking.
   - [x] Lock repository license and initial third-party notices.
-  - [x] Scaffold and prove the add-on protocol client with synthetic sanitized fixtures.
+  - [x] Integrate and pin official Stremio Core for the add-on protocol.
   - [x] Compile a deny-by-default Tauri shell and native HTTPS transport.
   - [x] Prove installed mpv capability without accepting a media argument.
   - [x] Prove the native mpv bridge on Debian without logging a playback URL.
@@ -47,6 +46,7 @@ torrent transport, member-state writes, or resume history as part of that task.
   - [x] Validate manifests natively and return sanitized capabilities only.
   - [x] Add individual removal and full local disconnect actions.
   - [x] Fetch stored add-on resources by sanitized ID without returning URLs.
+  - [x] Replace handwritten protocol parsing with official Stremio Core.
   - [x] Resolve one selected title across all compatible configured stream add-ons.
   - [ ] Resolve subtitle add-ons for the active video/release identity.
   - [x] Add bounded cancellation and sanitized diagnostic aggregation.
@@ -113,6 +113,12 @@ when they need user or real-environment confirmation.
   the private IPC smoke test. `npm run tauri -- build --no-bundle` also produced
   the optimized Linux executable. No browser/manual visual or real-media
   playback testing was performed.
+- 2026-09-22: corrected the media architecture to link official MIT-licensed
+  Stremio Core at pinned revision `b3062f7f`. Removed the duplicate TypeScript
+  protocol client and native resource URL builder. `npm run check` passed with
+  49 tests in 8 files; native-core passed 10 tests, the Tauri shell passed 6
+  regular tests with 1 ignored credential-store integration test, and both
+  crates passed strict Clippy. No manual testing was performed.
 
 ## Known blockers and risks
 

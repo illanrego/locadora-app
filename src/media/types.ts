@@ -1,5 +1,3 @@
-import type { ContentType } from '../domain/content';
-
 export type Resolution = 720 | 1080 | 2160 | 480 | null;
 export type ParseConfidence = 'complete' | 'partial';
 export type TransportType = 'http' | 'torrent' | 'external' | 'unsupported';
@@ -40,29 +38,4 @@ export interface RawAddonStream {
     filename?: unknown;
     bingeGroup?: unknown;
   } | null;
-}
-
-export interface AddonManifestResource {
-  name: string;
-  types?: string[];
-  idPrefixes?: string[];
-}
-
-export interface AddonManifest {
-  id: string;
-  name: string;
-  version: string;
-  types: string[];
-  resources: Array<string | AddonManifestResource>;
-}
-
-export interface AddonConnection {
-  manifest: AddonManifest;
-  /** Kept opaque and must never be rendered or logged. */
-  manifestUrl: string;
-}
-
-export interface StreamRequest {
-  type: ContentType;
-  videoId: string;
 }
