@@ -5,6 +5,7 @@ import { loadShelf, type ShelfPage } from './locadora/discovery';
 import { SidePanel } from './components/SidePanel';
 import { TitleInspection } from './components/TitleInspection';
 import { VhsTape } from './components/VhsTape';
+import { readNativeCapabilities, type NativeCapabilities } from './platform/nativeBridge';
 import './styles.css';
 
 type Panel = 'basket' | 'saved' | 'account' | null;
@@ -27,6 +28,7 @@ export default function App() {
   const [basket, setBasket] = useState<DiscoveryTitle[]>([]);
   const [panel, setPanel] = useState<Panel>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [nativeCapabilities, setNativeCapabilities] = useState<NativeCapabilities | null>(null);
   const t = copy[locale];
   const genre = GENRES[genreIndex];
 
@@ -80,6 +82,12 @@ export default function App() {
     document.title = locale === 'pt-BR' ? "Will's Locadora — seu player" : "Will's Video Store — your player";
   }, [locale]);
 
+  useEffect(() => {
+    void readNativeCapabilities().then(setNativeCapabilities).catch(() => {
+      setNativeCapabilities({ mpv: { available: false, version: null } });
+    });
+  }, []);
+
   return (
     <div className="app-shell" style={{ '--genre-accent': genre.accent } as React.CSSProperties}>
       <a className="skip-link" href="#shelf">{locale === 'pt-BR' ? 'Pular para a prateleira' : 'Skip to shelf'}</a>
@@ -132,7 +140,12 @@ export default function App() {
                 {locale === 'pt-BR' ? 'English' : 'Português'}
               </button>
             </div>
-            <p><strong>{locale === 'pt-BR' ? 'Player:' : 'Player:'}</strong> {t.development}</p>
+            <p>
+              <strong>Player:</strong>{' '}
+              {nativeCapabilities?.mpv.available
+                ? `${nativeCapabilities.mpv.version ?? 'mpv'} · ${locale === 'pt-BR' ? 'pronto' : 'ready'}`
+                : t.development}
+            </p>
           </section>
         )}
       </header>

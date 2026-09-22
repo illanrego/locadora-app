@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildResourceUrl,
   connectAddon,
+  normalizeAddonManifest,
   requestStreams,
   supportsResource,
   validateManifestUrl,
@@ -56,6 +57,11 @@ describe('add-on protocol client', () => {
     const connection = await connectAddon('https://addon.example.invalid/private/manifest.json?token=never-log', { fetchImpl });
     expect(connection.manifest.id).toBe(manifest.id);
     expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('shares manifest validation with the native platform adapter', () => {
+    expect(normalizeAddonManifest(manifest)).toEqual(manifest);
+    expect(() => normalizeAddonManifest({ name: 'missing fields' })).toThrow('no ID');
   });
 
   it('requests streams only from compatible add-ons', async () => {

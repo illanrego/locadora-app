@@ -17,6 +17,7 @@ Packaging work must refresh this file from the final dependency graph.
 | Testing Library / user-event | DOM interaction tests | MIT | Development only. |
 | jsdom | DOM test environment | MIT | Development only. |
 | Tauri 2 | Native application boundary | MIT OR Apache-2.0 | Candidate shell; final Rust graph must be audited. |
+| reqwest + rustls | Bounded native HTTPS transport | MIT OR Apache-2.0 | Redirects are manually revalidated; TLS uses platform-verifier-backed rustls. |
 | Stremio Core | Potential core integration | MIT | Not copied or linked in the initial protocol spike. |
 | Stremio add-on protocol | Compatible HTTP contract | Documentation/protocol | Implemented cleanly from the public resource contract. |
 | mpv / libmpv | Native playback candidate | GPL-2.0-or-later by default; an LGPL-2.1-or-later build mode exists with caveats | Initial spike targets a separately installed system mpv. No mpv binary is bundled. Packaging remains blocked on a final license/build review. |
@@ -44,3 +45,10 @@ protocol client, and deterministic rules can remain MIT. Tauri is compatible
 with that choice. Public binary distribution is not approved yet: native mpv,
 FFmpeg/codecs, WebKitGTK, installer, and Flatpak dependency obligations must be
 inventoried from the actual builds first.
+
+## Locally verified native versions
+
+The 2026-09-22 Debian build used mpv 0.35.1, libmpv 2.0.0, WebKitGTK
+2.50.6, GTK 3.24.38, Rust 1.98.1, Tauri 2.11.x, and reqwest 0.13.5. These
+versions describe the local proof only and do not yet define redistributed
+binary contents.

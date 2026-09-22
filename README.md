@@ -12,8 +12,29 @@ and the exact continuation point live in `IMPLEMENTATION_PROGRESS.md`.
 ```bash
 npm install
 npm run check
+npm run check:native-core
+npm run check:native
 ```
 
 The browser build uses sanitized catalogue fixtures unless
 `VITE_LOCADORA_PUBLIC_API_URL` is configured with a public discovery endpoint.
 Media manifests and playback descriptors must never be committed or logged.
+
+## Debian native prerequisites
+
+Rust is installed through `rustup`. Tauri and the system-player spike require:
+
+```bash
+sudo apt-get install libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev mpv libmpv-dev
+```
+
+Build an optimized unpackaged executable with:
+
+```bash
+source "$HOME/.cargo/env"
+npm run tauri -- build --no-bundle
+```
+
+See `docs/NATIVE_SECURITY.md` for the privileged command allowlist and network
+boundary.

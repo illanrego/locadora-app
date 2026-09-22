@@ -60,7 +60,7 @@ export function supportsResource(
   return !prefixes.length || prefixes.some((prefix) => id.startsWith(prefix));
 }
 
-function normalizeManifest(value: unknown): AddonManifest {
+export function normalizeAddonManifest(value: unknown): AddonManifest {
   if (!value || typeof value !== 'object') throw new Error('Add-on manifest is not an object');
   const raw = value as Partial<AddonManifest>;
   if (typeof raw.id !== 'string' || !raw.id.trim()) throw new Error('Add-on manifest has no ID');
@@ -115,7 +115,7 @@ export async function connectAddon(
 ): Promise<AddonConnection> {
   const url = validateManifestUrl(manifestUrl);
   const body = await boundedJson(url.href, options.fetchImpl ?? fetch, options.signal, options.timeoutMs);
-  return { manifest: normalizeManifest(body), manifestUrl: url.href };
+  return { manifest: normalizeAddonManifest(body), manifestUrl: url.href };
 }
 
 export async function requestStreams(

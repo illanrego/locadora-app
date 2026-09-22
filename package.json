@@ -12,6 +12,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b --pretty false",
     "check": "npm run typecheck && npm test && npm run build",
+    "check:native-core": "cargo test --manifest-path crates/native-core/Cargo.toml",
+    "check:native": "cargo test --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri"
   },
   "engines": {

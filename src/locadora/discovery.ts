@@ -1,4 +1,5 @@
 import { normalizeDiscoveryTitle, type ContentType, type DiscoveryTitle, type PublicTitlePayload } from '../domain/content';
+import { fetchNativePublicShelf, isNativeShell } from '../platform/nativeBridge';
 import { FIXTURE_TITLES } from './fixture';
 
 export interface ShelfQuery {
@@ -37,6 +38,20 @@ function endpoint(): string | null {
 
 export async function loadShelf(query: ShelfQuery, signal?: AbortSignal): Promise<ShelfPage> {
   const base = endpoint();
+  if (isNativeShell()) {
+    const body = await fetchNativePublicShelf({
+      genres: query.genres,
+      year: query.year,
+      contentType: query.type,
+      stand: query.stand,
+    }) as { titles?: PublicTitlePayload[]; hasNextStand?: boolean };
+    if (!Array.isArray(body.titles)) throw new Error(query.locale === 'pt-BR' ? 'O acervo respondeu em um formato inválido.' : 'The catalogue returned an invalid response.');
+    return {
+      titles: body.titles.map(normalizeDiscoveryTitle).filter((title): title is DiscoveryTitle => title !== null),
+      hasNextStand: Boolean(body.hasNextStand),
+      source: 'public-api',
+    };
+  }
   if (!base) return fixtureShelf(query);
   const url = new URL(`${base}/shelf`);
   url.search = new URLSearchParams({
