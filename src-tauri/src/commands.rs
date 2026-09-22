@@ -1,8 +1,8 @@
 use locadora_native_core::{
     JsonRequestMethod, Manifest, ManifestResource, MpvSession, NativeCapabilities, PlayerEvent,
     ResourcePath, VideoOutput, fetch_bounded_https_json, fetch_bounded_https_json_request,
-    native_capabilities as read_native_capabilities, stremio_manifest, stremio_resource,
-    validate_manifest_url,
+    native_capabilities as read_native_capabilities, player_runtime_root, stremio_manifest,
+    stremio_resource, validate_manifest_url,
 };
 use serde::Deserialize;
 use serde::Serialize;
@@ -1262,16 +1262,15 @@ pub fn media_configuration_disconnect() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn player_start(app: AppHandle, state: State<'_, PlayerState>) -> Result<(), String> {
+pub fn player_start(state: State<'_, PlayerState>) -> Result<(), String> {
     let mut player = state.0.lock().map_err(|_| "Player state is unavailable")?;
     if player.as_mut().is_some_and(MpvSession::is_alive) {
         return Ok(());
     }
-    let runtime_root = app
-        .path()
-        .app_cache_dir()
-        .map_err(|_| "Player cache path is unavailable")?;
-    std::fs::create_dir_all(&runtime_root).map_err(|_| "Player cache path is unavailable")?;
+    // Must stay short: the private control socket has to fit the Unix socket
+    // path limit, so the app cache directory is not used here.
+    let runtime_root = player_runtime_root();
+    std::fs::create_dir_all(&runtime_root).map_err(|_| "Player runtime path is unavailable")?;
     *player = Some(
         MpvSession::start(&runtime_root, VideoOutput::Window).map_err(|error| error.to_string())?,
     );

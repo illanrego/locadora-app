@@ -8,7 +8,7 @@ pub use network::{
     fetch_bounded_https_json, fetch_bounded_https_json_request, validate_manifest_url,
 };
 #[cfg(unix)]
-pub use player::{MpvSession, PlayerError, PlayerEvent, VideoOutput};
+pub use player::{MpvSession, PlayerError, PlayerEvent, VideoOutput, player_runtime_root};
 pub use stremio::{StremioCoreError, stremio_manifest, stremio_resource};
 pub use stremio_core::types::addon::{Manifest, ManifestResource, ResourcePath, ResourceResponse};
 

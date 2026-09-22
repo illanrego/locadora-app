@@ -335,10 +335,28 @@ when they need user or real-environment confirmation.
   colors and the Locadora palette where the pre-fix window was a single uniform
   color. This is not a human visual check, and no playback, subtitle, member
   service, or add-on import path was exercised.
+- 2026-09-22: fixed desktop playback failing with "mpv did not open its private
+  control channel" (mpv's window opened, then closed, and nothing played). The
+  private control socket was built under the long app cache directory, giving a
+  107-byte path; mpv cannot bind a Unix socket that long and fails silently, so
+  the 3-second connect deadline expired and the session was torn down. The
+  boundary was measured directly: 106 bytes binds, 107 bytes and longer do not.
+  The runtime root is now the short `$XDG_RUNTIME_DIR` (falling back to the
+  process temp directory) with a shorter session name, an over-long socket path
+  is rejected with its own error instead of a timeout, and the Rust player tests
+  now start mpv through the production root instead of `/tmp` only. native-core
+  passed 15 tests including the opt-in private-IPC smoke test; the Tauri shell
+  passed 18 tests with 2 ignored; both crates passed strict Clippy and
+  `cargo fmt --check`. Playback inside the app is still unconfirmed: it needs a
+  user play attempt.
 
 ## Known blockers and risks
 
-- A sanitized fixture from the user's configured stream add-on is still needed
+- The Linux shell still plays through a separate mpv window. Stremio's own
+  ShellVideo asks the shell for embedded `vo=libmpv`, and the current transport
+  discards that command, so in-window playback still needs a native shell that
+  renders mpv inside the app window.
+- The sanitized fixture from the user's configured stream add-on is still needed
   to confirm Torrentio-style field reliability. Synthetic fixtures may be used
   for implementation but cannot close that Phase 0 criterion.
 - The synthetic add-on fixture proves deterministic code behavior but does not

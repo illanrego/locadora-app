@@ -18,6 +18,9 @@ use url::{Host, Url};
 
 static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+/// `sockaddr_un::sun_path` holds 108 bytes on Linux, and mpv fails to bind a
+/// longer path without any diagnostic. Keep a clear margin below that edge.
+const MAX_SOCKET_PATH_BYTES: usize = 100;
 
 #[derive(Debug, Error)]
 pub enum PlayerError {
@@ -29,6 +32,22 @@ pub enum PlayerError {
     InvalidDescriptor,
     #[error("The player command failed")]
     CommandFailed,
+    #[error("The private player socket path is too long")]
+    SocketPathTooLong,
+}
+
+/// Directory that holds the private mpv control socket.
+///
+/// It must be a short, user-only path. `$XDG_RUNTIME_DIR` is per-user, mode
+/// 0700, and short; the process temp directory is the fallback. The app cache
+/// directory is deliberately not used: its long path pushes the socket past
+/// the Unix socket limit, where mpv fails to bind and the only symptom is a
+/// control-channel timeout.
+pub fn player_runtime_root() -> PathBuf {
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .filter(|root| root.is_dir())
+        .unwrap_or_else(std::env::temp_dir)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -157,15 +176,14 @@ pub struct MpvSession {
 }
 
 fn session_directory(root: &Path) -> PathBuf {
-    let timestamp = SystemTime::now()
+    let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_nanos();
+        .as_millis();
     let sequence = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
-    root.join(format!(
-        "wills-locadora-player-{}-{timestamp}-{sequence}",
-        std::process::id()
-    ))
+    // Short by design: the control socket built from it must stay under
+    // `MAX_SOCKET_PATH_BYTES`.
+    root.join(format!("wlp-{}-{stamp}-{sequence}", std::process::id()))
 }
 
 fn mpv_arguments(socket_path: &Path, video_output: VideoOutput) -> Vec<String> {
@@ -310,10 +328,14 @@ fn stremio_service_stream_url(value: &str) -> Result<(), PlayerError> {
 impl MpvSession {
     pub fn start(runtime_root: &Path, video_output: VideoOutput) -> Result<Self, PlayerError> {
         let session_dir = session_directory(runtime_root);
+        let socket_path = session_dir.join("mpv.sock");
+        // Fail loudly instead of letting mpv bind silently fail and time out.
+        if socket_path.as_os_str().len() > MAX_SOCKET_PATH_BYTES {
+            return Err(PlayerError::SocketPathTooLong);
+        }
         fs::create_dir_all(&session_dir).map_err(|_| PlayerError::ControlUnavailable)?;
         fs::set_permissions(&session_dir, fs::Permissions::from_mode(0o700))
             .map_err(|_| PlayerError::ControlUnavailable)?;
-        let socket_path = session_dir.join("mpv.sock");
         let args = mpv_arguments(&socket_path, video_output);
         let mut child = Command::new("mpv")
             .args(&args)
@@ -514,6 +536,31 @@ mod tests {
     }
 
     #[test]
+    fn control_socket_paths_stay_under_the_unix_socket_limit() {
+        // The desktop app built this socket under its long app cache directory,
+        // where mpv cannot bind it at all: the only symptom was a
+        // control-channel timeout and a window that opened then closed.
+        for root in [player_runtime_root(), std::env::temp_dir()] {
+            let socket = session_directory(&root).join("mpv.sock");
+            assert!(
+                socket.as_os_str().len() <= MAX_SOCKET_PATH_BYTES,
+                "socket path is {} bytes: {}",
+                socket.as_os_str().len(),
+                socket.display()
+            );
+        }
+    }
+
+    #[test]
+    fn over_long_socket_roots_are_rejected_before_mpv_starts() {
+        let root = std::env::temp_dir().join("x".repeat(MAX_SOCKET_PATH_BYTES));
+        assert!(matches!(
+            MpvSession::start(&root, VideoOutput::Null),
+            Err(PlayerError::SocketPathTooLong)
+        ));
+    }
+
+    #[test]
     fn remote_descriptors_are_protocol_and_network_bounded() {
         assert!(public_remote_url("https://media.example.com/video.mp4?token=secret").is_ok());
         for value in [
@@ -605,7 +652,7 @@ mod tests {
     fn property_commands_are_deny_by_default() {
         fn allowed(name: &str, value: Value) -> bool {
             let mut session =
-                MpvSession::start(&std::env::temp_dir(), VideoOutput::Null).expect("start mpv");
+                MpvSession::start(&player_runtime_root(), VideoOutput::Null).expect("start mpv");
             session.set_property(name, value).is_ok()
         }
 
@@ -628,7 +675,7 @@ mod tests {
             return;
         }
         let mut session =
-            MpvSession::start(&std::env::temp_dir(), VideoOutput::Null).expect("start mpv");
+            MpvSession::start(&player_runtime_root(), VideoOutput::Null).expect("start mpv");
         session
             .load_internal("av://lavfi:testsrc=duration=0.2:size=64x64:rate=10")
             .expect("load internal test source");
