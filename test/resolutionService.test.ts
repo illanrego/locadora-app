@@ -12,8 +12,8 @@ const title = normalizeDiscoveryTitle({
 })!;
 
 const addons: ConfiguredAddon[] = [
-  { id: 'good', name: 'Good fixture', supportsStreams: true, supportsSubtitles: false },
-  { id: 'broken', name: 'Broken fixture', supportsStreams: true, supportsSubtitles: false },
+  { id: 'good', name: 'Good fixture', resources: ['stream'], supportsStreams: true, supportsSubtitles: false },
+  { id: 'broken', name: 'Broken fixture', resources: ['stream'], supportsStreams: true, supportsSubtitles: false },
 ];
 
 describe('configured media resolution', () => {

@@ -21,6 +21,7 @@ pub fn run() {
             commands::member_sign_out,
             commands::member_state,
             commands::media_configuration_status,
+            commands::media_configuration_import_stremio,
             commands::media_configuration_add,
             commands::fetch_configured_addon_resource,
             commands::media_configuration_remove,

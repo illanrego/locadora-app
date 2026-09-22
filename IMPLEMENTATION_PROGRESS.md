@@ -1,7 +1,7 @@
 # Implementation progress
 
 Last updated: 2026-09-22
-Current milestone: Phase 2 Locadora member services
+Current milestone: MVP user acceptance
 Status: in progress
 
 ## Resume checkpoint
@@ -66,10 +66,19 @@ API, confirmation, persistence, analytics, or relationship to Cesta, rentals,
 returns, reviews, member/media sessions, or playback. Phase 2 implementation is
 complete; its exit criteria still need a live user-session acceptance check.
 
-Next task: begin Phase 6 Linux delivery with a reproducible Flatpak manifest
-and build instructions for the existing Tauri binary, documenting system mpv,
-WebKitGTK/codecs, Stremio Service, source, and license boundaries. Do not claim
-runtime acceptance until the package is actually built and exercised.
+The media settings panel can now import the complete add-on collection from an
+installed official Stremio Flatpak or native Linux desktop installation. The
+reader targets only the exact add-on record, never reads cookies or authKey,
+and uses a read-only LevelDB parser that does not lock or mutate Stremio data.
+All safe manifests are validated through the existing native boundary and
+stored in Locadora's separate OS-keyring entry. Catalog-only add-ons remain
+visible for collection parity without exposing Stremio catalogue routes.
+
+Next task: user-run MVP acceptance. Launch the optimized no-bundle Tauri binary,
+open Media Sources, import the installed Stremio collection, confirm the 32
+safe entries are listed with Local Files reported as skipped, then try one
+Locadora movie through Watch. Do not claim visual or playback acceptance until
+the user reports it.
 
 ## Phase board
 
@@ -113,6 +122,7 @@ runtime acceptance until the package is actually built and exercised.
   - [x] Resolve movie subtitle add-ons for the active IMDb identity.
   - [x] Add bounded cancellation and sanitized diagnostic aggregation.
   - [x] Connect torrent descriptors to official Stremio Service conversion.
+  - [x] Import the installed Stremio collection without copying account state.
   - [ ] Meet all Phase 3 exit criteria.
 - [ ] Phase 4 — Quick Watch movies
   - [x] Implement and boundary-test the versioned deterministic movie evaluator.
@@ -289,6 +299,18 @@ when they need user or real-environment confirmation.
   state, media configuration, or playback. `npm run check` passed with 76 tests
   in 20 files and a production build. No browser/manual or payment test was
   performed.
+- 2026-09-22: found the user's official Stremio 4.4.168 Flatpak collection and
+  inspected only its add-on record through a temporary read-only decoder: 33
+  descriptors, including Cinemeta, Torrentio, IMDb Catalogs, TMDB, and three
+  subtitle sources. Added a fixed-path, exact-key native importer using
+  `leveldb-core`; 32 HTTPS entries validate for protected import and only the
+  private-HTTP Local Files source is rejected. `npm run check` passed with 76
+  tests in 20 files and a production build. The Tauri shell passed 18 regular
+  tests with 2 ignored integrations; its opt-in installed-collection test also
+  passed against the real local LevelDB without printing URLs or account data.
+  Strict Clippy passed, and `npm run tauri -- build --no-bundle` produced the
+  optimized Linux MVP executable. No browser/manual or playback verification
+  was performed.
 
 ## Known blockers and risks
 

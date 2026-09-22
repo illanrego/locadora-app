@@ -7,7 +7,11 @@ use locadora_native_core::{
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
-use std::{collections::HashSet, sync::Mutex};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 use tauri::{AppHandle, Manager, State};
 use urlencoding::encode;
 
@@ -35,9 +39,12 @@ const KEYRING_ACCOUNT: &str = "addon-manifests-v1";
 const MEMBER_KEYRING_SERVICE: &str = "com.illanrego.willslocadora.member";
 const MEMBER_KEYRING_ACCOUNT: &str = "better-auth-session-v1";
 const MEDIA_CONFIGURATION_VERSION: u8 = 3;
-const MAX_CONFIGURED_ADDONS: usize = 12;
+const MAX_CONFIGURED_ADDONS: usize = 64;
 const MAX_MANIFEST_RESOURCES: usize = 64;
 const MAX_RESOURCE_FILTERS: usize = 64;
+const MAX_STREMIO_LOCAL_STORAGE_BYTES: usize = 2 * 1024 * 1024;
+const STREMIO_ADDONS_KEY_V4: &[u8] = b"_https://app.strem.io\0\x01addons";
+const STREMIO_ADDONS_KEY_V5: &[u8] = b"_https://web.stremio.com\0\x01addons";
 
 #[derive(Default)]
 pub struct PlayerState(Mutex<Option<MpvSession>>);
@@ -202,8 +209,25 @@ struct StoredMediaConfiguration {
 pub struct ConfiguredAddon {
     id: String,
     name: String,
+    resources: Vec<String>,
     supports_streams: bool,
     supports_subtitles: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkippedStremioAddon {
+    name: String,
+    reason: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StremioImportResult {
+    addons: Vec<ConfiguredAddon>,
+    imported: usize,
+    skipped: Vec<SkippedStremioAddon>,
+    source: String,
 }
 
 fn keyring_entry() -> Result<keyring::Entry, String> {
@@ -533,9 +557,19 @@ fn sanitized_configuration(configuration: &StoredMediaConfiguration) -> Vec<Conf
         .map(|addon| ConfiguredAddon {
             id: addon.id.clone(),
             name: addon.name.clone(),
+            resources: addon_resource_names(addon),
             supports_streams: addon_supports_resource_name(addon, "stream"),
             supports_subtitles: addon_supports_resource_name(addon, "subtitles"),
         })
+        .collect()
+}
+
+fn addon_resource_names(addon: &StoredAddon) -> Vec<String> {
+    const EXPOSED_RESOURCES: &[&str] = &["stream", "subtitles", "meta", "catalog", "addon_catalog"];
+    EXPOSED_RESOURCES
+        .iter()
+        .filter(|name| addon_supports_resource_name(addon, name))
+        .map(|name| (*name).to_owned())
         .collect()
 }
 
@@ -575,7 +609,11 @@ fn manifest_resources(manifest: &Manifest) -> Vec<StoredResource> {
                         .unwrap_or_else(|| default_prefixes.clone()),
                 ),
             };
-            matches!(name.as_str(), "stream" | "subtitles" | "meta").then(|| StoredResource {
+            matches!(
+                name.as_str(),
+                "stream" | "subtitles" | "meta" | "catalog" | "addon_catalog"
+            )
+            .then(|| StoredResource {
                 name: name.clone(),
                 types,
                 id_prefixes,
@@ -633,11 +671,8 @@ fn stored_addon_from_manifest(
         return Err("Add-on manifest is invalid".into());
     }
     let resources = manifest_resources(&manifest);
-    if !resources
-        .iter()
-        .any(|resource| matches!(resource.name.as_str(), "stream" | "subtitles"))
-    {
-        return Err("Add-on does not provide streams or subtitles".into());
+    if resources.is_empty() {
+        return Err("Add-on does not provide compatible resources".into());
     }
     Ok(StoredAddon {
         manifest_url,
@@ -648,6 +683,129 @@ fn stored_addon_from_manifest(
         supports_streams: false,
         supports_subtitles: false,
     })
+}
+
+fn decode_chromium_local_storage_string(value: &[u8]) -> Result<String, String> {
+    if value.is_empty() || value.len() > MAX_STREMIO_LOCAL_STORAGE_BYTES {
+        return Err("Installed Stremio add-on data is invalid".into());
+    }
+    match value[0] {
+        0 => {
+            let encoded = &value[1..];
+            if !encoded.len().is_multiple_of(2) {
+                return Err("Installed Stremio add-on data is invalid".into());
+            }
+            let units = encoded
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                .collect::<Vec<_>>();
+            String::from_utf16(&units)
+                .map_err(|_| "Installed Stremio add-on data is invalid".into())
+        }
+        1 => Ok(value[1..].iter().map(|byte| char::from(*byte)).collect()),
+        _ => Err("Installed Stremio add-on data uses an unsupported encoding".into()),
+    }
+}
+
+fn read_stremio_addon_values(leveldb_path: &Path) -> Result<Vec<Value>, String> {
+    let records = leveldb_core::read_dir(leveldb_path)
+        .map_err(|_| "Installed Stremio storage could not be read")?;
+    let record = records
+        .iter()
+        .filter(|record| record.key == STREMIO_ADDONS_KEY_V4 || record.key == STREMIO_ADDONS_KEY_V5)
+        .max_by_key(|record| record.seq)
+        .ok_or("Installed Stremio has no local add-on collection")?;
+    if record.deleted {
+        return Err("Installed Stremio has no local add-on collection".into());
+    }
+    let decoded = decode_chromium_local_storage_string(&record.value)?;
+    let value: Value =
+        serde_json::from_str(&decoded).map_err(|_| "Installed Stremio add-on data is invalid")?;
+    let addons = value
+        .as_array()
+        .ok_or("Installed Stremio add-on data is invalid")?;
+    if addons.len() > MAX_CONFIGURED_ADDONS {
+        return Err("Installed Stremio add-on collection is too large".into());
+    }
+    Ok(addons.clone())
+}
+
+fn installed_stremio_leveldb(app: &AppHandle) -> Result<(PathBuf, String), String> {
+    let home = app
+        .path()
+        .home_dir()
+        .map_err(|_| "Home directory is unavailable")?;
+    let candidates = [
+        (
+            home.join(
+                ".var/app/com.stremio.Stremio/data/Smart Code ltd/Stremio/QtWebEngine/Default/Local Storage/leveldb",
+            ),
+            "Stremio Flatpak",
+        ),
+        (
+            home.join(
+                ".local/share/Smart Code ltd/Stremio/QtWebEngine/Default/Local Storage/leveldb",
+            ),
+            "Stremio desktop",
+        ),
+    ];
+    candidates
+        .into_iter()
+        .find(|(path, _)| path.is_dir())
+        .map(|(path, source)| (path, source.to_owned()))
+        .ok_or("No supported local Stremio installation was found".into())
+}
+
+fn skipped_stremio_addon(value: &Value, reason: &str) -> SkippedStremioAddon {
+    let name = value
+        .pointer("/manifest/name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty() && name.len() <= 160)
+        .unwrap_or("Unnamed add-on");
+    SkippedStremioAddon {
+        name: name.to_owned(),
+        reason: reason.to_owned(),
+    }
+}
+
+fn import_stremio_addons(values: &[Value]) -> (Vec<StoredAddon>, Vec<SkippedStremioAddon>) {
+    let mut addons = Vec::new();
+    let mut skipped = Vec::new();
+    let mut ids = HashSet::new();
+    for value in values {
+        let Some(transport_url) = value.get("transportUrl").and_then(Value::as_str) else {
+            skipped.push(skipped_stremio_addon(value, "missing transport"));
+            continue;
+        };
+        let Ok(validated) = validate_manifest_url(transport_url) else {
+            skipped.push(skipped_stremio_addon(
+                value,
+                "unsafe or unsupported transport",
+            ));
+            continue;
+        };
+        let Some(manifest_value) = value.get("manifest").cloned() else {
+            skipped.push(skipped_stremio_addon(value, "missing manifest"));
+            continue;
+        };
+        let Ok(manifest) = serde_json::from_value::<Manifest>(manifest_value) else {
+            skipped.push(skipped_stremio_addon(value, "invalid manifest"));
+            continue;
+        };
+        let Ok(addon) = stored_addon_from_manifest(validated.into(), manifest) else {
+            skipped.push(skipped_stremio_addon(value, "unsupported manifest"));
+            continue;
+        };
+        if !ids.insert(addon.id.clone()) {
+            skipped.push(skipped_stremio_addon(value, "duplicate add-on"));
+            continue;
+        }
+        addons.push(addon);
+    }
+    (addons, skipped)
 }
 
 #[tauri::command]
@@ -1014,6 +1172,28 @@ pub fn media_configuration_status() -> Result<Vec<ConfiguredAddon>, String> {
 }
 
 #[tauri::command]
+pub fn media_configuration_import_stremio(app: AppHandle) -> Result<StremioImportResult, String> {
+    let (leveldb_path, source) = installed_stremio_leveldb(&app)?;
+    let values = read_stremio_addon_values(&leveldb_path)?;
+    let (addons, skipped) = import_stremio_addons(&values);
+    if addons.is_empty() {
+        return Err("Installed Stremio has no compatible safe add-ons".into());
+    }
+    let imported = addons.len();
+    let configuration = StoredMediaConfiguration {
+        version: MEDIA_CONFIGURATION_VERSION,
+        addons,
+    };
+    store_media_configuration(&configuration)?;
+    Ok(StremioImportResult {
+        addons: sanitized_configuration(&configuration),
+        imported,
+        skipped,
+        source,
+    })
+}
+
+#[tauri::command]
 pub async fn media_configuration_add(manifest_url: String) -> Result<Vec<ConfiguredAddon>, String> {
     let validated = validate_manifest_url(&manifest_url).map_err(|error| error.to_string())?;
     let manifest = stremio_manifest(validated.clone())
@@ -1044,6 +1224,9 @@ pub async fn media_configuration_add(manifest_url: String) -> Result<Vec<Configu
 pub async fn fetch_configured_addon_resource(
     request: ConfiguredResourceRequest,
 ) -> Result<Value, String> {
+    if !matches!(request.resource.as_str(), "stream" | "subtitles" | "meta") {
+        return Err("That add-on resource is not available to Locadora".into());
+    }
     let configuration = load_media_configuration()?;
     let addon = configuration
         .addons
@@ -1433,8 +1616,68 @@ mod tests {
     }
 
     #[test]
-    fn manifest_must_supply_media_resources() {
-        let result = stored_addon_from_manifest(
+    fn chromium_utf16_local_storage_values_decode_without_exposing_other_records() {
+        let json = r#"[{"transportUrl":"https://example.invalid/manifest.json"}]"#;
+        let mut stored = vec![0];
+        stored.extend(json.encode_utf16().flat_map(u16::to_le_bytes));
+        assert_eq!(decode_chromium_local_storage_string(&stored).unwrap(), json);
+    }
+
+    #[test]
+    fn stremio_import_keeps_safe_descriptors_and_reports_unsafe_ones() {
+        let values = serde_json::json!([{
+            "transportUrl": "https://example.invalid/manifest.json",
+            "manifest": {
+                "id": "org.example.catalog",
+                "name": "Catalog",
+                "version": "1.0.0",
+                "types": ["movie"],
+                "resources": ["catalog"]
+            }
+        }, {
+            "transportUrl": "http://127.0.0.1:11470/local/manifest.json",
+            "manifest": {
+                "id": "org.example.local",
+                "name": "Local Files",
+                "version": "1.0.0",
+                "types": ["movie"],
+                "resources": ["stream"]
+            }
+        }]);
+        let (addons, skipped) = import_stremio_addons(values.as_array().unwrap());
+        assert_eq!(addons.len(), 1);
+        assert_eq!(addons[0].id, "org.example.catalog");
+        assert_eq!(
+            skipped,
+            vec![SkippedStremioAddon {
+                name: "Local Files".into(),
+                reason: "unsafe or unsupported transport".into(),
+            }]
+        );
+    }
+
+    #[test]
+    #[ignore = "reads the caller-provided installed Stremio LevelDB path"]
+    fn installed_stremio_collection_is_importable_without_emitting_secrets() {
+        let path = std::env::var_os("LOCADORA_STREMIO_LEVELDB")
+            .map(PathBuf::from)
+            .expect("LOCADORA_STREMIO_LEVELDB");
+        let values = read_stremio_addon_values(&path).expect("read installed Stremio collection");
+        let (addons, skipped) = import_stremio_addons(&values);
+        assert!(!addons.is_empty());
+        assert!(addons.iter().any(|addon| addon.id == "com.linvo.cinemeta"));
+        assert!(
+            addons
+                .iter()
+                .any(|addon| addon.id == "com.stremio.torrentio.addon")
+        );
+        assert!(addons.iter().any(|addon| addon.id == "org.imdbcatalogs"));
+        assert!(skipped.iter().all(|addon| !addon.name.is_empty()));
+    }
+
+    #[test]
+    fn catalog_only_manifests_are_retained_without_becoming_playback_sources() {
+        let stored = stored_addon_from_manifest(
             "https://example.invalid/manifest.json".into(),
             fixture_manifest(serde_json::json!({
                 "id": "org.example.catalog",
@@ -1442,6 +1685,23 @@ mod tests {
                 "version": "1.0.0",
                 "types": ["movie"],
                 "resources": ["catalog"]
+            })),
+        )
+        .unwrap();
+        assert_eq!(addon_resource_names(&stored), vec!["catalog"]);
+        assert!(!addon_supports_resource_name(&stored, "stream"));
+    }
+
+    #[test]
+    fn manifest_must_supply_a_supported_resource() {
+        let result = stored_addon_from_manifest(
+            "https://example.invalid/manifest.json".into(),
+            fixture_manifest(serde_json::json!({
+                "id": "org.example.unknown",
+                "name": "Unknown",
+                "version": "1.0.0",
+                "types": ["movie"],
+                "resources": ["custom"]
             })),
         );
         assert!(result.is_err());

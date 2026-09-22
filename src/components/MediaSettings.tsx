@@ -3,6 +3,7 @@ import { copy, type Locale } from '../locadora/catalog';
 import {
   addMediaConfiguration,
   disconnectMediaConfiguration,
+  importInstalledStremioConfiguration,
   isNativeShell,
   readMediaConfiguration,
   removeMediaConfiguration,
@@ -41,6 +42,28 @@ export function MediaSettings({ locale, onClose }: MediaSettingsProps) {
       setAddons(await addMediaConfiguration(value));
       setManifestUrl('');
       setStatus(locale === 'pt-BR' ? 'Fonte protegida no cofre do sistema.' : 'Source protected in the system vault.');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importStremio = async () => {
+    if (busy) return;
+    setBusy(true);
+    setStatus(locale === 'pt-BR' ? 'Lendo os add-ons do Stremio instalado…' : 'Reading installed Stremio add-ons…');
+    try {
+      const result = await importInstalledStremioConfiguration();
+      setAddons(result.addons);
+      const skipped = result.skipped.length
+        ? (locale === 'pt-BR'
+            ? ` ${result.skipped.length} ignorado(s): ${result.skipped.map((item) => item.name).join(', ')}.`
+            : ` ${result.skipped.length} skipped: ${result.skipped.map((item) => item.name).join(', ')}.`)
+        : '';
+      setStatus(locale === 'pt-BR'
+        ? `${result.imported} add-ons importados de ${result.source}.${skipped}`
+        : `${result.imported} add-ons imported from ${result.source}.${skipped}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -92,6 +115,17 @@ export function MediaSettings({ locale, onClose }: MediaSettingsProps) {
         </p>
       ) : (
         <>
+          <section className="stremio-import">
+            <h3>{locale === 'pt-BR' ? 'Usar seus add-ons do Stremio' : 'Use your Stremio add-ons'}</h3>
+            <p>
+              {locale === 'pt-BR'
+                ? 'Importa a coleção do Stremio instalado sem copiar login, cookies ou histórico. A lista local atual será substituída.'
+                : 'Imports the installed Stremio collection without copying login, cookies, or history. The current local list will be replaced.'}
+            </p>
+            <button type="button" disabled={busy} onClick={() => void importStremio()}>
+              {locale === 'pt-BR' ? 'Importar do Stremio instalado' : 'Import from installed Stremio'}
+            </button>
+          </section>
           <form className="manifest-form" onSubmit={(event) => { event.preventDefault(); void add(); }}>
             <label htmlFor="manifest-url">Manifest URL</label>
             <input
@@ -111,7 +145,7 @@ export function MediaSettings({ locale, onClose }: MediaSettingsProps) {
               <li key={addon.id}>
                 <span>
                   <strong>{addon.name}</strong>
-                  <small>{addon.id} · {[addon.supportsStreams && 'streams', addon.supportsSubtitles && 'subtitles'].filter(Boolean).join(' + ')}</small>
+                  <small>{addon.id} · {addon.resources.join(' + ')}</small>
                 </span>
                 <button type="button" disabled={busy} onClick={() => void remove(addon.id)}>{locale === 'pt-BR' ? 'Remover' : 'Remove'}</button>
               </li>

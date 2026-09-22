@@ -13,6 +13,7 @@ const movie = normalizeDiscoveryTitle({
 const addons: ConfiguredAddon[] = [{
   id: 'subtitles',
   name: 'Subtitle fixture',
+  resources: ['subtitles'],
   supportsStreams: false,
   supportsSubtitles: true,
 }];

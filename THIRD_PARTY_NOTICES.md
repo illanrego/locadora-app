@@ -21,6 +21,7 @@ Packaging work must refresh this file from the final dependency graph.
 | Tauri 2 | Native application boundary | MIT OR Apache-2.0 | Candidate shell; final Rust graph must be audited. |
 | reqwest + rustls | Bounded native HTTPS transport | MIT OR Apache-2.0 | Redirects are manually revalidated; TLS uses platform-verifier-backed rustls. |
 | keyring-rs | OS-protected local secrets | MIT OR Apache-2.0 | Stores secret-bearing manifest configuration and the independent Locadora member session in separate platform-credential namespaces. |
+| leveldb-core 0.1.2 | Read-only installed Stremio add-on collection import | Apache-2.0 | Reads raw local-storage records without acquiring Stremio's lock or mutating its database; only the exact add-on collection key is decoded. |
 | Stremio Core | Add-on types, compatibility, transport, and response parsing | MIT | Linked from the official repository at pinned revision `b3062f7fa790223540022f9a62c12067b646c179`; retain its license and notices. |
 | Stremio official add-ons | Transitive Core data dependency | MIT | Version 2.1.2 through the pinned Core dependency. |
 | Stremio local-search | Transitive Core search dependency | MIT | Cargo locks the resolved official repository revision. |

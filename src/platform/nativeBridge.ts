@@ -8,8 +8,16 @@ export interface NativeCapabilities {
 export interface ConfiguredAddon {
   id: string;
   name: string;
+  resources: Array<'stream' | 'subtitles' | 'meta' | 'catalog' | 'addon_catalog'>;
   supportsStreams: boolean;
   supportsSubtitles: boolean;
+}
+
+export interface StremioImportResult {
+  addons: ConfiguredAddon[];
+  imported: number;
+  skipped: Array<{ name: string; reason: string }>;
+  source: string;
 }
 
 export interface MemberUser {
@@ -173,6 +181,11 @@ export async function readMediaConfiguration(): Promise<ConfiguredAddon[]> {
 export async function addMediaConfiguration(manifestUrl: string): Promise<ConfiguredAddon[]> {
   if (!isNativeShell()) throw new Error('Protected media configuration is available in the desktop app');
   return invoke<ConfiguredAddon[]>('media_configuration_add', { manifestUrl });
+}
+
+export async function importInstalledStremioConfiguration(): Promise<StremioImportResult> {
+  if (!isNativeShell()) throw new Error('Installed Stremio import is available in the desktop app');
+  return invoke<StremioImportResult>('media_configuration_import_stremio');
 }
 
 export async function removeMediaConfiguration(addonId: string): Promise<ConfiguredAddon[]> {

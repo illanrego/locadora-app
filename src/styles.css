@@ -218,6 +218,9 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .saved-title-list small { color: var(--muted); font: 700 .6rem "Courier New", monospace; }
 .saved-title-list button { min-height: 34px; padding: .45rem; font-size: .56rem; }
 .manifest-form { display: grid; gap: .55rem; margin: 1.2rem 0; }
+.stremio-import { display: grid; gap: .55rem; margin: 1rem 0 1.3rem; padding: 1rem; border: 2px solid #6b4fa3; background: #211a3555; }
+.stremio-import h3 { margin: 0; color: #d7c0ff; font: 900 1rem "Arial Narrow", Arial, sans-serif; text-transform: uppercase; }
+.stremio-import p { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.5; }
 .manifest-form label { color: var(--yellow); font: 800 .65rem/1 "Courier New", monospace; text-transform: uppercase; }
 .manifest-form input { min-height: 44px; padding: .65rem; border: 2px solid #3f526b; color: var(--cream); background: #080d15; font-family: "Courier New", monospace; }
 .addon-list { display: grid; gap: .65rem; padding: 0; list-style: none; }

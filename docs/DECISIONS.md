@@ -18,9 +18,11 @@ shows valid candidates and the explanation states why autoplay was withheld.
 
 ### D-003 — Initial media configuration
 
-Local compatible add-on manifest URLs are the first implementation path.
-Stremio account synchronization is deferred. Browsing never requires either
-Locadora or media login.
+Local compatible add-on manifest URLs remain available. Linux can also import
+the installed official Stremio collection from its read-only browser storage,
+without copying Stremio login, cookies, history, or account data. Stremio
+account synchronization is deferred. Browsing never requires either Locadora
+or media login.
 
 ### D-004 — Subtitle languages
 
@@ -73,6 +75,16 @@ stored in an OS-keyring service/account distinct from media configuration and is
 never returned to the React layer. Browser builds remain anonymous, member
 login stays optional until participation, and local logout succeeds even when
 the remote sign-out request is unavailable.
+
+### D-011 — Installed Stremio collection import
+
+The desktop app may read only fixed official Stremio local-storage locations
+and the exact add-on collection key. It reconstructs the newest live LevelDB
+record with a read-only parser, validates every transport and official Core
+manifest, and replaces Locadora's separate protected media configuration only
+after at least one safe add-on is found. It never reads Stremio cookies or
+copies its auth key. Catalog-only add-ons may be retained and shown for parity,
+but Locadora exposes only stream, subtitle, and metadata resource requests.
 
 ## Non-negotiable boundaries
 
