@@ -71,4 +71,22 @@ describe('official Stremio video shell adapter', () => {
     expect(property).toHaveBeenCalledWith({ name: 'paused-for-cache', data: true });
     await transport.destroy();
   });
+
+  it('reports the native reason for a rejected load and ignores rejected properties', async () => {
+    const transport = new StremioShellTransport('0.35.1');
+    const ended = vi.fn();
+    transport.on('mpv-event-ended', ended);
+    await transport.start();
+
+    native.setProperty.mockRejectedValueOnce('The player command failed');
+    native.load.mockRejectedValueOnce('The playback descriptor is not allowed');
+    transport.send('mpv-set-prop', ['volume', 50]);
+    transport.send('mpv-command', ['loadfile', 'https://media.example.invalid/video']);
+
+    await waitFor(() => expect(ended).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(ended).toHaveBeenCalledTimes(1);
+    expect(ended).toHaveBeenCalledWith({ error: 'The playback descriptor is not allowed' });
+    await transport.destroy();
+  });
 });

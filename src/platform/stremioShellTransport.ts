@@ -15,6 +15,12 @@ function mpvVersion(value: string | null): string {
   return value?.match(/\d+(?:\.\d+){1,2}/)?.[0] ?? '0.0.0';
 }
 
+function nativeCommandError(value: unknown): string {
+  // Native player errors are fixed, sanitized strings and never carry a URL.
+  if (typeof value === 'string' && value.trim()) return value.slice(0, 200);
+  return 'The native player command failed';
+}
+
 export class StremioShellTransport {
   readonly capabilities = { nativeAssSubtitles: false };
 
@@ -46,10 +52,9 @@ export class StremioShellTransport {
 
   send(name: string, args: unknown): void {
     if (this.destroyed) return;
-    const task = async () => this.handleSend(name, args);
-    this.queue = this.queue.then(task, task).catch(() => {
-      this.emit('mpv-event-ended', { error: 'The native player command failed' });
-    });
+    const task = () =>
+      this.handleSend(name, args).catch((error: unknown) => this.reportFailure(name, args, error));
+    this.queue = this.queue.then(task, task);
   }
 
   async destroy(): Promise<void> {
@@ -98,6 +103,17 @@ export class StremioShellTransport {
         : rawValue;
       await setNativePlayerProperty(property, value);
     }
+  }
+
+  /**
+   * Only a rejected load means the stream cannot play. A rejected cosmetic
+   * property (subtitle size, aspect, volume) or an already-stopped session must
+   * not be reported as a playback failure.
+   */
+  private reportFailure(name: string, args: unknown, error: unknown): void {
+    const isLoad = name === 'mpv-command' && Array.isArray(args) && args[0] === 'loadfile';
+    if (!isLoad) return;
+    this.emit('mpv-event-ended', { error: nativeCommandError(error) });
   }
 
   private async poll(): Promise<void> {

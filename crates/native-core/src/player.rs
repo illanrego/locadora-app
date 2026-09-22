@@ -307,6 +307,23 @@ fn stremio_service_stream_url(value: &str) -> Result<(), PlayerError> {
         .path_segments()
         .ok_or(PlayerError::InvalidDescriptor)?
         .collect::<Vec<_>>();
+    if segments
+        .iter()
+        .any(|segment| matches!(*segment, "" | "." | ".."))
+    {
+        return Err(PlayerError::InvalidDescriptor);
+    }
+    // A direct stream that needs request headers is proxied by the official
+    // service, which hands the player a `/proxy/<options><original path>` URL.
+    // Only that one endpoint is reachable; arbitrary service paths are not.
+    if segments.first() == Some(&"proxy") {
+        return if segments.len() >= 2 {
+            Ok(())
+        } else {
+            Err(PlayerError::InvalidDescriptor)
+        };
+    }
+    // Torrent streams are addressed by info hash and file index.
     if segments.len() != 2
         || segments[0].len() != 40
         || !segments[0].bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -592,6 +609,30 @@ mod tests {
         ] {
             assert!(
                 stremio_service_stream_url(&value).is_err(),
+                "accepted {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn official_stremio_service_proxy_streams_are_allowlisted() {
+        // withStreamingServer routes a direct stream through the official
+        // service whenever the add-on supplies request headers, and hands the
+        // player a /proxy/ URL. Refusing it fails playback as a rejected
+        // command.
+        assert!(
+            stremio_service_stream_url(
+                "http://127.0.0.1:11470/proxy/d=https%3A%2F%2Fmedia.example.com&h=User-Agent%3Aok/movie.mkv?token=secret"
+            )
+            .is_ok()
+        );
+        for value in [
+            "http://127.0.0.1:11470/proxy/../settings",
+            "http://127.0.0.1:11470/other/path",
+            "http://127.0.0.1:11470/proxy/d=x/movie.mkv#fragment",
+        ] {
+            assert!(
+                stremio_service_stream_url(value).is_err(),
                 "accepted {value}"
             );
         }

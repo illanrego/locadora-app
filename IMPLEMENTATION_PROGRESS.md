@@ -349,6 +349,17 @@ when they need user or real-environment confirmation.
   passed 18 tests with 2 ignored; both crates passed strict Clippy and
   `cargo fmt --check`. Playback inside the app is still unconfirmed: it needs a
   user play attempt.
+- 2026-09-22: with the socket fixed, mpv stayed open but the Watch panel
+  reported a generic "The native player command failed". Two defects: the shell
+  transport collapsed every rejected native command into that one string, and
+  the native descriptor allowlist rejected the official service's `/proxy/`
+  stream form, which Stremio Video generates for any direct stream that needs
+  request headers. The allowlist now accepts `/proxy/` (still only the official
+  `127.0.0.1:11470` origin, no credentials, fragment, or path traversal), and
+  the transport reports the native reason for a rejected load while ignoring
+  rejected cosmetic properties, which no longer end playback. `npm run check`
+  passed with 80 tests in 21 files; native-core passed 16 tests. Playback inside
+  the app is still unconfirmed.
 
 ## Known blockers and risks
 
