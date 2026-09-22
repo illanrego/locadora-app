@@ -144,6 +144,19 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .identity-list dt { color: var(--muted); font-size: .6rem; }
 .identity-list dd { margin: .25rem 0 0; font: 700 .78rem "Courier New", monospace; }
 .inspection-actions { display: grid; gap: .65rem; margin-top: 1.5rem; }
+.title-reviews { display: grid; gap: .8rem; padding: 1rem; border: 1px solid #ffffff2c; background: #080d15; text-align: left; }
+.review-summary { display: flex; align-items: baseline; justify-content: space-between; gap: .7rem; }
+.review-summary strong { color: var(--yellow); font-size: 1.2rem; }
+.review-summary span, .review-eligibility { color: var(--muted); font-size: .7rem; line-height: 1.45; }
+.review-form { display: grid; gap: .45rem; border-top: 1px dashed #ffffff30; padding-top: .8rem; }
+.review-form h3 { margin: 0 0 .25rem; color: var(--cyan); font: 900 .9rem "Arial Narrow", Arial, sans-serif; text-transform: uppercase; }
+.review-form label { color: var(--yellow); font: 800 .6rem "Courier New", monospace; text-transform: uppercase; }
+.review-form select, .review-form textarea { min-height: 40px; padding: .55rem; border: 1px solid #3f526b; color: var(--cream); background: #111925; }
+.review-form textarea { min-height: 90px; resize: vertical; }
+.review-list { display: grid; gap: .55rem; }
+.review-list article { padding: .7rem; border-left: 4px solid var(--red); background: #ffffff08; }
+.review-list article header { display: flex; justify-content: space-between; gap: .5rem; color: var(--yellow); font-size: .7rem; }
+.review-list article p { margin: .45rem 0 0; color: #d6ccb7; font-size: .75rem; line-height: 1.5; }
 .modal .primary-action { color: var(--ink); background: var(--yellow); }
 .modal .text-action { border-color: transparent; background: transparent; box-shadow: none; }
 

@@ -100,6 +100,21 @@ export async function fetchMemberHistory(offset: number): Promise<unknown> {
   return invoke('member_history', { request: { offset } });
 }
 
+export async function fetchTitleReviews(contentType: ContentType, tmdbId: number): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Locadora reviews are available in the desktop app');
+  return invoke('title_reviews', { request: { contentType, tmdbId } });
+}
+
+export async function fetchMemberReviewEligibility(contentType: ContentType, tmdbId: number): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Locadora review eligibility is available in the desktop app');
+  return invoke('member_review_eligibility', { request: { contentType, tmdbId } });
+}
+
+export async function writeMemberReview(contentType: ContentType, tmdbId: number, rating: number, body: string): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Locadora reviews are available in the desktop app');
+  return invoke('member_write_review', { write: { contentType, tmdbId, rating, body } });
+}
+
 export async function signOutMember(): Promise<MemberSessionStatus> {
   if (!isNativeShell()) return { configured: false, signedIn: false, user: null };
   return invoke<MemberSessionStatus>('member_sign_out');

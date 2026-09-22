@@ -54,10 +54,15 @@ Account history now paginates through a fixed native
 page is normalized independently, entries are deduplicated by rental-item ID,
 and the UI stops requesting pages when the Worker clears `hasMore`.
 
-Next task: add title-review reading plus signed-in review eligibility/write
-through fixed `GET /v1/titles/:type/:tmdbId/reviews`, eligibility, and review
-routes. Keep reviews attached to canonical Locadora titles and independent from
-media selection or playback state.
+Title inspection now opens bounded public review summaries/cards through the
+fixed title route. Signed-in eligibility is checked separately, and only an
+eligible member can submit a half-star rating plus 1–1,000 characters through
+the fixed review route. Review state is attached only to the canonical Locadora
+title and never to a media source or playback event.
+
+Next task: inspect and implement the Phase 2 voluntary-donation presentation
+without persisting payment state or coupling donations to Cesta, rentals,
+returns, reviews, media configuration, or playback.
 
 ## Phase board
 
@@ -89,7 +94,7 @@ media selection or playback state.
   - [x] Add participation-time Balcão rental checkout.
   - [x] Add explicit return-desk outcomes independent from playback.
   - [x] Add bounded, deduplicated history pagination.
-  - [ ] Add review reading and eligible review writes.
+  - [x] Add public review reading and eligible member review writes.
   - [ ] Integrate donations without coupling payment and rental state.
 - [ ] Phase 3 — media engine and add-on configuration
   - [x] Store secret-bearing manifest configuration in the OS credential store.
@@ -263,6 +268,14 @@ when they need user or real-environment confirmation.
   and the production build passed; the Tauri shell passed 14 tests with 1
   ignored keyring integration test and strict Clippy. No browser/manual or live
   history request was performed.
+- 2026-09-22: added public title-review summaries/cards and authenticated review
+  eligibility/publication through fixed native Worker routes. Titles are
+  canonical movie/series TMDB identities; ratings are half-star steps from 0.5
+  through 5, text is compacted and capped at 1,000 characters, and player/media
+  state has no review mutation path. `npm run typecheck`, 74 Vitest tests in 19
+  files, and the production build passed; the Tauri shell passed 15 tests with
+  1 ignored keyring integration test and strict Clippy. No browser/manual or
+  live review write was performed.
 
 ## Known blockers and risks
 

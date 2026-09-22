@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import type { DiscoveryTitle } from '../domain/content';
 import { externalId } from '../domain/content';
 import { copy, type Locale } from '../locadora/catalog';
 import { Modal } from './Modal';
+import { TitleReviews } from './TitleReviews';
 
 interface TitleInspectionProps {
   title: DiscoveryTitle;
@@ -31,6 +33,7 @@ export function TitleInspection({
   onClose,
 }: TitleInspectionProps) {
   const t = copy[locale];
+  const [reviewsOpen, setReviewsOpen] = useState(false);
   return (
     <Modal label={title.name} onClose={onClose} className="title-modal">
       <div className="inspection-art" aria-hidden="true">
@@ -58,6 +61,10 @@ export function TitleInspection({
           <button type="button" aria-pressed={favorite} onClick={() => onToggleSaved('favorite')}>
             {favorite ? (locale === 'pt-BR' ? 'Remover das favoritas' : 'Remove from favorites') : (locale === 'pt-BR' ? 'Marcar como favorita' : 'Add to favorites')}
           </button>
+          <button type="button" aria-expanded={reviewsOpen} onClick={() => setReviewsOpen((open) => !open)}>
+            {reviewsOpen ? (locale === 'pt-BR' ? 'Fechar avaliações' : 'Close reviews') : (locale === 'pt-BR' ? 'Ver avaliações' : 'See reviews')}
+          </button>
+          {reviewsOpen && <TitleReviews title={title} locale={locale} />}
           <button type="button" className="text-action" onClick={onClose}>{t.close}</button>
         </div>
       </section>

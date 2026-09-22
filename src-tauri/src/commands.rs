@@ -124,6 +124,22 @@ pub struct MemberHistoryRequest {
     offset: u16,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TitleReviewRequest {
+    tmdb_id: u64,
+    content_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberReviewWrite {
+    tmdb_id: u64,
+    content_type: String,
+    rating: f64,
+    body: String,
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MemberUser {
@@ -376,6 +392,27 @@ fn validate_history_offset(offset: u16) -> Result<(), String> {
         return Err("Invalid history offset".into());
     }
     Ok(())
+}
+
+fn validate_review_title(content_type: &str, tmdb_id: u64) -> Result<(), String> {
+    if tmdb_id == 0 || !matches!(content_type, "movie" | "series") {
+        return Err("Invalid review title".into());
+    }
+    Ok(())
+}
+
+fn normalized_review(write: &MemberReviewWrite) -> Result<String, String> {
+    validate_review_title(&write.content_type, write.tmdb_id)?;
+    let body = write.body.split_whitespace().collect::<Vec<_>>().join(" ");
+    if !write.rating.is_finite()
+        || !(0.5..=5.0).contains(&write.rating)
+        || (write.rating * 2.0).fract() != 0.0
+        || body.is_empty()
+        || body.len() > 1_000
+    {
+        return Err("A review needs a half-star rating and text up to 1000 characters".into());
+    }
+    Ok(body)
 }
 
 fn member_service_error(status: u16) -> String {
@@ -855,6 +892,83 @@ pub async fn member_history(request: MemberHistoryRequest) -> Result<Value, Stri
 }
 
 #[tauri::command]
+pub async fn title_reviews(request: TitleReviewRequest) -> Result<Value, String> {
+    validate_review_title(&request.content_type, request.tmdb_id)?;
+    let response = fetch_bounded_https_json_request(
+        &format!(
+            "{MEMBER_API_BASE}/v1/titles/{}/{}/reviews",
+            request.content_type, request.tmdb_id
+        ),
+        JsonRequestMethod::Get,
+        None,
+        None,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    Ok(response.body)
+}
+
+#[tauri::command]
+pub async fn member_review_eligibility(request: TitleReviewRequest) -> Result<Value, String> {
+    validate_review_title(&request.content_type, request.tmdb_id)?;
+    let token = load_member_token()?.ok_or("Sign in to review titles")?;
+    let response = fetch_bounded_https_json_request(
+        &format!(
+            "{MEMBER_API_BASE}/v1/titles/{}/{}/review-eligibility",
+            request.content_type, request.tmdb_id
+        ),
+        JsonRequestMethod::Get,
+        None,
+        Some(&token),
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if matches!(response.status, 401 | 403) {
+        delete_member_token()?;
+        return Err("Member session expired. Sign in again".into());
+    }
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    if let Some(refreshed_token) = response.refreshed_token {
+        store_member_token(&refreshed_token)?;
+    }
+    Ok(response.body)
+}
+
+#[tauri::command]
+pub async fn member_write_review(write: MemberReviewWrite) -> Result<Value, String> {
+    let normalized_body = normalized_review(&write)?;
+    let token = load_member_token()?.ok_or("Sign in to review titles")?;
+    let body = serde_json::json!({ "rating": write.rating, "body": normalized_body });
+    let response = fetch_bounded_https_json_request(
+        &format!(
+            "{MEMBER_API_BASE}/v1/titles/{}/{}/review",
+            write.content_type, write.tmdb_id
+        ),
+        JsonRequestMethod::Post,
+        Some(&body),
+        Some(&token),
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if matches!(response.status, 401 | 403) {
+        delete_member_token()?;
+        return Err("Member session expired. Sign in again".into());
+    }
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    if let Some(refreshed_token) = response.refreshed_token {
+        store_member_token(&refreshed_token)?;
+    }
+    Ok(response.body)
+}
+
+#[tauri::command]
 pub async fn member_sign_out() -> Result<MemberSessionStatus, String> {
     if let Some(token) = load_member_token()? {
         let body = serde_json::json!({});
@@ -1241,6 +1355,33 @@ mod tests {
         assert!(validate_history_offset(0).is_ok());
         assert!(validate_history_offset(10_000).is_ok());
         assert!(validate_history_offset(10_001).is_err());
+    }
+
+    #[test]
+    fn reviews_require_canonical_titles_half_stars_and_bounded_text() {
+        let valid = MemberReviewWrite {
+            tmdb_id: 603,
+            content_type: "movie".into(),
+            rating: 4.5,
+            body: "  Muito   bom.\nMesmo. ".into(),
+        };
+        assert_eq!(normalized_review(&valid).unwrap(), "Muito bom. Mesmo.");
+        for (content_type, tmdb_id, rating, body) in [
+            ("episode", 603, 4.5, "Good"),
+            ("movie", 0, 4.5, "Good"),
+            ("movie", 603, 4.2, "Good"),
+            ("movie", 603, 5.0, "   "),
+        ] {
+            assert!(
+                normalized_review(&MemberReviewWrite {
+                    tmdb_id,
+                    content_type: content_type.into(),
+                    rating,
+                    body: body.into(),
+                })
+                .is_err()
+            );
+        }
     }
 
     #[test]
