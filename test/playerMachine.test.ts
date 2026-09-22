@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { INITIAL_PLAYER_STATE, reducePlayerState } from '../src/media/playerMachine';
+import { INITIAL_PLAYER_STATE, reducePlayerState, type PlayerMachineState } from '../src/media/playerMachine';
 
 describe('player state machine', () => {
   it('follows the complete successful resolution and playback sequence', () => {
@@ -32,5 +32,16 @@ describe('player state machine', () => {
   it('cancels without mutating any Locadora domain state', () => {
     const resolving = reducePlayerState(INITIAL_PLAYER_STATE, { type: 'SELECT_TITLE', titleKey: 'series:tmdb:2' });
     expect(reducePlayerState(resolving, { type: 'CANCEL' })).toEqual(INITIAL_PLAYER_STATE);
+  });
+
+  it('switches sources from playing without losing title context', () => {
+    let state: PlayerMachineState = {
+      ...INITIAL_PLAYER_STATE,
+      phase: 'playing',
+      titleKey: 'movie:tmdb:1',
+      candidateId: 'first',
+    };
+    state = reducePlayerState(state, { type: 'SOURCE_SELECTED', candidateId: 'second' });
+    expect(state).toMatchObject({ phase: 'buffering', titleKey: 'movie:tmdb:1', candidateId: 'second' });
   });
 });

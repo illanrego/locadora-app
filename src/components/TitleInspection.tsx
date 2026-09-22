@@ -8,7 +8,9 @@ interface TitleInspectionProps {
   locale: Locale;
   isInBasket: boolean;
   basketFull: boolean;
+  canWatch: boolean;
   onToggleBasket: () => void;
+  onWatch: () => void;
   onClose: () => void;
 }
 
@@ -17,7 +19,9 @@ export function TitleInspection({
   locale,
   isInBasket,
   basketFull,
+  canWatch,
   onToggleBasket,
+  onWatch,
   onClose,
 }: TitleInspectionProps) {
   const t = copy[locale];
@@ -39,7 +43,9 @@ export function TitleInspection({
           <button type="button" className="primary-action" onClick={onToggleBasket} disabled={!isInBasket && basketFull}>
             {isInBasket ? t.removeBasket : t.addBasket}
           </button>
-          <button type="button" disabled title={t.development}>{t.watchDevelopment}</button>
+          <button type="button" disabled={!canWatch} title={canWatch ? undefined : t.development} onClick={onWatch}>
+            {canWatch ? 'Quick Watch' : t.watchDevelopment}
+          </button>
           <button type="button" className="text-action" onClick={onClose}>{t.close}</button>
         </div>
       </section>

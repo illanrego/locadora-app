@@ -1,23 +1,24 @@
 # Implementation progress
 
 Last updated: 2026-09-22
-Current milestone: Phase 0 native proof + Phase 1 visual skeleton
+Current milestone: Phase 3 media resolution + Phase 4 Quick Watch
 Status: in progress
 
 ## Resume checkpoint
 
-The first executable React/TypeScript slice is implemented and tested. It
-renders an accessible responsive Locadora shelf from explicitly synthetic
-fixtures, with a separately configurable public discovery adapter. The pure
-media layer includes add-on protocol validation, stream normalization, movie
-Quick Watch v1, subtitle prioritization/fingerprints, and log redaction.
+The tested desktop path now goes from a selected Locadora title and confirmed
+IMDb identity through all compatible protected add-on configurations, stream
+normalization, deterministic movie Quick Watch, a manual fallback picker, and
+the private mpv IPC lifecycle. Direct HTTPS stream winners can start mpv;
+torrent descriptors remain visible but disabled until a reviewed transport
+resolver exists. Add-on URLs remain in the OS credential store and are never
+returned to the webview.
 
-Next task: implement the configured-media resolution service. Given a confirmed
-IMDb title identity, it must query all compatible stored add-ons by sanitized
-ID, normalize their candidates, run movie Quick Watch, and return either one
-explained winner or the manual picker model. Keep the Watch action disabled
-until this service, cancellation/timeouts, source switching, and player events
-form a single tested path.
+Next task: resolve subtitle resources for the active release, present PT/EN
+tracks first with an explicit other-languages disclosure, and connect subtitle
+selection to mpv. Open the delay control immediately after selection and persist
+the delay only under the existing video-plus-track fingerprint. Do not add
+torrent transport, member-state writes, or resume history as part of that task.
 
 ## Phase board
 
@@ -46,11 +47,20 @@ form a single tested path.
   - [x] Validate manifests natively and return sanitized capabilities only.
   - [x] Add individual removal and full local disconnect actions.
   - [x] Fetch stored add-on resources by sanitized ID without returning URLs.
-  - [ ] Resolve one selected title across configured stream/subtitle add-ons.
-  - [ ] Add bounded cancellation and sanitized diagnostic aggregation.
+  - [x] Resolve one selected title across all compatible configured stream add-ons.
+  - [ ] Resolve subtitle add-ons for the active video/release identity.
+  - [x] Add bounded cancellation and sanitized diagnostic aggregation.
   - [ ] Meet all Phase 3 exit criteria.
 - [ ] Phase 4 — Quick Watch movies
+  - [x] Implement and boundary-test the versioned deterministic movie evaluator.
+  - [x] Connect a safe direct-URL winner and manual fallback picker to title inspection.
+  - [ ] Add a setting to disable Quick Watch without changing the default rules.
+  - [ ] Meet all Phase 4 exit criteria with a real sanitized add-on fixture.
 - [ ] Phase 5 — native playback, audio, and subtitles
+  - [x] Connect native start/load/events/control/shutdown to the Watch flow.
+  - [x] Allow source switching without crossing into Locadora member state.
+  - [ ] Add retry presentation, audio selection, and the complete subtitle flow.
+  - [ ] Meet all Phase 5 exit criteria.
 - [ ] Phase 6 — Linux packaging
 - [ ] Phase 7 — Windows shell and installer
 - [ ] Phase 8 — series Quick Watch (blocked on product rules)
@@ -96,6 +106,13 @@ when they need user or real-environment confirmation.
   Tauri tests, strict Clippy, and another optimized no-bundle Tauri build. The
   settings UI displays only sanitized add-on metadata and keeps manifest input
   desktop-only.
+- 2026-09-22: configured stream resolution and the Watch flow passed
+  `npm run check` with 61 tests in 10 files and a production build. Both Rust
+  crates passed `cargo fmt --check`, strict Clippy, and their regular tests;
+  native-core passed all 10 tests with `LOCADORA_REQUIRE_MPV_SMOKE=1`, including
+  the private IPC smoke test. `npm run tauri -- build --no-bundle` also produced
+  the optimized Linux executable. No browser/manual visual or real-media
+  playback testing was performed.
 
 ## Known blockers and risks
 
@@ -106,6 +123,9 @@ when they need user or real-environment confirmation.
   count as the user-configured sanitized response required by Phase 0.
 - A real user-configured sanitized response is still required before parser
   field reliability and Phase 0 can be closed.
+- The current player can load direct HTTPS stream URLs. Torrent descriptors are
+  intentionally non-playable until a bounded, license-reviewed resolver is
+  selected and implemented.
 - Series Quick Watch rules are deliberately undefined.
 - Public release licensing must be re-reviewed after the final native/player
   dependency graph is locked.

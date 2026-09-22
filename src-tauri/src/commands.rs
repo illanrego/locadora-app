@@ -29,7 +29,10 @@ const ALLOWED_GENRES: &[&str] = &[
 ];
 const KEYRING_SERVICE: &str = "com.illanrego.willslocadora.media";
 const KEYRING_ACCOUNT: &str = "addon-manifests-v1";
+const MEDIA_CONFIGURATION_VERSION: u8 = 2;
 const MAX_CONFIGURED_ADDONS: usize = 12;
+const MAX_MANIFEST_RESOURCES: usize = 64;
+const MAX_RESOURCE_FILTERS: usize = 64;
 
 #[derive(Default)]
 pub struct PlayerState(Mutex<Option<MpvSession>>);
@@ -72,11 +75,25 @@ pub enum PlayerAction {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct StoredResource {
+    name: String,
+    #[serde(default)]
+    types: Vec<String>,
+    #[serde(default)]
+    id_prefixes: Vec<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct StoredAddon {
     manifest_url: String,
     id: String,
     name: String,
+    #[serde(default)]
+    resources: Vec<StoredResource>,
+    #[serde(default, skip_serializing)]
     supports_streams: bool,
+    #[serde(default, skip_serializing)]
     supports_subtitles: bool,
 }
 
@@ -105,22 +122,52 @@ fn keyring_entry_for(account: &str) -> Result<keyring::Entry, String> {
         .map_err(|_| "Protected media storage is unavailable".into())
 }
 
+fn migrate_media_configuration(configuration: &mut StoredMediaConfiguration) {
+    if configuration.version != 1 {
+        return;
+    }
+    for addon in &mut configuration.addons {
+        if addon.resources.is_empty() {
+            if addon.supports_streams {
+                addon.resources.push(StoredResource {
+                    name: "stream".into(),
+                    types: vec![],
+                    id_prefixes: vec![],
+                });
+            }
+            if addon.supports_subtitles {
+                addon.resources.push(StoredResource {
+                    name: "subtitles".into(),
+                    types: vec![],
+                    id_prefixes: vec![],
+                });
+            }
+        }
+    }
+    configuration.version = MEDIA_CONFIGURATION_VERSION;
+}
+
 fn load_media_configuration() -> Result<StoredMediaConfiguration, String> {
     let entry = keyring_entry()?;
     let secret = match entry.get_password() {
         Ok(secret) => secret,
         Err(keyring::Error::NoEntry) => {
             return Ok(StoredMediaConfiguration {
-                version: 1,
+                version: MEDIA_CONFIGURATION_VERSION,
                 addons: vec![],
             });
         }
         Err(_) => return Err("Protected media storage is unavailable".into()),
     };
-    let configuration: StoredMediaConfiguration =
+    let mut configuration: StoredMediaConfiguration =
         serde_json::from_str(&secret).map_err(|_| "Protected media configuration is invalid")?;
-    if configuration.version != 1
+    migrate_media_configuration(&mut configuration);
+    if configuration.version != MEDIA_CONFIGURATION_VERSION
         || configuration.addons.len() > MAX_CONFIGURED_ADDONS
+        || configuration
+            .addons
+            .iter()
+            .any(|addon| addon.resources.len() > MAX_MANIFEST_RESOURCES)
         || configuration
             .addons
             .iter()
@@ -146,22 +193,88 @@ fn sanitized_configuration(configuration: &StoredMediaConfiguration) -> Vec<Conf
         .map(|addon| ConfiguredAddon {
             id: addon.id.clone(),
             name: addon.name.clone(),
-            supports_streams: addon.supports_streams,
-            supports_subtitles: addon.supports_subtitles,
+            supports_streams: addon
+                .resources
+                .iter()
+                .any(|resource| resource.name == "stream"),
+            supports_subtitles: addon
+                .resources
+                .iter()
+                .any(|resource| resource.name == "subtitles"),
         })
         .collect()
 }
 
-fn manifest_supports(value: &Value, resource_name: &str) -> bool {
+fn string_array(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|item| !item.is_empty() && item.len() <= 160)
+                .take(MAX_RESOURCE_FILTERS)
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn manifest_resources(value: &Value) -> Vec<StoredResource> {
+    let default_types = string_array(value.get("types"));
+    let default_prefixes = string_array(value.get("idPrefixes"));
     value
         .get("resources")
         .and_then(Value::as_array)
-        .is_some_and(|resources| {
-            resources.iter().any(|resource| {
-                resource.as_str() == Some(resource_name)
-                    || resource.get("name").and_then(Value::as_str) == Some(resource_name)
-            })
+        .map(|resources| {
+            resources
+                .iter()
+                .filter_map(|resource| {
+                    if let Some(name) = resource.as_str() {
+                        return matches!(name, "stream" | "subtitles" | "meta").then(|| {
+                            StoredResource {
+                                name: name.into(),
+                                types: default_types.clone(),
+                                id_prefixes: default_prefixes.clone(),
+                            }
+                        });
+                    }
+                    let name = resource.get("name").and_then(Value::as_str)?;
+                    if !matches!(name, "stream" | "subtitles" | "meta") {
+                        return None;
+                    }
+                    let types = string_array(resource.get("types"));
+                    let id_prefixes = string_array(resource.get("idPrefixes"));
+                    Some(StoredResource {
+                        name: name.into(),
+                        types: if types.is_empty() {
+                            default_types.clone()
+                        } else {
+                            types
+                        },
+                        id_prefixes: if id_prefixes.is_empty() {
+                            default_prefixes.clone()
+                        } else {
+                            id_prefixes
+                        },
+                    })
+                })
+                .take(MAX_MANIFEST_RESOURCES)
+                .collect()
         })
+        .unwrap_or_default()
+}
+
+fn addon_supports(addon: &StoredAddon, resource_name: &str, content_type: &str, id: &str) -> bool {
+    addon.resources.iter().any(|resource| {
+        resource.name == resource_name
+            && (resource.types.is_empty() || resource.types.iter().any(|item| item == content_type))
+            && (resource.id_prefixes.is_empty()
+                || resource
+                    .id_prefixes
+                    .iter()
+                    .any(|prefix| id.starts_with(prefix)))
+    })
 }
 
 fn stored_addon_from_manifest(manifest_url: String, value: &Value) -> Result<StoredAddon, String> {
@@ -178,17 +291,20 @@ fn stored_addon_from_manifest(manifest_url: String, value: &Value) -> Result<Sto
     if id.is_empty() || id.len() > 160 || name.is_empty() || name.len() > 160 {
         return Err("Add-on manifest is invalid".into());
     }
-    let supports_streams = manifest_supports(value, "stream");
-    let supports_subtitles = manifest_supports(value, "subtitles");
-    if !supports_streams && !supports_subtitles {
+    let resources = manifest_resources(value);
+    if !resources
+        .iter()
+        .any(|resource| matches!(resource.name.as_str(), "stream" | "subtitles"))
+    {
         return Err("Add-on does not provide streams or subtitles".into());
     }
     Ok(StoredAddon {
         manifest_url,
         id: id.into(),
         name: name.into(),
-        supports_streams,
-        supports_subtitles,
+        resources,
+        supports_streams: false,
+        supports_subtitles: false,
     })
 }
 
@@ -239,10 +355,7 @@ pub async fn fetch_configured_addon_resource(
         .iter()
         .find(|addon| addon.id == request.addon_id)
         .ok_or("Configured add-on was not found")?;
-    if (request.resource == "stream" && !addon.supports_streams)
-        || (request.resource == "subtitles" && !addon.supports_subtitles)
-        || !matches!(request.resource.as_str(), "stream" | "subtitles" | "meta")
-    {
+    if !addon_supports(addon, &request.resource, &request.content_type, &request.id) {
         return Err("Configured add-on does not provide that resource".into());
     }
     let url = build_addon_resource_url(
@@ -410,7 +523,7 @@ mod tests {
         )
         .unwrap();
         let sanitized = sanitized_configuration(&StoredMediaConfiguration {
-            version: 1,
+            version: MEDIA_CONFIGURATION_VERSION,
             addons: vec![stored],
         });
         let serialized = serde_json::to_string(&sanitized).unwrap();
@@ -426,6 +539,57 @@ mod tests {
             &serde_json::json!({ "id": "org.example.catalog", "name": "Catalog only", "resources": ["catalog"] }),
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn resource_filters_preserve_type_and_id_prefix_compatibility() {
+        let stored = stored_addon_from_manifest(
+            "https://example.invalid/manifest.json".into(),
+            &serde_json::json!({
+                "id": "org.example.filters",
+                "name": "Filtered",
+                "types": ["movie", "series"],
+                "resources": [
+                    { "name": "stream", "types": ["movie"], "idPrefixes": ["tt"] },
+                    { "name": "subtitles", "types": ["series"] }
+                ]
+            }),
+        )
+        .unwrap();
+        assert!(addon_supports(&stored, "stream", "movie", "tt1254207"));
+        assert!(!addon_supports(&stored, "stream", "series", "tt1254207"));
+        assert!(!addon_supports(&stored, "stream", "movie", "custom:1"));
+        assert!(addon_supports(&stored, "subtitles", "series", "custom:1"));
+    }
+
+    #[test]
+    fn legacy_configuration_retains_declared_capabilities() {
+        let mut configuration: StoredMediaConfiguration =
+            serde_json::from_value(serde_json::json!({
+                "version": 1,
+                "addons": [{
+                    "manifestUrl": "https://example.invalid/manifest.json",
+                    "id": "org.example.legacy",
+                    "name": "Legacy",
+                    "supportsStreams": true,
+                    "supportsSubtitles": false
+                }]
+            }))
+            .unwrap();
+        migrate_media_configuration(&mut configuration);
+        assert_eq!(configuration.version, MEDIA_CONFIGURATION_VERSION);
+        assert!(addon_supports(
+            &configuration.addons[0],
+            "stream",
+            "movie",
+            "tt1254207"
+        ));
+        assert!(!addon_supports(
+            &configuration.addons[0],
+            "subtitles",
+            "movie",
+            "tt1254207"
+        ));
     }
 
     #[test]

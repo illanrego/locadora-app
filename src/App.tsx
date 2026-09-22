@@ -6,6 +6,7 @@ import { SidePanel } from './components/SidePanel';
 import { MediaSettings } from './components/MediaSettings';
 import { TitleInspection } from './components/TitleInspection';
 import { VhsTape } from './components/VhsTape';
+import { WatchFlow } from './components/WatchFlow';
 import { readNativeCapabilities, type NativeCapabilities } from './platform/nativeBridge';
 import './styles.css';
 
@@ -30,6 +31,7 @@ export default function App() {
   const [panel, setPanel] = useState<Panel>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mediaSettingsOpen, setMediaSettingsOpen] = useState(false);
+  const [watchTitle, setWatchTitle] = useState<DiscoveryTitle | null>(null);
   const [nativeCapabilities, setNativeCapabilities] = useState<NativeCapabilities | null>(null);
   const t = copy[locale];
   const genre = GENRES[genreIndex];
@@ -203,12 +205,15 @@ export default function App() {
           locale={locale}
           isInBasket={inBasket(selected)}
           basketFull={basket.length >= 3}
+          canWatch={Boolean(nativeCapabilities?.mpv.available)}
           onToggleBasket={() => toggleBasket(selected)}
+          onWatch={() => { setWatchTitle(selected); setSelected(null); }}
           onClose={() => setSelected(null)}
         />
       )}
       {panel && <SidePanel kind={panel} locale={locale} basket={basket} onRemove={toggleBasket} onClose={() => setPanel(null)} />}
       {mediaSettingsOpen && <MediaSettings locale={locale} onClose={() => setMediaSettingsOpen(false)} />}
+      {watchTitle && <WatchFlow title={watchTitle} locale={locale} onClose={() => setWatchTitle(null)} />}
     </div>
   );
 }

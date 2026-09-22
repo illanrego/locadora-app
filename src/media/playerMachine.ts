@@ -51,8 +51,8 @@ const allowedTransitions: Record<PlayerPhase, PlayerPhase[]> = {
   'normalizing-candidates': ['applying-quick-watch', 'failed', 'idle'],
   'applying-quick-watch': ['buffering', 'failed', 'idle'],
   buffering: ['playing', 'paused', 'failed', 'idle'],
-  playing: ['paused', 'ended', 'failed', 'idle'],
-  paused: ['playing', 'ended', 'failed', 'idle'],
+  playing: ['buffering', 'paused', 'ended', 'failed', 'idle'],
+  paused: ['buffering', 'playing', 'ended', 'failed', 'idle'],
   ended: ['buffering', 'idle'],
   failed: ['buffering', 'idle'],
 };

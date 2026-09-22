@@ -168,6 +168,25 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .danger-zone p, .configuration-status { color: var(--muted); font-size: .72rem; line-height: 1.5; }
 .danger-zone button { border-color: #ff7c66; background: #7c251d; }
 .configuration-status { min-height: 1.2em; }
+.watch-modal { width: min(760px, calc(100vw - 1rem)); padding: 1.5rem; }
+.watch-status { margin: 1rem 0; padding: 1rem; border: 1px solid #ffffff2c; background: #05080d99; }
+.watch-status p { margin: .5rem 0 0; color: #d6ccb7; }
+.player-phase { display: inline-block; padding: .3rem .45rem; color: var(--ink); background: var(--yellow); font: 900 .6rem/1 "Courier New", monospace; text-transform: uppercase; }
+.phase-failed { color: #fff; background: #a73529; }
+.phase-playing { background: #60d399; }
+.current-source { font-family: "Courier New", monospace; font-size: .72rem; }
+.player-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; margin: 1rem 0; }
+.player-controls span { margin-left: auto; color: var(--muted); font: 700 .72rem "Courier New", monospace; }
+.transport-warning { padding: .8rem; border: 1px solid #d9a63b; color: #ffdf94; background: #4b3413; font-size: .76rem; line-height: 1.5; }
+.manual-picker { margin-top: 1.4rem; }
+.manual-picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 2px solid var(--red); }
+.manual-picker-heading h3 { margin: 0 0 .5rem; font: 900 1.2rem "Arial Narrow", Arial, sans-serif; text-transform: uppercase; }
+.manual-picker-heading span { display: grid; width: 28px; aspect-ratio: 1; place-items: center; color: var(--ink); background: var(--yellow); border-radius: 50%; font-weight: 900; }
+.manual-picker ol { display: grid; gap: .55rem; max-height: 330px; padding: .75rem 0; overflow: auto; list-style: none; }
+.manual-picker li button { display: grid; width: 100%; gap: .3rem; text-align: left; text-transform: none; }
+.manual-picker li button strong { color: var(--yellow); }
+.manual-picker li button span, .manual-picker li button small { color: var(--muted); font-family: "Courier New", monospace; }
+.cancel-watch { width: 100%; margin-top: 1rem; }
 
 @media (max-width: 900px) {
   .masthead { align-items: flex-start; }
@@ -209,6 +228,7 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   .inspection-art { min-height: 260px; border: 0; border-bottom: 8px solid #080b10; }
   .inspection-copy { padding: 1.3rem; }
   .basket-list li { align-items: stretch; flex-direction: column; }
+  .player-controls span { width: 100%; margin: .3rem 0 0; }
   footer { align-items: start; flex-direction: column; }
 }
 
