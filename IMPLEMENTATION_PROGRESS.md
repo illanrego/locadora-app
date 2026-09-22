@@ -49,9 +49,15 @@ watched, or undisclosed—before calling a fixed native
 successful return reloads active rentals and history; no player event can
 trigger or choose the outcome.
 
-Next task: add bounded account-history pagination through the fixed
-`GET /v1/history?offset=N` contract, deduplicating entries by rental-item ID and
-respecting the Worker's `hasMore` response.
+Account history now paginates through a fixed native
+`GET /v1/history?offset=N` route. Offsets are integer-bounded to 10,000, every
+page is normalized independently, entries are deduplicated by rental-item ID,
+and the UI stops requesting pages when the Worker clears `hasMore`.
+
+Next task: add title-review reading plus signed-in review eligibility/write
+through fixed `GET /v1/titles/:type/:tmdbId/reviews`, eligibility, and review
+routes. Keep reviews attached to canonical Locadora titles and independent from
+media selection or playback state.
 
 ## Phase board
 
@@ -82,7 +88,8 @@ respecting the Worker's `hasMore` response.
   - [x] Add independent device-local and account collection actions.
   - [x] Add participation-time Balcão rental checkout.
   - [x] Add explicit return-desk outcomes independent from playback.
-  - [ ] Add history pagination and review actions.
+  - [x] Add bounded, deduplicated history pagination.
+  - [ ] Add review reading and eligible review writes.
   - [ ] Integrate donations without coupling payment and rental state.
 - [ ] Phase 3 — media engine and add-on configuration
   - [x] Store secret-bearing manifest configuration in the OS credential store.
@@ -249,6 +256,13 @@ when they need user or real-environment confirmation.
   build passed; the Tauri shell passed 13 tests with 1 ignored keyring
   integration test and strict Clippy. No browser/manual or live return write was
   performed.
+- 2026-09-22: added bounded account-history pagination through the existing
+  private Worker contract. Native offsets are limited to the server's 10,000
+  maximum; response pages are normalized separately, deduplicated by rental-item
+  ID, and halted by `hasMore`. `npm run typecheck`, 71 Vitest tests in 17 files,
+  and the production build passed; the Tauri shell passed 14 tests with 1
+  ignored keyring integration test and strict Clippy. No browser/manual or live
+  history request was performed.
 
 ## Known blockers and risks
 

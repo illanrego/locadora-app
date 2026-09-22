@@ -119,6 +119,11 @@ pub struct MemberReturnRequest {
     watched_status: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct MemberHistoryRequest {
+    offset: u16,
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MemberUser {
@@ -362,6 +367,13 @@ fn validate_member_return(request: &MemberReturnRequest) -> Result<(), String> {
         )
     {
         return Err("Invalid rental return".into());
+    }
+    Ok(())
+}
+
+fn validate_history_offset(offset: u16) -> Result<(), String> {
+    if offset > 10_000 {
+        return Err("Invalid history offset".into());
     }
     Ok(())
 }
@@ -818,6 +830,31 @@ pub async fn member_return_rental(request: MemberReturnRequest) -> Result<Value,
 }
 
 #[tauri::command]
+pub async fn member_history(request: MemberHistoryRequest) -> Result<Value, String> {
+    validate_history_offset(request.offset)?;
+    let token = load_member_token()?.ok_or("Sign in to view your history")?;
+    let response = fetch_bounded_https_json_request(
+        &format!("{MEMBER_API_BASE}/v1/history?offset={}", request.offset),
+        JsonRequestMethod::Get,
+        None,
+        Some(&token),
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if matches!(response.status, 401 | 403) {
+        delete_member_token()?;
+        return Err("Member session expired. Sign in again".into());
+    }
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    if let Some(refreshed_token) = response.refreshed_token {
+        store_member_token(&refreshed_token)?;
+    }
+    Ok(response.body)
+}
+
+#[tauri::command]
 pub async fn member_sign_out() -> Result<MemberSessionStatus, String> {
     if let Some(token) = load_member_token()? {
         let body = serde_json::json!({});
@@ -1197,6 +1234,13 @@ mod tests {
             })
             .is_err()
         );
+    }
+
+    #[test]
+    fn member_history_offsets_match_the_worker_bound() {
+        assert!(validate_history_offset(0).is_ok());
+        assert!(validate_history_offset(10_000).is_ok());
+        assert!(validate_history_offset(10_001).is_err());
     }
 
     #[test]

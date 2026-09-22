@@ -28,6 +28,11 @@ export interface MemberState {
   };
 }
 
+export interface MemberHistoryPage {
+  history: MemberTitle[];
+  hasMore: boolean;
+}
+
 const MAX_COLLECTION_ITEMS = 500;
 const MAX_HISTORY_ITEMS = 100;
 
@@ -108,5 +113,13 @@ export function normalizeMemberState(value: unknown): MemberState {
       watchLater: normalizeTitles(collectionsValue?.watch_later, MAX_COLLECTION_ITEMS),
       favorites: normalizeTitles(collectionsValue?.favorite, MAX_COLLECTION_ITEMS),
     },
+  };
+}
+
+export function normalizeMemberHistoryPage(value: unknown): MemberHistoryPage {
+  const page = record(value) ?? {};
+  return {
+    history: normalizeTitles(page.history, MAX_HISTORY_ITEMS),
+    hasMore: page.hasMore === true,
   };
 }

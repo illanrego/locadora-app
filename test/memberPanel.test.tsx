@@ -13,6 +13,7 @@ const native = vi.hoisted(() => ({
   signOutMember: vi.fn(),
   returnMemberRental: vi.fn(),
   fetchMemberState: vi.fn(),
+  fetchMemberHistory: vi.fn(),
 }));
 
 vi.mock('../src/platform/nativeBridge', () => native);
@@ -74,5 +75,22 @@ describe('Locadora member panel', () => {
     expect(native.returnMemberRental).toHaveBeenCalledWith(item.id, 'watched');
     expect(await screen.findByText('Fita devolvida e histórico atualizado.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Assisti' })).not.toBeInTheDocument();
+  });
+
+  it('paginates and deduplicates member history by rental item ID', async () => {
+    const first = { id: '11111111-1111-4111-8111-111111111111', canonicalKey: 'movie:1', tmdbId: 1, type: 'movie', name: 'First Tape' };
+    const second = { id: '22222222-2222-4222-8222-222222222222', canonicalKey: 'movie:2', tmdbId: 2, type: 'movie', name: 'Second Tape' };
+    native.readMemberSession.mockResolvedValue({ configured: true, signedIn: true, user: { id: 'user-1', username: 'will' } });
+    native.fetchMemberState.mockResolvedValue({ profile: { userId: 'user-1', username: 'will' }, activeRental: null, collections: {}, history: [first], historyHasMore: true });
+    native.fetchMemberHistory.mockResolvedValue({ history: [first, second], hasMore: false });
+    const user = userEvent.setup();
+    render(<MemberPanel locale="pt-BR" />);
+
+    await user.click(await screen.findByRole('button', { name: 'Mais histórico' }));
+
+    expect(native.fetchMemberHistory).toHaveBeenCalledWith(1);
+    expect(await screen.findByText('Second Tape')).toBeInTheDocument();
+    expect(screen.getAllByText('First Tape')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Mais histórico' })).not.toBeInTheDocument();
   });
 });

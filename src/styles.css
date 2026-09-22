@@ -189,6 +189,7 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .return-actions { display: flex; flex-wrap: wrap; gap: .35rem; width: 100%; }
 .return-actions button { min-height: 32px; padding: .4rem; font-size: .54rem; }
 .member-empty { margin: 0; padding: .65rem; border: 1px dashed #ffffff24; }
+.history-more { width: 100%; margin-top: .55rem; }
 .saved-panel { margin-top: 1rem; }
 .saved-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
 .saved-tabs button[aria-selected="true"] { color: var(--ink); background: var(--yellow); }

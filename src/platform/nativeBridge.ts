@@ -95,6 +95,11 @@ export async function returnMemberRental(itemId: string, watchedStatus: 'watched
   return invoke('member_return_rental', { request: { itemId, watchedStatus } });
 }
 
+export async function fetchMemberHistory(offset: number): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Locadora history is available in the desktop app');
+  return invoke('member_history', { request: { offset } });
+}
+
 export async function signOutMember(): Promise<MemberSessionStatus> {
   if (!isNativeShell()) return { configured: false, signedIn: false, user: null };
   return invoke<MemberSessionStatus>('member_sign_out');

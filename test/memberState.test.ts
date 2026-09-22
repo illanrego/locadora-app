@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeMemberState } from '../src/member/memberState';
+import { normalizeMemberHistoryPage, normalizeMemberState } from '../src/member/memberState';
 
 describe('Locadora member-state normalization', () => {
   it('keeps bounded profile, rental, collection, and history fields', () => {
@@ -40,5 +40,16 @@ describe('Locadora member-state normalization', () => {
     expect(state.collections.favorites).toEqual([]);
     expect(state.history).toEqual([]);
     expect(state.historyHasMore).toBe(false);
+  });
+
+  it('normalizes paginated history separately from initial state', () => {
+    const page = normalizeMemberHistoryPage({
+      history: [{ id: 'item-1', canonicalKey: 'movie:9', tmdbId: 9, type: 'movie', name: 'Tape Nine' }],
+      hasMore: true,
+      token: 'must-not-pass',
+    });
+    expect(page.history).toHaveLength(1);
+    expect(page.hasMore).toBe(true);
+    expect(JSON.stringify(page)).not.toContain('must-not-pass');
   });
 });

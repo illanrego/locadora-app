@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import { normalizeMemberState, type MemberState, type MemberTitle } from '../member/memberState';
+import { normalizeMemberHistoryPage, normalizeMemberState, type MemberState, type MemberTitle } from '../member/memberState';
 import {
   fetchMemberState,
+  fetchMemberHistory,
   readMemberSession,
   signInMember,
   signOutMember,
@@ -51,6 +52,7 @@ export function MemberPanel({ locale }: MemberPanelProps) {
   const [signup, setSignup] = useState(false);
   const [busy, setBusy] = useState(false);
   const [returningId, setReturningId] = useState('');
+  const [historyBusy, setHistoryBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const pt = locale === 'pt-BR';
@@ -162,6 +164,29 @@ export function MemberPanel({ locale }: MemberPanelProps) {
     }
   }
 
+  async function loadMoreHistory() {
+    if (!member || !member.historyHasMore) return;
+    setHistoryBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const page = normalizeMemberHistoryPage(await fetchMemberHistory(member.history.length));
+      setMember((current) => {
+        if (!current) return current;
+        const existing = new Set(current.history.map((item) => item.id));
+        return {
+          ...current,
+          history: [...current.history, ...page.history.filter((item) => !existing.has(item.id))],
+          historyHasMore: page.hasMore,
+        };
+      });
+    } catch (cause) {
+      setError(messageFrom(cause, pt ? 'Não foi possível carregar mais histórico.' : 'Could not load more history.'));
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
+
   if (session === null) return <p className="configuration-status" role="status">{pt ? 'Abrindo sua Carteirinha…' : 'Opening your membership…'}</p>;
 
   if (!session.configured) {
@@ -261,7 +286,8 @@ export function MemberPanel({ locale }: MemberPanelProps) {
           </section>
           <section className="member-section">
             <h3>{pt ? 'Últimas devoluções' : 'Recent returns'}</h3>
-            <TapeList items={member.history.slice(0, 5)} locale={locale} empty={pt ? 'Seu histórico ainda está vazio.' : 'Your history is still empty.'} />
+            <TapeList items={member.history} locale={locale} empty={pt ? 'Seu histórico ainda está vazio.' : 'Your history is still empty.'} />
+            {member.historyHasMore && <button type="button" className="history-more" disabled={historyBusy} onClick={() => void loadMoreHistory()}>{historyBusy ? (pt ? 'Buscando…' : 'Loading…') : (pt ? 'Mais histórico' : 'More history')}</button>}
           </section>
         </>
       )}

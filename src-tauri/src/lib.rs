@@ -14,6 +14,7 @@ pub fn run() {
             commands::member_update_collection,
             commands::member_create_rental,
             commands::member_return_rental,
+            commands::member_history,
             commands::member_sign_out,
             commands::member_state,
             commands::media_configuration_status,
