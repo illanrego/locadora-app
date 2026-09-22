@@ -74,11 +74,22 @@ All safe manifests are validated through the existing native boundary and
 stored in Locadora's separate OS-keyring entry. Catalog-only add-ons remain
 visible for collection parity without exposing Stremio catalogue routes.
 
-Next task: user-run MVP acceptance. Launch the optimized no-bundle Tauri binary,
-open Media Sources, import the installed Stremio collection, confirm the 32
-safe entries are listed with Local Files reported as skipped, then try one
-Locadora movie through Watch. Do not claim visual or playback acceptance until
-the user reports it.
+The optimized desktop build now mounts its interface. A release-only startup
+crash came from `vtt.js`, the WebVTT parser required by Stremio Video: its
+script-style files publish their API through a top-level `this`, which the
+production bundler substitutes as `undefined`, so evaluating the bundle threw
+`Cannot set properties of undefined (setting 'WebVTT')` and the window stayed
+empty while the stylesheet alone painted the page background. A build-time shim
+(`tools/vttGlobalShim.ts`) now hands those UMD footers the real global instead
+of patching the dependency on disk. Relative Vite asset URLs were kept as
+portability for Tauri's asset origin, but absolute paths were already resolving
+there; they were not the cause of the blank window.
+
+Next task: user-run MVP acceptance. The optimized no-bundle Tauri binary now
+mounts its interface. Launch it, open Media Sources, import the installed
+Stremio collection, confirm the 32 safe entries are listed with Local Files
+reported as skipped, then try one Locadora movie through Watch. Do not claim
+visual or playback acceptance until the user reports it.
 
 ## Phase board
 
@@ -311,6 +322,19 @@ when they need user or real-environment confirmation.
   Strict Clippy passed, and `npm run tauri -- build --no-bundle` produced the
   optimized Linux MVP executable. No browser/manual or playback verification
   was performed.
+- 2026-09-22: diagnosed the optimized binary's blank window. The production
+  bundle threw `Cannot set properties of undefined (setting 'WebVTT')` while
+  evaluating `vtt.js`, which Stremio Video requires for HTML subtitles: the
+  dependency publishes its API through a top-level `this` that the bundler
+  substitutes as `undefined` in ES module output. Added `tools/vttGlobalShim.ts`
+  (a build-time transform handing those five UMD footers the real global) and
+  `test/vttGlobalShim.test.ts`, which asserts the shipped files still use that
+  footer. `npm run check` passed with 79 tests in 21 files and a production
+  build. The optimized no-bundle binary was rebuilt and launched: its 1280x800
+  window was captured and inspected programmatically, reporting 136,703 distinct
+  colors and the Locadora palette where the pre-fix window was a single uniform
+  color. This is not a human visual check, and no playback, subtitle, member
+  service, or add-on import path was exercised.
 
 ## Known blockers and risks
 

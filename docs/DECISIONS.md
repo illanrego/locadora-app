@@ -86,6 +86,17 @@ after at least one safe add-on is found. It never reads Stremio cookies or
 copies its auth key. Catalog-only add-ons may be retained and shown for parity,
 but Locadora exposes only stream, subtitle, and metadata resource requests.
 
+### D-012 — Production bundle shim for Stremio Video's WebVTT parser
+
+`@stremio/stremio-video` requires `vtt.js` for HTML subtitle rendering, and that
+package ships script-style files whose UMD footer publishes its API on a
+top-level `this`. In ES module output the bundler substitutes that `this` as
+`undefined`, so the production bundle threw while evaluating and the desktop
+window stayed empty. Locadora keeps the official dependency unmodified on disk
+and applies a narrow build-time transform (`tools/vttGlobalShim.ts`) that passes
+the real global to that footer for `node_modules/vtt.js` only. Development mode
+was unaffected, and no runtime behavior of the parser changes.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,
