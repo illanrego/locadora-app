@@ -247,6 +247,7 @@ export default function App() {
                 genre={genre}
                 year={year}
                 locale={locale}
+                paused={watchTitle !== null}
                 onInspect={setSelected}
                 onReady={immersiveStarted}
                 onFailure={immersiveFailed}

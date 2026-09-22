@@ -13,6 +13,8 @@ interface ImmersiveShelfProps {
   genre: GenreDefinition;
   year: number;
   locale: Locale;
+  /** Suspends the render loop, e.g. while the player owns the GPU. */
+  paused?: boolean;
   onInspect: (title: DiscoveryTitle) => void;
   onReady: () => void;
   onFailure: () => void;
@@ -64,8 +66,15 @@ function signTexture(genre: GenreDefinition, year: number, locale: Locale, theme
   return texture;
 }
 
-export default function ImmersiveShelf({ titles, genre, year, locale, onInspect, onReady, onFailure }: ImmersiveShelfProps) {
+export default function ImmersiveShelf({ titles, genre, year, locale, paused = false, onInspect, onReady, onFailure }: ImmersiveShelfProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const pausedRef = useRef(paused);
+  const resumeRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+    if (!paused) resumeRef.current?.();
+  }, [paused]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -225,13 +234,19 @@ export default function ImmersiveShelf({ titles, genre, year, locale, onInspect,
       const render = () => {
         if (disposed) return;
         renderer.render(scene, camera);
-        frame = window.requestAnimationFrame(render);
+        // Suspended while the player is open: this loop otherwise keeps the
+        // iGPU busy at 60 fps and competes with video presentation.
+        frame = pausedRef.current ? 0 : window.requestAnimationFrame(render);
+      };
+      resumeRef.current = () => {
+        if (!disposed && !frame) render();
       };
       render();
       onReady();
 
       return () => {
         disposed = true;
+        resumeRef.current = null;
         window.cancelAnimationFrame(frame);
         observer.disconnect();
         renderer.domElement.removeEventListener('keydown', onKeyDown);
