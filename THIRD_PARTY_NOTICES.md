@@ -11,6 +11,8 @@ Packaging work must refresh this file from the final dependency graph.
 | Component | Intended use | Upstream license | Distribution note |
 | --- | --- | --- | --- |
 | React / React DOM | Shared interface | MIT | Retain notices in binary distributions. |
+| Three.js 0.185.1 | Optional immersive Locadora shelf | MIT | Lazy-loaded only for immersive mode; retain the Three.js license notice. |
+| Will's Locadora web modules | Visual constants and immersive shelf interaction reference | MIT, copyright Illan Rego | Genre themes, rack dimensions, camera/lighting values, plaque treatment, and interaction contracts were ported into React/TypeScript; the source repository remains unchanged. |
 | Vite | Build tool | MIT | Build-time only; generated license report is enabled. |
 | TypeScript | Type checking | Apache-2.0 | Build-time only. |
 | Vitest | Automated tests | MIT | Development only. |

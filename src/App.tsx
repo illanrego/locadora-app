@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import type { ContentType, DiscoveryTitle } from './domain/content';
 import { GENRES, copy, type Locale } from './locadora/catalog';
 import { loadShelf, type ShelfPage } from './locadora/discovery';
@@ -9,7 +9,10 @@ import { VhsTape } from './components/VhsTape';
 import { WatchFlow } from './components/WatchFlow';
 import { readNativeCapabilities, type NativeCapabilities } from './platform/nativeBridge';
 import { readQuickWatchEnabled, writeQuickWatchEnabled } from './media/quickWatchPreference';
+import { readImmersiveEnabled, writeImmersiveEnabled } from './locadora/immersive';
 import './styles.css';
+
+const ImmersiveShelf = lazy(() => import('./components/ImmersiveShelf'));
 
 type Panel = 'basket' | 'saved' | 'account' | null;
 
@@ -35,6 +38,9 @@ export default function App() {
   const [watchTitle, setWatchTitle] = useState<DiscoveryTitle | null>(null);
   const [nativeCapabilities, setNativeCapabilities] = useState<NativeCapabilities | null>(null);
   const [quickWatchEnabled, setQuickWatchEnabled] = useState(readQuickWatchEnabled);
+  const [immersiveEnabled, setImmersiveEnabled] = useState(readImmersiveEnabled);
+  const [immersiveReady, setImmersiveReady] = useState(false);
+  const [immersiveError, setImmersiveError] = useState('');
   const t = copy[locale];
   const genre = GENRES[genreIndex];
 
@@ -82,6 +88,24 @@ export default function App() {
     setQuery('');
   };
   const applyYear = () => setYear(clampYear(yearDraft));
+  const toggleImmersive = () => {
+    setImmersiveEnabled((enabled) => {
+      const next = !enabled;
+      writeImmersiveEnabled(next);
+      setImmersiveReady(false);
+      setImmersiveError('');
+      return next;
+    });
+  };
+  const immersiveFailed = useCallback(() => {
+    setImmersiveEnabled(false);
+    setImmersiveReady(false);
+    writeImmersiveEnabled(false);
+    setImmersiveError(locale === 'pt-BR'
+      ? 'O modo imersivo não abriu; a estante 2D continua disponível.'
+      : 'Immersive mode could not start; the 2D shelf remains available.');
+  }, [locale]);
+  const immersiveStarted = useCallback(() => setImmersiveReady(true), []);
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -159,6 +183,9 @@ export default function App() {
             >
               {locale === 'pt-BR' ? 'Quick Watch automático' : 'Automatic Quick Watch'}
             </button>
+            <button type="button" aria-pressed={immersiveEnabled} onClick={toggleImmersive}>
+              {locale === 'pt-BR' ? 'Modo imersivo' : 'Immersive mode'}
+            </button>
             <p>
               <strong>Player:</strong>{' '}
               {nativeCapabilities?.mpv.available
@@ -183,6 +210,22 @@ export default function App() {
             </p>
           </header>
 
+          {immersiveError && <p className="immersive-error" role="status">{immersiveError}</p>}
+
+          {immersiveEnabled && status === 'ready' && (
+            <Suspense fallback={<p className="immersive-loading">{locale === 'pt-BR' ? 'Acendendo as luzes…' : 'Turning on the lights…'}</p>}>
+              <ImmersiveShelf
+                titles={visibleTitles}
+                genre={genre}
+                year={year}
+                locale={locale}
+                onInspect={setSelected}
+                onReady={immersiveStarted}
+                onFailure={immersiveFailed}
+              />
+            </Suspense>
+          )}
+
           {status === 'error' ? (
             <div className="empty-state">
               <span className="empty-tape" aria-hidden="true" />
@@ -191,7 +234,7 @@ export default function App() {
               <button type="button" onClick={() => void fetchPage(0, false)}>{t.retry}</button>
             </div>
           ) : (
-            <div id="shelf" className="shelf" aria-busy={status === 'loading'}>
+            <div id="shelf" className="shelf" aria-busy={status === 'loading'} hidden={immersiveEnabled && immersiveReady}>
               {visibleTitles.map((title) => (
                 <VhsTape key={title.identity.canonicalKey} title={title} accent={genre.accent} locale={locale} onInspect={setSelected} />
               ))}

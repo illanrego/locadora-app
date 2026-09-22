@@ -17,10 +17,10 @@ player reducer were removed. The native environment supplies bounded HTTPS and
 a deny-by-default mpv adapter while private transport URLs remain in the OS
 credential store.
 
-Next task: audit the read-only Locadora React/Three components and port the
-reusable visual behavior needed for immersive browsing, with the current
-accessible 2D shelf as the mandatory fallback. Do not copy media behavior back
-into the public Locadora repository.
+Next task: implement the Phase 2 Locadora member-service adapter from the
+read-only web application's existing Better Auth/private Worker contracts,
+keeping its session completely independent from media configuration and
+playback. Do not add direct Supabase access or mutate the reference repository.
 
 ## Phase board
 
@@ -41,7 +41,7 @@ into the public Locadora repository.
   - [x] Add visible Cesta/Balcão/account concepts with later-phase writes disabled.
   - [x] Remove provider-first and Stremio-catalogue controls.
   - [x] Route public discovery through the native-safe production transport.
-  - [ ] Implement the immersive enhancement and 2D failure fallback.
+  - [x] Implement the immersive enhancement and 2D failure fallback.
   - [ ] Meet all Phase 1 exit criteria and receive user visual approval.
 - [ ] Phase 2 — Locadora member services
 - [ ] Phase 3 — media engine and add-on configuration
@@ -152,6 +152,13 @@ when they need user or real-environment confirmation.
   `npm run check` passed with 55 tests in 11 files and a production build. No
   browser/manual visual, audible, subtitle-rendering, or playback test was
   performed.
+- 2026-09-22: audited the read-only Locadora web source and confirmed it is
+  vanilla JavaScript/Three.js rather than React. Ported its MIT-licensed genre
+  themes, camera/lighting values, 10x4 rack geometry, plaque treatment, and
+  keyboard/pointer interactions into a lazy React/Three immersive enhancement.
+  The 2D shelf remains the default and stays mounted until WebGL succeeds;
+  startup failure restores it. `npm run check` passed with 59 tests in 13 files
+  and a production build. No browser/manual visual or WebGL test was performed.
 - 2026-09-22: added the secondary Automatic Quick Watch preference. It defaults
   on, persists locally, and when disabled retains the same versioned evaluation
   and manual candidates while suppressing autoplay only. `npm run check` passed

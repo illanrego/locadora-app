@@ -84,4 +84,12 @@ describe('accessible Locadora shelf', () => {
     await user.click(screen.getByRole('button', { name: 'Ajustes' }));
     expect(screen.getByRole('button', { name: 'Quick Watch automático' })).toHaveAttribute('aria-pressed', 'false');
   });
+
+  it('keeps immersive browsing optional and the 2D shelf as the default', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Ajustes' }));
+    expect(screen.getByRole('button', { name: 'Modo imersivo' })).toHaveAttribute('aria-pressed', 'false');
+    expect(await screen.findByRole('button', { name: /Inspecionar Agent 327/i })).toBeInTheDocument();
+  });
 });
