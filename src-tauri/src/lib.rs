@@ -15,6 +15,7 @@ pub fn run() {
             commands::player_start,
             commands::player_load,
             commands::player_control,
+            commands::player_set_property,
             commands::player_events,
             commands::player_shutdown,
         ])

@@ -23,6 +23,10 @@ Packaging work must refresh this file from the final dependency graph.
 | Stremio official add-ons | Transitive Core data dependency | MIT | Version 2.1.2 through the pinned Core dependency. |
 | Stremio local-search | Transitive Core search dependency | MIT | Cargo locks the resolved official repository revision. |
 | Stremio add-on protocol | Compatible HTTP contract | Documentation/protocol | Requests and responses are now handled by official Stremio Core over the bounded native environment. |
+| Stremio Video 0.0.98 | Official frontend player abstraction and ShellVideo state model | MIT | Used beneath Locadora's React presentation through a narrow Tauri/mpv shell transport. |
+| Stremio libass-wasm 4.2.6 | HTML subtitle rendering used by Stremio Video | LGPL-2.1-or-later AND (FTL OR GPL-2.0-or-later) AND MIT AND MIT-Modern-Variant AND ISC AND NTP AND Zlib AND BSL-1.0 | Shipped as a transitive browser asset; preserve the generated license inventory and source/notice obligations. |
+| Stremio hls.js fork 1.5.5 canary | HLS playback support used by Stremio Video | Apache-2.0 | Transitive browser dependency. |
+| vtt.js 0.13.0 | WebVTT parsing used by Stremio Video | Apache-2.0 | Transitive browser dependency. |
 | mpv / libmpv | Native playback candidate | GPL-2.0-or-later by default; an LGPL-2.1-or-later build mode exists with caveats | Initial spike targets a separately installed system mpv. No mpv binary is bundled. Packaging remains blocked on a final license/build review. |
 
 ## Explicit exclusions
@@ -37,6 +41,7 @@ Packaging work must refresh this file from the final dependency graph.
 
 - Tauri architecture and license: <https://github.com/tauri-apps/tauri/blob/dev/ARCHITECTURE.md>
 - Stremio Core license: <https://github.com/Stremio/stremio-core/blob/development/LICENSE.md>
+- Stremio Video license: <https://github.com/Stremio/stremio-video/blob/master/LICENSE>
 - Stremio add-on protocol: <https://stremio.github.io/stremio-addon-sdk/protocol.html>
 - mpv licensing modes and limitations: <https://github.com/mpv-player/mpv/blob/master/Copyright>
 - Vite generated license inventory: <https://vite.dev/config/build-options.html#build-license>
@@ -44,11 +49,11 @@ Packaging work must refresh this file from the final dependency graph.
 ## Current conclusion
 
 The original source in this repository is MIT-licensed. Official Stremio Core
-is now a pinned MIT dependency, so the Locadora UI and deterministic Quick Watch
-rules can remain MIT. Tauri is compatible with that choice. Public binary
-distribution is not approved yet: Stremio frontend/player modules, native mpv,
-FFmpeg/codecs, WebKitGTK, installer, and Flatpak dependency obligations must be
-inventoried from the actual builds first.
+and Stremio Video are MIT dependencies, so the Locadora UI and deterministic
+Quick Watch rules can remain MIT. Tauri is compatible with that choice. Public
+binary distribution is not approved yet: the transitive libass/WASM bundle,
+native mpv, FFmpeg/codecs, WebKitGTK, installer, and Flatpak dependency
+obligations must be reviewed against the final packaged artifacts first.
 
 ## Locally verified native versions
 

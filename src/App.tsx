@@ -213,7 +213,14 @@ export default function App() {
       )}
       {panel && <SidePanel kind={panel} locale={locale} basket={basket} onRemove={toggleBasket} onClose={() => setPanel(null)} />}
       {mediaSettingsOpen && <MediaSettings locale={locale} onClose={() => setMediaSettingsOpen(false)} />}
-      {watchTitle && <WatchFlow title={watchTitle} locale={locale} onClose={() => setWatchTitle(null)} />}
+      {watchTitle && (
+        <WatchFlow
+          title={watchTitle}
+          locale={locale}
+          mpvVersion={nativeCapabilities?.mpv.version ?? null}
+          onClose={() => setWatchTitle(null)}
+        />
+      )}
     </div>
   );
 }

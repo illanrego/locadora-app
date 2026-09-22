@@ -48,6 +48,13 @@ pub struct ConfiguredResourceRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PlayerPropertyRequest {
+    name: String,
+    value: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PublicShelfRequest {
     genres: Vec<String>,
     year: u16,
@@ -422,6 +429,19 @@ pub fn player_control(
         PlayerAction::Stop => player.stop_media(),
     }
     .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn player_set_property(
+    request: PlayerPropertyRequest,
+    state: State<'_, PlayerState>,
+) -> Result<(), String> {
+    let mut player = state.0.lock().map_err(|_| "Player state is unavailable")?;
+    player
+        .as_mut()
+        .ok_or("Player is not running")?
+        .set_property(&request.name, request.value)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

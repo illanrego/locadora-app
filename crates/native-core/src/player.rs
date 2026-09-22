@@ -261,6 +261,59 @@ impl MpvSession {
         self.send_command(vec![json!("seek"), json!(seconds), json!("relative+exact")])
     }
 
+    pub fn set_property(&mut self, name: &str, value: Value) -> Result<(), PlayerError> {
+        let allowed = match name {
+            "pause"
+            | "mute"
+            | "keepaspect"
+            | "sub-ass-force-margins"
+            | "input-default-bindings"
+            | "input-vo-keyboard" => value.is_boolean(),
+            "time-pos" => value
+                .as_f64()
+                .is_some_and(|value| value.is_finite() && value >= 0.0),
+            "volume" => value
+                .as_f64()
+                .is_some_and(|value| value.is_finite() && (0.0..=100.0).contains(&value)),
+            "speed" => value
+                .as_f64()
+                .is_some_and(|value| value.is_finite() && (0.25..=4.0).contains(&value)),
+            "sub-delay" => value
+                .as_f64()
+                .is_some_and(|value| value.is_finite() && (-600.0..=600.0).contains(&value)),
+            "sub-scale" => value
+                .as_f64()
+                .is_some_and(|value| value.is_finite() && (0.1..=10.0).contains(&value)),
+            "sub-pos" => value
+                .as_f64()
+                .is_some_and(|value| value.is_finite() && (0.0..=100.0).contains(&value)),
+            "panscan" => value
+                .as_f64()
+                .is_some_and(|value| value.is_finite() && (0.0..=1.0).contains(&value)),
+            "aid" | "sid" => match &value {
+                Value::String(value) => value == "no" || value.parse::<u32>().is_ok(),
+                Value::Number(value) => {
+                    value.as_u64().is_some_and(|value| value <= u32::MAX as u64)
+                }
+                _ => false,
+            },
+            "sub-ass-override" => value
+                .as_str()
+                .is_some_and(|value| matches!(value, "no" | "strip")),
+            "hwdec" => value
+                .as_str()
+                .is_some_and(|value| matches!(value, "no" | "auto" | "auto-copy" | "d3d11va")),
+            "osc" => value
+                .as_str()
+                .is_some_and(|value| matches!(value, "yes" | "no")),
+            _ => false,
+        };
+        if !allowed {
+            return Err(PlayerError::CommandFailed);
+        }
+        self.send_command(vec![json!("set_property"), json!(name), value])
+    }
+
     pub fn stop_media(&mut self) -> Result<(), PlayerError> {
         self.send_command(vec![json!("stop")])
     }
@@ -339,6 +392,23 @@ mod tests {
             event_from_message(&json!({ "event": "log-message", "text": "secret" })),
             None
         );
+    }
+
+    #[test]
+    fn property_commands_are_deny_by_default() {
+        fn allowed(name: &str, value: Value) -> bool {
+            let mut session =
+                MpvSession::start(&std::env::temp_dir(), VideoOutput::Null).expect("start mpv");
+            session.set_property(name, value).is_ok()
+        }
+
+        if !crate::probe_mpv().available {
+            return;
+        }
+        assert!(allowed("pause", json!(true)));
+        assert!(allowed("sub-delay", json!(1.25)));
+        assert!(!allowed("script-opts", json!("danger")));
+        assert!(!allowed("sub-delay", json!(601)));
     }
 
     #[test]

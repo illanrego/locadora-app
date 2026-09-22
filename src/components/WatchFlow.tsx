@@ -1,22 +1,16 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DiscoveryTitle } from '../domain/content';
 import { copy, type Locale } from '../locadora/catalog';
-import { INITIAL_PLAYER_STATE, reducePlayerState } from '../media/playerMachine';
 import { resolveTitleMedia, type MediaResolution } from '../media/resolutionService';
 import type { StreamCandidate } from '../media/types';
-import {
-  controlNativePlayer,
-  loadNativePlayer,
-  readMediaConfiguration,
-  readNativePlayerEvents,
-  shutdownNativePlayer,
-  startNativePlayer,
-} from '../platform/nativeBridge';
+import { useStremioVideo } from '../media/useStremioVideo';
+import { readMediaConfiguration } from '../platform/nativeBridge';
 import { Modal } from './Modal';
 
 interface WatchFlowProps {
   title: DiscoveryTitle;
   locale: Locale;
+  mpvVersion: string | null;
   onClose: () => void;
 }
 
@@ -45,14 +39,15 @@ function playable(candidate: StreamCandidate): candidate is StreamCandidate & { 
   return candidate.playbackDescriptor.kind === 'url' && candidate.transportType === 'http';
 }
 
-export function WatchFlow({ title, locale, onClose }: WatchFlowProps) {
+export function WatchFlow({ title, locale, mpvVersion, onClose }: WatchFlowProps) {
   const t = copy[locale];
-  const [player, dispatch] = useReducer(reducePlayerState, INITIAL_PLAYER_STATE);
+  const video = useStremioVideo(mpvVersion);
   const [resolution, setResolution] = useState<MediaResolution | null>(null);
   const [manualVisible, setManualVisible] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const [playerActive, setPlayerActive] = useState(false);
-  const playerStarted = useRef(false);
+  const [lookupState, setLookupState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [candidateId, setCandidateId] = useState<string | null>(null);
+  const [stopped, setStopped] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const play = useCallback(async (candidate: StreamCandidate) => {
@@ -60,43 +55,40 @@ export function WatchFlow({ title, locale, onClose }: WatchFlowProps) {
       setManualVisible(true);
       return;
     }
-    dispatch({ type: 'SOURCE_SELECTED', candidateId: candidate.stableId });
+    setCandidateId(candidate.stableId);
+    setStopped(false);
     try {
-      await startNativePlayer();
-      playerStarted.current = true;
-      setPlayerActive(true);
-      await loadNativePlayer(candidate.playbackDescriptor.url);
+      await video.load(candidate.playbackDescriptor.url);
     } catch (error) {
-      dispatch({ type: 'FAILED', message: error instanceof Error ? error.message : String(error) });
+      setLookupError(error instanceof Error ? error.message : String(error));
       setManualVisible(true);
     }
-  }, []);
+  }, [video.load]);
 
   useEffect(() => {
     const controller = new AbortController();
     abortRef.current = controller;
-    dispatch({ type: 'SELECT_TITLE', titleKey: title.identity.canonicalKey });
     void (async () => {
       try {
         const addons = await readMediaConfiguration();
         if (controller.signal.aborted) return;
-        dispatch({ type: 'IDENTITY_RESOLVED' });
         const result = await resolveTitleMedia(title, addons, { signal: controller.signal });
         if (controller.signal.aborted) return;
-        dispatch({ type: 'STREAMS_LOADED' });
-        dispatch({ type: 'CANDIDATES_NORMALIZED' });
         setResolution(result);
+        setLookupState('ready');
         const winner = result.quickWatch?.winner;
         if (winner && playable(winner)) {
           await play(winner);
         } else if (result.status === 'manual-selection-required' || winner) {
           setManualVisible(true);
         } else if (!['cancelled'].includes(result.status)) {
-          dispatch({ type: 'FAILED', message: explanation(result, locale) });
+          setLookupState('failed');
+          setLookupError(explanation(result, locale));
         }
       } catch (error) {
         if (!controller.signal.aborted) {
-          dispatch({ type: 'FAILED', message: error instanceof Error ? error.message : String(error) });
+          setLookupState('failed');
+          setLookupError(error instanceof Error ? error.message : String(error));
         }
       }
     })();
@@ -106,44 +98,28 @@ export function WatchFlow({ title, locale, onClose }: WatchFlowProps) {
     };
   }, [locale, play, title]);
 
-  useEffect(() => {
-    if (!playerActive || !['buffering', 'playing', 'paused'].includes(player.phase)) return;
-    const interval = window.setInterval(() => {
-      void readNativePlayerEvents().then((events) => {
-        for (const event of events) {
-          switch (event.kind) {
-            case 'file-loaded': dispatch({ type: 'FILE_LOADED' }); break;
-            case 'playing': setPaused(false); dispatch({ type: 'PLAYING' }); break;
-            case 'paused': setPaused(true); dispatch({ type: 'PAUSED' }); break;
-            case 'position': dispatch({ type: 'POSITION', seconds: event.value }); break;
-            case 'duration': dispatch({ type: 'DURATION', seconds: event.value }); break;
-            case 'ended': dispatch({ type: 'ENDED' }); break;
-            case 'failed': dispatch({ type: 'FAILED', message: event.value }); break;
-            default: break;
-          }
-        }
-      }).catch((error: unknown) => dispatch({ type: 'FAILED', message: error instanceof Error ? error.message : String(error) }));
-    }, 250);
-    return () => window.clearInterval(interval);
-  }, [player.phase, playerActive]);
-
   const close = useCallback(() => {
     abortRef.current?.abort();
-    if (playerStarted.current) void shutdownNativePlayer();
+    video.unload();
     onClose();
-  }, [onClose]);
-
-  const control = async (action: 'pause' | 'resume' | 'seek' | 'stop', seconds?: number) => {
-    try {
-      await controlNativePlayer(action, seconds);
-      if (action === 'stop') dispatch({ type: 'ENDED' });
-    } catch (error) {
-      dispatch({ type: 'FAILED', message: error instanceof Error ? error.message : String(error) });
-    }
-  };
+  }, [onClose, video.unload]);
 
   const candidates = resolution?.manualCandidates ?? [];
-  const current = resolution?.candidates.find((candidate) => candidate.stableId === player.candidateId) ?? null;
+  const current = resolution?.candidates.find((candidate) => candidate.stableId === candidateId) ?? null;
+  const playerError = video.state.error ?? lookupError;
+  const phase = lookupState === 'loading'
+    ? 'loading-streams'
+    : playerError
+      ? 'failed'
+      : stopped || video.state.ended
+        ? 'ended'
+        : candidateId && !video.state.loaded
+          ? 'buffering'
+          : video.state.loaded && video.state.paused
+            ? 'paused'
+            : video.state.loaded
+              ? 'playing'
+              : 'applying-quick-watch';
   return (
     <Modal label={`Quick Watch · ${title.name}`} onClose={close} className="watch-modal">
       <header className="panel-header">
@@ -153,18 +129,20 @@ export function WatchFlow({ title, locale, onClose }: WatchFlowProps) {
       </header>
 
       <section className="watch-status" aria-live="polite">
-        <span className={`player-phase phase-${player.phase}`}>{player.phase}</span>
-        <p>{player.error ?? explanation(resolution, locale)}</p>
+        <span className={`player-phase phase-${phase}`}>{phase}</span>
+        <p>{playerError ?? explanation(resolution, locale)}</p>
         {current && <p className="current-source">{current.resolution}p · {formatBytes(current.sizeBytes, locale)} · {current.seeders ?? '—'} seeders · {current.sourceName}</p>}
       </section>
 
-      {['buffering', 'playing', 'paused', 'ended'].includes(player.phase) && (
+      <div ref={video.containerRef} className="stremio-video-surface" aria-hidden="true" />
+
+      {candidateId && (
         <section className="player-controls" aria-label={locale === 'pt-BR' ? 'Controles do player' : 'Player controls'}>
-          <button type="button" onClick={() => void control('seek', -10)}>−10s</button>
-          <button type="button" onClick={() => void control(paused ? 'resume' : 'pause')}>{paused ? '▶' : 'Ⅱ'}</button>
-          <button type="button" onClick={() => void control('seek', 10)}>+10s</button>
-          <button type="button" onClick={() => void control('stop')}>■ {locale === 'pt-BR' ? 'Parar' : 'Stop'}</button>
-          <span>{Math.floor(player.positionSeconds)}s / {player.durationSeconds ? `${Math.floor(player.durationSeconds)}s` : '—'}</span>
+          <button type="button" onClick={() => video.seekRelative(-10)}>−10s</button>
+          <button type="button" onClick={() => video.setPaused(!video.state.paused)}>{video.state.paused ? '▶' : 'Ⅱ'}</button>
+          <button type="button" onClick={() => video.seekRelative(10)}>+10s</button>
+          <button type="button" onClick={() => { video.unload(); setStopped(true); }}>■ {locale === 'pt-BR' ? 'Parar' : 'Stop'}</button>
+          <span>{Math.floor((video.state.time ?? 0) / 1000)}s / {video.state.duration ? `${Math.floor(video.state.duration / 1000)}s` : '—'}</span>
         </section>
       )}
 
@@ -176,7 +154,7 @@ export function WatchFlow({ title, locale, onClose }: WatchFlowProps) {
         </p>
       )}
 
-      {(manualVisible || player.phase === 'failed') && candidates.length > 0 && (
+      {(manualVisible || phase === 'failed') && candidates.length > 0 && (
         <section className="manual-picker">
           <div className="manual-picker-heading">
             <h3>{locale === 'pt-BR' ? 'Escolher outra fonte' : 'Choose another source'}</h3>
@@ -196,7 +174,7 @@ export function WatchFlow({ title, locale, onClose }: WatchFlowProps) {
         </section>
       )}
 
-      {['resolving-identity', 'loading-streams', 'normalizing-candidates', 'applying-quick-watch'].includes(player.phase) && (
+      {lookupState === 'loading' && (
         <button type="button" className="cancel-watch" onClick={close}>{locale === 'pt-BR' ? 'Cancelar busca' : 'Cancel lookup'}</button>
       )}
     </Modal>

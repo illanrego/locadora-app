@@ -10,14 +10,17 @@ The architecture has been corrected to reuse Stremio rather than reproduce it.
 Official `stremio-core` is pinned at revision
 `b3062f7fa790223540022f9a62c12067b646c179`. It now owns manifest parsing,
 resource compatibility, request construction, and typed stream/subtitle
-response parsing. The handwritten TypeScript add-on client and native resource
-URL builder were removed. The native environment supplies bounded HTTPS while
-private transport URLs remain in the OS credential store.
+response parsing. Official `@stremio/stremio-video` 0.0.98 now owns frontend
+player state and coordination through its ShellVideo implementation. The
+handwritten TypeScript add-on client, native resource URL builder, and custom
+player reducer were removed. The native environment supplies bounded HTTPS and
+a deny-by-default mpv adapter while private transport URLs remain in the OS
+credential store.
 
-Next task: replace the custom frontend player state/coordination with official
-`@stremio/stremio-video`, adapting its shell transport to the deny-by-default
-Tauri/mpv boundary. Preserve the Locadora React presentation and Quick Watch
-policy; do not copy Stremio's visual routes.
+Next task: expose sanitized mpv track/buffering properties to the official
+ShellVideo model, then connect official Stremio local streaming-service
+discovery so torrent descriptors can use Stremio Video's own conversion path.
+Preserve the Locadora React presentation and Quick Watch policy.
 
 ## Phase board
 
@@ -58,6 +61,7 @@ policy; do not copy Stremio's visual routes.
   - [ ] Meet all Phase 4 exit criteria with a real sanitized add-on fixture.
 - [ ] Phase 5 — native playback, audio, and subtitles
   - [x] Connect native start/load/events/control/shutdown to the Watch flow.
+  - [x] Replace custom frontend player state with official Stremio Video.
   - [x] Allow source switching without crossing into Locadora member state.
   - [ ] Add retry presentation, audio selection, and the complete subtitle flow.
   - [ ] Meet all Phase 5 exit criteria.
@@ -119,6 +123,15 @@ when they need user or real-environment confirmation.
   49 tests in 8 files; native-core passed 10 tests, the Tauri shell passed 6
   regular tests with 1 ignored credential-store integration test, and both
   crates passed strict Clippy. No manual testing was performed.
+- 2026-09-22: integrated official `@stremio/stremio-video` 0.0.98 and removed
+  the custom frontend player reducer. Its ShellVideo messages now pass through
+  a tested, deny-by-default Tauri/mpv property adapter. `npm run check` passed
+  with 47 tests in 8 files and a production build; native-core passed 11 tests,
+  the Tauri shell passed 6 regular tests with 1 ignored credential-store test,
+  both Rust crates passed strict Clippy, and `npm run tauri -- build
+  --no-bundle` produced the optimized Linux executable. The larger production
+  bundle includes the official libass/WASM subtitle runtime. No manual testing
+  was performed.
 
 ## Known blockers and risks
 
