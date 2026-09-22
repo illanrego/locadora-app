@@ -188,6 +188,16 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .manual-picker li button span, .manual-picker li button small { color: var(--muted); font-family: "Courier New", monospace; }
 .cancel-watch { width: 100%; margin-top: 1rem; }
 .stremio-video-surface { position: relative; min-height: 1px; }
+.track-controls { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; padding: .8rem; border: 1px solid var(--line); background: rgba(20, 14, 12, .72); }
+.track-controls label { display: grid; gap: .3rem; min-width: 11rem; }
+.track-controls label > span, .subtitle-delay > span { color: var(--muted); font-size: .76rem; text-transform: uppercase; letter-spacing: .08em; }
+.track-controls select { min-height: 2.35rem; padding: .35rem .55rem; color: var(--paper); background: var(--ink); border: 1px solid var(--line); }
+.subtitle-delay { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.subtitle-delay > span { flex-basis: 100%; }
+.subtitle-delay input { width: 5rem; min-height: 2.35rem; text-align: center; font-variant-numeric: tabular-nums; color: var(--paper); background: var(--ink); border: 1px solid var(--line); }
+.subtitle-delay small { flex-basis: 100%; color: var(--muted); }
+.other-subtitles { align-self: end; }
+.retry-playback { margin-bottom: .7rem; }
 
 @media (max-width: 900px) {
   .masthead { align-items: flex-start; }

@@ -37,11 +37,11 @@ function languageRank(language: PreferredSubtitleLanguage): number {
 
 export function normalizeSubtitleTracks(rawTracks: unknown): SubtitleTrack[] {
   if (!Array.isArray(rawTracks)) return [];
-  return rawTracks.flatMap((raw, index) => {
+  return rawTracks.slice(0, 128).flatMap((raw, index) => {
     if (!raw || typeof raw !== 'object') return [];
     const track = raw as RawSubtitleTrack;
     const url = typeof track.url === 'string' ? track.url.trim() : '';
-    if (!url) return [];
+    if (!url || url.length > 8_192) return [];
     try {
       const parsed = new URL(url);
       if (!['http:', 'https:'].includes(parsed.protocol)) return [];
@@ -49,8 +49,8 @@ export function normalizeSubtitleTracks(rawTracks: unknown): SubtitleTrack[] {
       return [];
     }
     const language = normalizeSubtitleLanguage(track.lang);
-    const rawId = String(track.id ?? '').trim();
-    const label = String(track.label ?? track.lang ?? `Subtitle ${index + 1}`).trim();
+    const rawId = String(track.id ?? '').trim().slice(0, 256);
+    const label = String(track.label ?? track.lang ?? `Subtitle ${index + 1}`).trim().slice(0, 256);
     return [{
       id: rawId || `subtitle-${stableHash(`${url}:${index}`)}`,
       url,

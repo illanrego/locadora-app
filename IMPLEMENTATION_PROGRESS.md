@@ -17,10 +17,9 @@ player reducer were removed. The native environment supplies bounded HTTPS and
 a deny-by-default mpv adapter while private transport URLs remain in the OS
 credential store.
 
-Next task: expose embedded audio/subtitle selection and subtitle delay through
-Locadora's Watch panel using the official Stremio Video properties already fed
-by the sanitized mpv track list. Then resolve external subtitle add-ons through
-official Stremio Core and add them through Stremio Video's subtitle commands.
+Next task: add the user setting that disables Quick Watch without changing its
+default rules, then tighten add-on response-size/time bounds and the
+source-failure diagnostics. Keep settings secondary to Locadora browsing.
 
 ## Phase board
 
@@ -51,7 +50,7 @@ official Stremio Core and add them through Stremio Video's subtitle commands.
   - [x] Fetch stored add-on resources by sanitized ID without returning URLs.
   - [x] Replace handwritten protocol parsing with official Stremio Core.
   - [x] Resolve one selected title across all compatible configured stream add-ons.
-  - [ ] Resolve subtitle add-ons for the active video/release identity.
+  - [x] Resolve movie subtitle add-ons for the active IMDb identity.
   - [x] Add bounded cancellation and sanitized diagnostic aggregation.
   - [x] Connect torrent descriptors to official Stremio Service conversion.
   - [ ] Meet all Phase 3 exit criteria.
@@ -65,7 +64,8 @@ official Stremio Core and add them through Stremio Video's subtitle commands.
   - [x] Replace custom frontend player state with official Stremio Video.
   - [x] Feed sanitized mpv buffering and embedded-track properties into Stremio Video.
   - [x] Allow source switching without crossing into Locadora member state.
-  - [ ] Add retry presentation, audio selection, and the complete subtitle flow.
+  - [x] Add retry presentation and embedded audio selection.
+  - [x] Add PT/EN-first subtitles, other-language reveal, immediate delay controls, and release-scoped delay memory.
   - [ ] Meet all Phase 5 exit criteria.
 - [ ] Phase 6 — Linux packaging
 - [ ] Phase 7 — Windows shell and installer
@@ -143,6 +143,14 @@ when they need user or real-environment confirmation.
   build; native-core passed 12 tests, the Tauri shell passed 6 regular tests
   with 1 ignored credential-store test, and both Rust crates passed strict
   Clippy. No real torrent or manual playback test was performed.
+- 2026-09-22: resolved movie subtitle resources through official Stremio Core
+  and fed bounded tracks into official Stremio Video. The Locadora Watch panel
+  now exposes Stremio-owned embedded audio/subtitle selection, PT/EN-first
+  filtering, deliberate other-language reveal, direct and keyboard delay
+  adjustment, release-and-track-scoped delay persistence, and source retry.
+  `npm run check` passed with 55 tests in 11 files and a production build. No
+  browser/manual visual, audible, subtitle-rendering, or playback test was
+  performed.
 
 ## Known blockers and risks
 
