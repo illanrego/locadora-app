@@ -40,6 +40,21 @@ describe('accessible Locadora shelf', () => {
     expect(screen.getByLabelText('1 / 3')).toBeInTheDocument();
   });
 
+  it('keeps Cesta anonymous until Balcão asks for a member session', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Inspecionar Agent 327/i }));
+    const inspection = screen.getByRole('dialog', { name: /Agent 327/i });
+    await user.click(within(inspection).getByRole('button', { name: 'Colocar na Cesta' }));
+    await user.click(within(inspection).getByRole('button', { name: 'Fechar' }));
+    await user.click(screen.getByRole('button', { name: /Cesta/ }));
+    const basket = screen.getByRole('dialog', { name: 'Cesta' });
+    await user.click(within(basket).getByRole('button', { name: 'Balcão' }));
+    expect(await within(basket).findByText('Entre na sua Carteirinha para passar no Balcão.')).toBeInTheDocument();
+    await user.click(within(basket).getByRole('button', { name: 'Abrir Carteirinha' }));
+    expect(await screen.findByRole('dialog', { name: 'Conta' })).toBeInTheDocument();
+  });
+
   it('keeps anonymous saved tapes locally and exposes them through Salvos', async () => {
     const user = userEvent.setup();
     render(<App />);

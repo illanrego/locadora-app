@@ -80,6 +80,16 @@ export async function updateMemberCollection(request: {
   return invoke('member_update_collection', { update: request });
 }
 
+export async function createMemberRental(titles: Array<{
+  tmdbId: number;
+  contentType: ContentType;
+  name: string;
+  year: number | null;
+}>): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Locadora rentals are available in the desktop app');
+  return invoke('member_create_rental', { request: { titles } });
+}
+
 export async function signOutMember(): Promise<MemberSessionStatus> {
   if (!isNativeShell()) return { configured: false, signedIn: false, user: null };
   return invoke<MemberSessionStatus>('member_sign_out');

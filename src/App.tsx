@@ -295,7 +295,17 @@ export default function App() {
           onClose={() => setSelected(null)}
         />
       )}
-      {panel && <SidePanel kind={panel} locale={locale} basket={basket} saved={saved} onRemove={toggleBasket} onSetSaved={setSavedTitle} onClose={() => setPanel(null)} />}
+      {panel && <SidePanel
+        kind={panel}
+        locale={locale}
+        basket={basket}
+        saved={saved}
+        onRemove={toggleBasket}
+        onSetSaved={setSavedTitle}
+        onBasketComplete={() => setBasket([])}
+        onOpenAccount={() => setPanel('account')}
+        onClose={() => setPanel(null)}
+      />}
       {mediaSettingsOpen && <MediaSettings locale={locale} onClose={() => setMediaSettingsOpen(false)} />}
       {watchTitle && (
         <WatchFlow

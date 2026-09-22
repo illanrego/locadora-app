@@ -98,6 +98,20 @@ pub struct MemberCollectionUpdate {
     year: Option<u16>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberRentalTitle {
+    tmdb_id: u64,
+    content_type: String,
+    name: String,
+    year: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MemberRentalRequest {
+    titles: Vec<MemberRentalTitle>,
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MemberUser {
@@ -290,6 +304,27 @@ fn validate_member_collection(update: &MemberCollectionUpdate) -> Result<(), Str
             .is_some_and(|year| !(1870..=2100).contains(&year))
     {
         return Err("Invalid saved-title request".into());
+    }
+    Ok(())
+}
+
+fn validate_member_rental(request: &MemberRentalRequest) -> Result<(), String> {
+    if request.titles.is_empty() || request.titles.len() > 3 {
+        return Err("Choose one to three distinct titles".into());
+    }
+    let mut identities = HashSet::new();
+    for title in &request.titles {
+        if !matches!(title.content_type.as_str(), "movie" | "series")
+            || title.tmdb_id == 0
+            || title.name.trim().is_empty()
+            || title.name.trim().len() > 240
+            || title
+                .year
+                .is_some_and(|year| !(1870..=2100).contains(&year))
+            || !identities.insert((title.content_type.as_str(), title.tmdb_id))
+        {
+            return Err("Choose one to three distinct titles".into());
+        }
     }
     Ok(())
 }
@@ -679,6 +714,44 @@ pub async fn member_update_collection(update: MemberCollectionUpdate) -> Result<
 }
 
 #[tauri::command]
+pub async fn member_create_rental(request: MemberRentalRequest) -> Result<Value, String> {
+    validate_member_rental(&request)?;
+    let token = load_member_token()?.ok_or("Sign in to rent your tapes")?;
+    let titles = request
+        .titles
+        .iter()
+        .map(|title| {
+            serde_json::json!({
+                "tmdbId": title.tmdb_id,
+                "type": title.content_type,
+                "name": title.name.trim(),
+                "year": title.year,
+            })
+        })
+        .collect::<Vec<_>>();
+    let body = serde_json::json!({ "titles": titles });
+    let response = fetch_bounded_https_json_request(
+        &format!("{MEMBER_API_BASE}/v1/rentals"),
+        JsonRequestMethod::Post,
+        Some(&body),
+        Some(&token),
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if matches!(response.status, 401 | 403) {
+        delete_member_token()?;
+        return Err("Member session expired. Sign in again".into());
+    }
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    if let Some(refreshed_token) = response.refreshed_token {
+        store_member_token(&refreshed_token)?;
+    }
+    Ok(response.body)
+}
+
+#[tauri::command]
 pub async fn member_sign_out() -> Result<MemberSessionStatus, String> {
     if let Some(token) = load_member_token()? {
         let body = serde_json::json!({});
@@ -997,6 +1070,40 @@ mod tests {
                 .is_err()
             );
         }
+    }
+
+    #[test]
+    fn member_rentals_are_bounded_to_three_distinct_canonical_titles() {
+        let title = || MemberRentalTitle {
+            tmdb_id: 603,
+            content_type: "movie".into(),
+            name: "The Matrix".into(),
+            year: Some(1999),
+        };
+        assert!(
+            validate_member_rental(&MemberRentalRequest {
+                titles: vec![title()]
+            })
+            .is_ok()
+        );
+        assert!(
+            validate_member_rental(&MemberRentalRequest {
+                titles: vec![title(), title()],
+            })
+            .is_err()
+        );
+        assert!(validate_member_rental(&MemberRentalRequest { titles: vec![] }).is_err());
+        assert!(
+            validate_member_rental(&MemberRentalRequest {
+                titles: (0..4)
+                    .map(|index| MemberRentalTitle {
+                        tmdb_id: 600 + index,
+                        ..title()
+                    })
+                    .collect(),
+            })
+            .is_err()
+        );
     }
 
     #[test]

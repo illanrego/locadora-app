@@ -37,10 +37,16 @@ anonymous device-local saves. Tape inspection can add/remove `watch_later` and
 missing/unavailable member session leaves the local choice intact. Collection
 writes do not touch Cesta, rental, or player state.
 
-Next task: connect the existing Cesta/Balcão flow to the fixed private
-`POST /v1/rentals` contract, requiring a signed-in member with a completed
-profile only at checkout. Refresh member state after success and keep playback
-events entirely outside the rental transition.
+The existing Cesta/Balcão flow now remains anonymous while titles are staged,
+then requires a signed-in member with a completed public profile at checkout.
+It submits one to three distinct canonical snapshots through the fixed native
+`POST /v1/rentals` route, refreshes member state after success, and clears only
+the Cesta. No playback event participates in the rental transition.
+
+Next task: add the account return-desk flow through fixed
+`POST /v1/rental-items/:id/return` commands with the three existing watched
+outcomes, then refresh active rentals and history without marking anything
+watched from player events.
 
 ## Phase board
 
@@ -69,7 +75,8 @@ events entirely outside the rental transition.
   - [x] Load and normalize profile, active rental, collections, and initial history.
   - [x] Add account creation and profile onboarding.
   - [x] Add independent device-local and account collection actions.
-  - [ ] Add history pagination, rental, return, and review actions.
+  - [x] Add participation-time Balcão rental checkout.
+  - [ ] Add history pagination, return, and review actions.
   - [ ] Integrate donations without coupling payment and rental state.
 - [ ] Phase 3 — media engine and add-on configuration
   - [x] Store secret-bearing manifest configuration in the OS credential store.
@@ -220,6 +227,14 @@ when they need user or real-environment confirmation.
   16 files and a production build; the Tauri shell passed 11 tests with 1
   ignored keyring integration test and strict Clippy. No browser/manual or live
   member-service write was performed.
+- 2026-09-22: connected the existing Cesta/Balcão interaction to bounded native
+  rental checkout. Anonymous users can stage up to three titles; checkout alone
+  requires a restored member session and completed public profile, checks the
+  active-rental limit, submits canonical snapshots to the fixed Worker route,
+  refreshes member state, and clears the basket after success. `npm run
+  typecheck`, 68 Vitest tests in 17 files, and the production build passed; the
+  Tauri shell passed 12 tests with 1 ignored keyring integration test and strict
+  Clippy. No browser/manual or live rental write was performed.
 
 ## Known blockers and risks
 

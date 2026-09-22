@@ -4,6 +4,7 @@ import { copy, type Locale } from '../locadora/catalog';
 import { Modal } from './Modal';
 import { MemberPanel } from './MemberPanel';
 import { SavedPanel } from './SavedPanel';
+import { BasketPanel } from './BasketPanel';
 
 interface SidePanelProps {
   kind: 'basket' | 'saved' | 'account';
@@ -12,10 +13,12 @@ interface SidePanelProps {
   saved: LocalSavedCollections;
   onRemove: (title: DiscoveryTitle) => void;
   onSetSaved: (title: DiscoveryTitle, collection: SavedCollection, enabled: boolean) => Promise<boolean>;
+  onBasketComplete: () => void;
+  onOpenAccount: () => void;
   onClose: () => void;
 }
 
-export function SidePanel({ kind, locale, basket, saved, onRemove, onSetSaved, onClose }: SidePanelProps) {
+export function SidePanel({ kind, locale, basket, saved, onRemove, onSetSaved, onBasketComplete, onOpenAccount, onClose }: SidePanelProps) {
   const t = copy[locale];
   const heading = kind === 'basket' ? t.basket : kind === 'saved' ? (locale === 'pt-BR' ? 'Salvos' : 'Saved') : t.account;
   return (
@@ -26,21 +29,7 @@ export function SidePanel({ kind, locale, basket, saved, onRemove, onSetSaved, o
         <button type="button" className="dialog-close" onClick={onClose} aria-label={t.close}>×</button>
       </header>
       {kind === 'basket' ? (
-        <>
-          <p>{t.basketHint}</p>
-          {basket.length ? (
-            <ol className="basket-list">
-              {basket.map((title) => (
-                <li key={title.identity.canonicalKey}>
-                  <span><strong>{title.name}</strong><small>{title.year ?? '—'}</small></span>
-                  <button type="button" onClick={() => onRemove(title)}>{t.removeBasket}</button>
-                </li>
-              ))}
-            </ol>
-          ) : <p className="panel-empty">{t.basketEmpty}</p>}
-          <button type="button" className="counter-action" disabled={!basket.length}>{t.counter} · {t.development}</button>
-          <p className="phase-note">{t.checkoutLater}</p>
-        </>
+        <BasketPanel locale={locale} basket={basket} onRemove={onRemove} onComplete={onBasketComplete} onOpenAccount={onOpenAccount} />
       ) : kind === 'account' ? (
         <MemberPanel locale={locale} />
       ) : (
