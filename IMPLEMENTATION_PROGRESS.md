@@ -31,10 +31,16 @@ The account panel collects confirmation locally and completes the separate
 private `PUT /v1/profile` username-onboarding flow. Callback selection remains
 native-allowlisted and session material never reaches React.
 
-Next task: connect the existing “Salvos” panel to the member collection state
-and add fixed native commands for saving/removing `watch_later` and `favorite`
-memberships. Preserve anonymous local staging and never let collection writes
-change playback or rental state.
+The existing “Salvos” panel now combines bounded account collections with
+anonymous device-local saves. Tape inspection can add/remove `watch_later` and
+`favorite`; authenticated writes use only fixed native Worker routes, while a
+missing/unavailable member session leaves the local choice intact. Collection
+writes do not touch Cesta, rental, or player state.
+
+Next task: connect the existing Cesta/Balcão flow to the fixed private
+`POST /v1/rentals` contract, requiring a signed-in member with a completed
+profile only at checkout. Refresh member state after success and keep playback
+events entirely outside the rental transition.
 
 ## Phase board
 
@@ -62,7 +68,8 @@ change playback or rental state.
   - [x] Restore, sign in, and sign out through the existing Better Auth contract.
   - [x] Load and normalize profile, active rental, collections, and initial history.
   - [x] Add account creation and profile onboarding.
-  - [ ] Add history pagination, collection, rental, return, and review actions.
+  - [x] Add independent device-local and account collection actions.
+  - [ ] Add history pagination, rental, return, and review actions.
   - [ ] Integrate donations without coupling payment and rental state.
 - [ ] Phase 3 — media engine and add-on configuration
   - [x] Store secret-bearing manifest configuration in the OS credential store.
@@ -205,6 +212,14 @@ when they need user or real-environment confirmation.
   and the production build passed; the Tauri shell passed 10 tests with 1
   ignored keyring integration test and strict Clippy. No live signup, email,
   browser/manual, or production member write was performed.
+- 2026-09-22: connected tape inspection and the existing Salvos panel to
+  independent `watch_later` and `favorite` collections. Anonymous saves persist
+  as bounded normalized local metadata; signed-in changes mirror through fixed
+  native private-Worker routes, and the panel combines both sources without
+  coupling them to rentals or playback. `npm run check` passed with 66 tests in
+  16 files and a production build; the Tauri shell passed 11 tests with 1
+  ignored keyring integration test and strict Clippy. No browser/manual or live
+  member-service write was performed.
 
 ## Known blockers and risks
 

@@ -87,6 +87,17 @@ pub struct MemberProfileUpdate {
     username: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberCollectionUpdate {
+    collection: String,
+    enabled: bool,
+    tmdb_id: u64,
+    content_type: String,
+    name: String,
+    year: Option<u16>,
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MemberUser {
@@ -266,6 +277,21 @@ fn validate_member_signup(signup: &MemberSignup) -> Result<String, String> {
         password: signup.password.clone(),
     })?;
     normalized_member_username(&signup.username)
+}
+
+fn validate_member_collection(update: &MemberCollectionUpdate) -> Result<(), String> {
+    if !matches!(update.collection.as_str(), "watch_later" | "favorite")
+        || !matches!(update.content_type.as_str(), "movie" | "series")
+        || update.tmdb_id == 0
+        || update.name.trim().is_empty()
+        || update.name.trim().len() > 240
+        || update
+            .year
+            .is_some_and(|year| !(1870..=2100).contains(&year))
+    {
+        return Err("Invalid saved-title request".into());
+    }
+    Ok(())
 }
 
 fn member_service_error(status: u16) -> String {
@@ -608,6 +634,51 @@ pub async fn member_update_profile(update: MemberProfileUpdate) -> Result<Value,
 }
 
 #[tauri::command]
+pub async fn member_update_collection(update: MemberCollectionUpdate) -> Result<Value, String> {
+    validate_member_collection(&update)?;
+    let token = load_member_token()?.ok_or("Sign in to sync saved titles")?;
+    let (method, url, body) = if update.enabled {
+        (
+            JsonRequestMethod::Post,
+            format!("{MEMBER_API_BASE}/v1/collections/{}", update.collection),
+            Some(serde_json::json!({
+                "title": {
+                    "tmdbId": update.tmdb_id,
+                    "type": update.content_type,
+                    "name": update.name.trim(),
+                    "year": update.year,
+                },
+                "collection": update.collection,
+                "source": "locadora",
+            })),
+        )
+    } else {
+        (
+            JsonRequestMethod::Delete,
+            format!(
+                "{MEMBER_API_BASE}/v1/collections/{}/{}/{}",
+                update.collection, update.content_type, update.tmdb_id
+            ),
+            None,
+        )
+    };
+    let response = fetch_bounded_https_json_request(&url, method, body.as_ref(), Some(&token))
+        .await
+        .map_err(|error| error.to_string())?;
+    if matches!(response.status, 401 | 403) {
+        delete_member_token()?;
+        return Err("Member session expired. Sign in again".into());
+    }
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    if let Some(refreshed_token) = response.refreshed_token {
+        store_member_token(&refreshed_token)?;
+    }
+    Ok(response.body)
+}
+
+#[tauri::command]
 pub async fn member_sign_out() -> Result<MemberSessionStatus, String> {
     if let Some(token) = load_member_token()? {
         let body = serde_json::json!({});
@@ -894,6 +965,38 @@ mod tests {
             .is_err()
         );
         assert!(normalized_member_username("no spaces allowed").is_err());
+    }
+
+    #[test]
+    fn member_collection_writes_accept_only_fixed_collections_and_canonical_titles() {
+        assert!(
+            validate_member_collection(&MemberCollectionUpdate {
+                collection: "watch_later".into(),
+                enabled: true,
+                tmdb_id: 603,
+                content_type: "movie".into(),
+                name: "The Matrix".into(),
+                year: Some(1999),
+            })
+            .is_ok()
+        );
+        for (collection, content_type, tmdb_id) in [
+            ("admin", "movie", 603),
+            ("favorite", "../../admin", 603),
+            ("favorite", "series", 0),
+        ] {
+            assert!(
+                validate_member_collection(&MemberCollectionUpdate {
+                    collection: collection.into(),
+                    enabled: false,
+                    tmdb_id,
+                    content_type: content_type.into(),
+                    name: "Tape".into(),
+                    year: None,
+                })
+                .is_err()
+            );
+        }
     }
 
     #[test]

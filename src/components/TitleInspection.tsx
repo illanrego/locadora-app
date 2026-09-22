@@ -9,7 +9,10 @@ interface TitleInspectionProps {
   isInBasket: boolean;
   basketFull: boolean;
   canWatch: boolean;
+  savedForLater: boolean;
+  favorite: boolean;
   onToggleBasket: () => void;
+  onToggleSaved: (collection: 'watch_later' | 'favorite') => void;
   onWatch: () => void;
   onClose: () => void;
 }
@@ -20,7 +23,10 @@ export function TitleInspection({
   isInBasket,
   basketFull,
   canWatch,
+  savedForLater,
+  favorite,
   onToggleBasket,
+  onToggleSaved,
   onWatch,
   onClose,
 }: TitleInspectionProps) {
@@ -45,6 +51,12 @@ export function TitleInspection({
           </button>
           <button type="button" disabled={!canWatch} title={canWatch ? undefined : t.development} onClick={onWatch}>
             {canWatch ? 'Quick Watch' : t.watchDevelopment}
+          </button>
+          <button type="button" aria-pressed={savedForLater} onClick={() => onToggleSaved('watch_later')}>
+            {savedForLater ? (locale === 'pt-BR' ? 'Remover de Ver depois' : 'Remove from Watch later') : (locale === 'pt-BR' ? 'Salvar para depois' : 'Save for later')}
+          </button>
+          <button type="button" aria-pressed={favorite} onClick={() => onToggleSaved('favorite')}>
+            {favorite ? (locale === 'pt-BR' ? 'Remover das favoritas' : 'Remove from favorites') : (locale === 'pt-BR' ? 'Marcar como favorita' : 'Add to favorites')}
           </button>
           <button type="button" className="text-action" onClick={onClose}>{t.close}</button>
         </div>

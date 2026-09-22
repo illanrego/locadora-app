@@ -185,6 +185,15 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .member-tape-list small, .member-tape-list em, .member-empty { color: var(--muted); font: 700 .6rem "Courier New", monospace; }
 .member-tape-list em { color: #ff9b88; }
 .member-empty { margin: 0; padding: .65rem; border: 1px dashed #ffffff24; }
+.saved-panel { margin-top: 1rem; }
+.saved-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.saved-tabs button[aria-selected="true"] { color: var(--ink); background: var(--yellow); }
+.saved-title-list { display: grid; gap: .6rem; margin: 1rem 0; padding: 0; list-style: none; }
+.saved-title-list li { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .75rem; border: 1px solid #ffffff2d; background: #ffffff08; }
+.saved-title-list li span { display: grid; min-width: 0; gap: .2rem; }
+.saved-title-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saved-title-list small { color: var(--muted); font: 700 .6rem "Courier New", monospace; }
+.saved-title-list button { min-height: 34px; padding: .45rem; font-size: .56rem; }
 .manifest-form { display: grid; gap: .55rem; margin: 1.2rem 0; }
 .manifest-form label { color: var(--yellow); font: 800 .65rem/1 "Courier New", monospace; text-transform: uppercase; }
 .manifest-form input { min-height: 44px; padding: .65rem; border: 2px solid #3f526b; color: var(--cream); background: #080d15; font-family: "Courier New", monospace; }

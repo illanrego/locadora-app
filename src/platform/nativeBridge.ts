@@ -68,6 +68,18 @@ export async function updateMemberProfile(username: string): Promise<unknown> {
   return invoke('member_update_profile', { update: { username } });
 }
 
+export async function updateMemberCollection(request: {
+  collection: 'watch_later' | 'favorite';
+  enabled: boolean;
+  tmdbId: number;
+  contentType: ContentType;
+  name: string;
+  year: number | null;
+}): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Locadora account sync is available in the desktop app');
+  return invoke('member_update_collection', { update: request });
+}
+
 export async function signOutMember(): Promise<MemberSessionStatus> {
   if (!isNativeShell()) return { configured: false, signedIn: false, user: null };
   return invoke<MemberSessionStatus>('member_sign_out');

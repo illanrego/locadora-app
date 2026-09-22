@@ -1,17 +1,21 @@
 import type { DiscoveryTitle } from '../domain/content';
+import type { LocalSavedCollections, SavedCollection } from '../member/localSaved';
 import { copy, type Locale } from '../locadora/catalog';
 import { Modal } from './Modal';
 import { MemberPanel } from './MemberPanel';
+import { SavedPanel } from './SavedPanel';
 
 interface SidePanelProps {
   kind: 'basket' | 'saved' | 'account';
   locale: Locale;
   basket: DiscoveryTitle[];
+  saved: LocalSavedCollections;
   onRemove: (title: DiscoveryTitle) => void;
+  onSetSaved: (title: DiscoveryTitle, collection: SavedCollection, enabled: boolean) => Promise<boolean>;
   onClose: () => void;
 }
 
-export function SidePanel({ kind, locale, basket, onRemove, onClose }: SidePanelProps) {
+export function SidePanel({ kind, locale, basket, saved, onRemove, onSetSaved, onClose }: SidePanelProps) {
   const t = copy[locale];
   const heading = kind === 'basket' ? t.basket : kind === 'saved' ? (locale === 'pt-BR' ? 'Salvos' : 'Saved') : t.account;
   return (
@@ -40,10 +44,7 @@ export function SidePanel({ kind, locale, basket, onRemove, onClose }: SidePanel
       ) : kind === 'account' ? (
         <MemberPanel locale={locale} />
       ) : (
-        <div className="phase-placeholder">
-          <span aria-hidden="true">▣</span>
-          <p>{kind === 'saved' ? t.savedLater : t.accountLater}</p>
-        </div>
+        <SavedPanel locale={locale} local={saved} onSet={onSetSaved} />
       )}
     </Modal>
   );

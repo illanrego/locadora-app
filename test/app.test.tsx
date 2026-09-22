@@ -40,6 +40,20 @@ describe('accessible Locadora shelf', () => {
     expect(screen.getByLabelText('1 / 3')).toBeInTheDocument();
   });
 
+  it('keeps anonymous saved tapes locally and exposes them through Salvos', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Inspecionar Agent 327/i }));
+    const inspection = screen.getByRole('dialog', { name: /Agent 327/i });
+    await user.click(within(inspection).getByRole('button', { name: 'Salvar para depois' }));
+    expect(within(inspection).getByRole('button', { name: 'Remover de Ver depois' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(within(inspection).getByRole('button', { name: 'Fechar' }));
+    await user.click(screen.getByRole('button', { name: 'Salvos' }));
+    const saved = screen.getByRole('dialog', { name: 'Salvos' });
+    expect(within(saved).getByText('Agent 327: Operation Barbershop')).toBeInTheDocument();
+    expect(await within(saved).findByText('Salvas só neste dispositivo.')).toBeInTheDocument();
+  });
+
   it('keeps series in manual-development mode and switches locale', async () => {
     const user = userEvent.setup();
     render(<App />);

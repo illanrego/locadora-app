@@ -11,6 +11,7 @@ pub fn run() {
             commands::member_sign_in,
             commands::member_sign_up,
             commands::member_update_profile,
+            commands::member_update_collection,
             commands::member_sign_out,
             commands::member_state,
             commands::media_configuration_status,

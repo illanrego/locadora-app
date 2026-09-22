@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import type { ContentType, DiscoveryTitle } from './domain/content';
+import { externalId, type ContentType, type DiscoveryTitle } from './domain/content';
 import { GENRES, copy, type Locale } from './locadora/catalog';
 import { loadShelf, type ShelfPage } from './locadora/discovery';
 import { SidePanel } from './components/SidePanel';
@@ -7,9 +7,10 @@ import { MediaSettings } from './components/MediaSettings';
 import { TitleInspection } from './components/TitleInspection';
 import { VhsTape } from './components/VhsTape';
 import { WatchFlow } from './components/WatchFlow';
-import { readNativeCapabilities, type NativeCapabilities } from './platform/nativeBridge';
+import { readMemberSession, readNativeCapabilities, updateMemberCollection, type NativeCapabilities } from './platform/nativeBridge';
 import { readQuickWatchEnabled, writeQuickWatchEnabled } from './media/quickWatchPreference';
 import { readImmersiveEnabled, writeImmersiveEnabled } from './locadora/immersive';
+import { hasLocalSavedTitle, readLocalSavedCollections, setLocalSavedTitle, writeLocalSavedCollections, type SavedCollection } from './member/localSaved';
 import './styles.css';
 
 const ImmersiveShelf = lazy(() => import('./components/ImmersiveShelf'));
@@ -32,6 +33,7 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<DiscoveryTitle | null>(null);
   const [basket, setBasket] = useState<DiscoveryTitle[]>([]);
+  const [saved, setSaved] = useState(readLocalSavedCollections);
   const [panel, setPanel] = useState<Panel>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mediaSettingsOpen, setMediaSettingsOpen] = useState(false);
@@ -82,6 +84,30 @@ export default function App() {
     setBasket((current) => current.some((item) => item.identity.canonicalKey === title.identity.canonicalKey)
       ? current.filter((item) => item.identity.canonicalKey !== title.identity.canonicalKey)
       : current.length < 3 ? [...current, title] : current);
+  };
+  const setSavedTitle = async (title: DiscoveryTitle, collection: SavedCollection, enabled: boolean): Promise<boolean> => {
+    setSaved((current) => {
+      const next = setLocalSavedTitle(current, title, collection, enabled);
+      writeLocalSavedCollections(next);
+      return next;
+    });
+    try {
+      const session = await readMemberSession();
+      if (!session.signedIn) return false;
+      const tmdbId = Number(externalId(title.identity, 'tmdb'));
+      if (!Number.isSafeInteger(tmdbId) || tmdbId < 1) return false;
+      await updateMemberCollection({
+        collection,
+        enabled,
+        tmdbId,
+        contentType: title.identity.type,
+        name: title.name,
+        year: title.year,
+      });
+      return true;
+    } catch {
+      return false;
+    }
   };
   const chooseGenre = (index: number) => {
     setGenreIndex(index);
@@ -261,12 +287,15 @@ export default function App() {
           isInBasket={inBasket(selected)}
           basketFull={basket.length >= 3}
           canWatch={Boolean(nativeCapabilities?.mpv.available)}
+          savedForLater={hasLocalSavedTitle(saved, selected, 'watch_later')}
+          favorite={hasLocalSavedTitle(saved, selected, 'favorite')}
           onToggleBasket={() => toggleBasket(selected)}
+          onToggleSaved={(collection) => void setSavedTitle(selected, collection, !hasLocalSavedTitle(saved, selected, collection))}
           onWatch={() => { setWatchTitle(selected); setSelected(null); }}
           onClose={() => setSelected(null)}
         />
       )}
-      {panel && <SidePanel kind={panel} locale={locale} basket={basket} onRemove={toggleBasket} onClose={() => setPanel(null)} />}
+      {panel && <SidePanel kind={panel} locale={locale} basket={basket} saved={saved} onRemove={toggleBasket} onSetSaved={setSavedTitle} onClose={() => setPanel(null)} />}
       {mediaSettingsOpen && <MediaSettings locale={locale} onClose={() => setMediaSettingsOpen(false)} />}
       {watchTitle && (
         <WatchFlow
