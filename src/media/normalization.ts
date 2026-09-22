@@ -74,9 +74,14 @@ function normalizePlaybackDescriptor(raw: RawAddonStream): {
 } {
   const infoHash = text(raw.infoHash).toLowerCase();
   const fileIndex = finiteNonNegativeInteger(raw.fileIdx);
+  const announce = (Array.isArray(raw.announce) ? raw.announce : Array.isArray(raw.sources) ? raw.sources : [])
+    .filter((source): source is string => typeof source === 'string')
+    .map((source) => source.trim())
+    .filter((source) => source.length > 0 && source.length <= 2_048)
+    .slice(0, 32);
   if (/^[a-f0-9]{40}$/.test(infoHash)) {
     return {
-      descriptor: { kind: 'torrent', infoHash, fileIndex },
+      descriptor: { kind: 'torrent', infoHash, fileIndex, announce },
       transportType: 'torrent',
       stableMaterial: `torrent:${infoHash}:${fileIndex ?? ''}`,
     };

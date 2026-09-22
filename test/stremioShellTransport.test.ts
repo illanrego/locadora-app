@@ -55,4 +55,20 @@ describe('official Stremio video shell adapter', () => {
     expect(ready).toHaveBeenCalledWith({ loadId: 1, ready: false });
     await transport.destroy();
   });
+
+  it('forwards only the native boundary\'s sanitized mpv properties', async () => {
+    native.events.mockResolvedValueOnce([
+      { kind: 'property', value: { name: 'track-list', data: [{ type: 'audio', id: 1 }] } },
+      { kind: 'property', value: { name: 'paused-for-cache', data: true } },
+    ]);
+    const transport = new StremioShellTransport('0.35.1');
+    const property = vi.fn();
+    transport.on('mpv-prop-change', property);
+    await transport.start();
+
+    await waitFor(() => expect(property).toHaveBeenCalledTimes(2));
+    expect(property).toHaveBeenCalledWith({ name: 'track-list', data: [{ type: 'audio', id: 1 }] });
+    expect(property).toHaveBeenCalledWith({ name: 'paused-for-cache', data: true });
+    await transport.destroy();
+  });
 });

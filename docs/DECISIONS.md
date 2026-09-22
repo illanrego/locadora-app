@@ -56,6 +56,15 @@ protocol, media-state, or playback coordination code must be removed when an
 appropriate licensed Stremio module supplies that behavior. This corrects the
 overly narrow interpretation used in the initial spike.
 
+### D-009 — Official local streaming service boundary
+
+Torrent descriptors are converted by official Stremio Video through the
+official Stremio Service loopback API at `127.0.0.1:11470`. The WebView CSP may
+connect only to that fixed endpoint. The native player accepts only the
+service's canonical hash/file playback path; arbitrary localhost URLs remain
+blocked. Stremio Service is detected at runtime and is not silently installed,
+started, linked, or bundled by this milestone.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

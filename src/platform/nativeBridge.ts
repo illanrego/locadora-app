@@ -19,6 +19,7 @@ export type NativePlayerEvent =
   | { kind: 'paused' }
   | { kind: 'position'; value: number }
   | { kind: 'duration'; value: number }
+  | { kind: 'property'; value: { name: string; data: unknown } }
   | { kind: 'ended'; value: string }
   | { kind: 'idle' }
   | { kind: 'failed'; value: string };

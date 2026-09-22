@@ -4,7 +4,7 @@ export type TransportType = 'http' | 'torrent' | 'external' | 'unsupported';
 
 export type PlaybackDescriptor =
   | { kind: 'url'; url: string }
-  | { kind: 'torrent'; infoHash: string; fileIndex: number | null }
+  | { kind: 'torrent'; infoHash: string; fileIndex: number | null; announce: string[] }
   | { kind: 'external'; externalUrl: string }
   | { kind: 'unsupported' };
 
@@ -30,6 +30,8 @@ export interface RawAddonStream {
   externalUrl?: unknown;
   infoHash?: unknown;
   fileIdx?: unknown;
+  announce?: unknown;
+  sources?: unknown;
   resolution?: unknown;
   seeders?: unknown;
   source?: unknown;

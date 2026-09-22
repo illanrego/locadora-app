@@ -3,6 +3,7 @@ import type { DiscoveryTitle } from '../domain/content';
 import { copy, type Locale } from '../locadora/catalog';
 import { resolveTitleMedia, type MediaResolution } from '../media/resolutionService';
 import type { StreamCandidate } from '../media/types';
+import { toStremioPlayableStream } from '../media/stremioStream';
 import { useStremioVideo } from '../media/useStremioVideo';
 import { readMediaConfiguration } from '../platform/nativeBridge';
 import { Modal } from './Modal';
@@ -22,6 +23,10 @@ function formatBytes(bytes: number | null, locale: Locale): string {
     : `${Math.round(bytes / 1024 ** 2)} MB`;
 }
 
+function playable(candidate: StreamCandidate): boolean {
+  return toStremioPlayableStream(candidate) !== null;
+}
+
 function explanation(resolution: MediaResolution | null, locale: Locale): string {
   if (!resolution) return locale === 'pt-BR' ? 'Preparando o caixa…' : 'Preparing the counter…';
   const messages: Record<MediaResolution['status'], { 'pt-BR': string; 'en-US': string }> = {
@@ -33,10 +38,6 @@ function explanation(resolution: MediaResolution | null, locale: Locale): string
     cancelled: { 'pt-BR': 'Busca cancelada.', 'en-US': 'Lookup cancelled.' },
   };
   return messages[resolution.status][locale];
-}
-
-function playable(candidate: StreamCandidate): candidate is StreamCandidate & { playbackDescriptor: { kind: 'url'; url: string } } {
-  return candidate.playbackDescriptor.kind === 'url' && candidate.transportType === 'http';
 }
 
 export function WatchFlow({ title, locale, mpvVersion, onClose }: WatchFlowProps) {
@@ -51,14 +52,15 @@ export function WatchFlow({ title, locale, mpvVersion, onClose }: WatchFlowProps
   const abortRef = useRef<AbortController | null>(null);
 
   const play = useCallback(async (candidate: StreamCandidate) => {
-    if (!playable(candidate)) {
+    const stream = toStremioPlayableStream(candidate);
+    if (!stream) {
       setManualVisible(true);
       return;
     }
     setCandidateId(candidate.stableId);
     setStopped(false);
     try {
-      await video.load(candidate.playbackDescriptor.url);
+      await video.load(stream);
     } catch (error) {
       setLookupError(error instanceof Error ? error.message : String(error));
       setManualVisible(true);
@@ -77,7 +79,7 @@ export function WatchFlow({ title, locale, mpvVersion, onClose }: WatchFlowProps
         setResolution(result);
         setLookupState('ready');
         const winner = result.quickWatch?.winner;
-        if (winner && playable(winner)) {
+        if (winner && toStremioPlayableStream(winner)) {
           await play(winner);
         } else if (result.status === 'manual-selection-required' || winner) {
           setManualVisible(true);
@@ -149,8 +151,8 @@ export function WatchFlow({ title, locale, mpvVersion, onClose }: WatchFlowProps
       {resolution?.quickWatch?.winner && !playable(resolution.quickWatch.winner) && (
         <p className="transport-warning">
           {locale === 'pt-BR'
-            ? 'A melhor opção é torrent e ainda precisa do resolvedor de transporte. Nenhuma reprodução foi iniciada.'
-            : 'The best option is a torrent and still needs the transport resolver. Playback was not started.'}
+            ? 'A melhor opção usa um transporte externo não suportado. Nenhuma reprodução foi iniciada.'
+            : 'The best option uses an unsupported external transport. Playback was not started.'}
         </p>
       )}
 

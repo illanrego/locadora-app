@@ -2,6 +2,8 @@ import StremioVideo from '@stremio/stremio-video';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { safeDiagnostic } from './redaction';
 import { StremioShellTransport } from '../platform/stremioShellTransport';
+import { STREMIO_SERVICE_URL, stremioServiceAvailable } from '../platform/stremioService';
+import type { StremioPlayableStream } from './stremioStream';
 
 export interface StremioVideoState {
   loaded: boolean;
@@ -37,7 +39,7 @@ function stremioVideoError(value: unknown): string {
 export interface StremioVideoController {
   containerRef: RefObject<HTMLDivElement | null>;
   state: StremioVideoState;
-  load: (url: string) => Promise<void>;
+  load: (stream: StremioPlayableStream) => Promise<void>;
   unload: () => void;
   setPaused: (paused: boolean) => void;
   seekRelative: (seconds: number) => void;
@@ -85,23 +87,28 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     };
   }, [reportedMpvVersion]);
 
-  const load = useCallback(async (url: string) => {
+  const load = useCallback(async (stream: StremioPlayableStream) => {
     const video = videoRef.current;
     const transport = transportRef.current;
     const containerElement = containerRef.current;
     if (!video || !transport || !containerElement) throw new Error('Stremio video is not ready');
+    const usesTorrent = 'infoHash' in stream;
+    if (usesTorrent && !await stremioServiceAvailable()) {
+      throw new Error('The official Stremio streaming service is not available');
+    }
     await transport.start();
     setState(INITIAL_STATE);
     video.dispatch({
       type: 'command',
       commandName: 'load',
       commandArgs: {
-        stream: { url },
+        stream,
         platform: 'linux',
         time: 0,
         hardwareDecoding: true,
         gpuVideoProcessing: false,
         assSubtitlesStyling: true,
+        streamingServerURL: usesTorrent ? STREMIO_SERVICE_URL : null,
       },
     }, {
       containerElement,

@@ -46,9 +46,106 @@ pub enum PlayerEvent {
     Paused,
     Position(f64),
     Duration(f64),
+    Property { name: String, data: Value },
     Ended(String),
     Idle,
     Failed(String),
+}
+
+fn bounded_property_string(value: &Value, maximum: usize) -> Option<Value> {
+    value
+        .as_str()
+        .filter(|value| value.len() <= maximum)
+        .map(|value| json!(value))
+}
+
+fn safe_track_list(value: &Value) -> Value {
+    let Some(tracks) = value.as_array() else {
+        return json!([]);
+    };
+    Value::Array(
+        tracks
+            .iter()
+            .take(128)
+            .filter_map(|track| {
+                let track = track.as_object()?;
+                let track_type = track.get("type")?.as_str()?;
+                if !matches!(track_type, "audio" | "sub" | "video") {
+                    return None;
+                }
+                let id = match track.get("id")? {
+                    Value::Number(value) if value.as_u64().is_some() => {
+                        Value::Number(value.clone())
+                    }
+                    value => bounded_property_string(value, 32)?,
+                };
+                let mut safe = serde_json::Map::from_iter([
+                    ("type".into(), json!(track_type)),
+                    ("id".into(), id),
+                ]);
+                for name in ["lang", "title", "codec"] {
+                    if let Some(value) = track
+                        .get(name)
+                        .and_then(|value| bounded_property_string(value, 160))
+                    {
+                        safe.insert(name.into(), value);
+                    }
+                }
+                if let Some(value) = track.get("external").and_then(Value::as_bool) {
+                    safe.insert("external".into(), json!(value));
+                }
+                Some(Value::Object(safe))
+            })
+            .collect(),
+    )
+}
+
+fn safe_video_params(value: &Value) -> Value {
+    let Some(params) = value.as_object() else {
+        return Value::Null;
+    };
+    let mut safe = serde_json::Map::new();
+    for name in ["w", "h", "dw", "dh", "rotate", "max-cll", "max-luma"] {
+        if let Some(value) = params.get(name).and_then(Value::as_f64)
+            && value.is_finite()
+        {
+            safe.insert(name.into(), json!(value));
+        }
+    }
+    for name in ["gamma", "primaries", "pixelformat"] {
+        if let Some(value) = params
+            .get(name)
+            .and_then(|value| bounded_property_string(value, 64))
+        {
+            safe.insert(name.into(), value);
+        }
+    }
+    Value::Object(safe)
+}
+
+fn safe_observed_property(name: &str, data: &Value) -> Option<PlayerEvent> {
+    let data = match name {
+        "paused-for-cache" | "seeking" | "mute" => {
+            data.as_bool().map(Value::Bool).unwrap_or(Value::Null)
+        }
+        "demuxer-cache-time" | "volume" | "speed" | "sub-scale" | "sub-pos" | "sub-delay" => data
+            .as_f64()
+            .filter(|value| value.is_finite())
+            .map(|value| json!(value))
+            .unwrap_or(Value::Null),
+        "aid" | "sid" => match data {
+            Value::Null => Value::Null,
+            Value::Number(value) if value.as_u64().is_some() => Value::Number(value.clone()),
+            value => bounded_property_string(value, 32)?,
+        },
+        "track-list" => safe_track_list(data),
+        "video-params" => safe_video_params(data),
+        _ => return None,
+    };
+    Some(PlayerEvent::Property {
+        name: name.into(),
+        data,
+    })
 }
 
 pub struct MpvSession {
@@ -117,7 +214,7 @@ fn event_from_message(value: &Value) -> Option<PlayerEvent> {
                 "time-pos" => data.as_f64().map(PlayerEvent::Position),
                 "duration" => data.as_f64().map(PlayerEvent::Duration),
                 "core-idle" if data.as_bool() == Some(true) => Some(PlayerEvent::Idle),
-                _ => None,
+                _ => safe_observed_property(name, data),
             }
         }
         _ => None,
@@ -145,7 +242,10 @@ fn spawn_event_reader(stream: UnixStream) -> Receiver<PlayerEvent> {
 
 fn public_remote_url(value: &str) -> Result<(), PlayerError> {
     let url = Url::parse(value).map_err(|_| PlayerError::InvalidDescriptor)?;
-    if !matches!(url.scheme(), "http" | "https") {
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
         return Err(PlayerError::InvalidDescriptor);
     }
     match url.host().ok_or(PlayerError::InvalidDescriptor)? {
@@ -169,6 +269,42 @@ fn public_remote_url(value: &str) -> Result<(), PlayerError> {
         }
         _ => Ok(()),
     }
+}
+
+fn stremio_service_stream_url(value: &str) -> Result<(), PlayerError> {
+    if value.len() > 16_384 {
+        return Err(PlayerError::InvalidDescriptor);
+    }
+    let url = Url::parse(value).map_err(|_| PlayerError::InvalidDescriptor)?;
+    if url.scheme() != "http"
+        || url.host_str() != Some("127.0.0.1")
+        || url.port() != Some(11470)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(PlayerError::InvalidDescriptor);
+    }
+    let segments = url
+        .path_segments()
+        .ok_or(PlayerError::InvalidDescriptor)?
+        .collect::<Vec<_>>();
+    if segments.len() != 2
+        || segments[0].len() != 40
+        || !segments[0].bytes().all(|byte| byte.is_ascii_hexdigit())
+        || segments[1].parse::<u16>().is_err()
+    {
+        return Err(PlayerError::InvalidDescriptor);
+    }
+    let query = url.query_pairs().collect::<Vec<_>>();
+    if query.len() > 64
+        || query
+            .iter()
+            .any(|(name, value)| name != "tr" || value.is_empty() || value.len() > 2_048)
+    {
+        return Err(PlayerError::InvalidDescriptor);
+    }
+    Ok(())
 }
 
 impl MpvSession {
@@ -223,6 +359,19 @@ impl MpvSession {
             (2, "time-pos"),
             (3, "duration"),
             (4, "core-idle"),
+            (5, "paused-for-cache"),
+            (6, "seeking"),
+            (7, "demuxer-cache-time"),
+            (8, "volume"),
+            (9, "mute"),
+            (10, "speed"),
+            (11, "track-list"),
+            (12, "aid"),
+            (13, "sid"),
+            (14, "sub-scale"),
+            (15, "sub-pos"),
+            (16, "sub-delay"),
+            (17, "video-params"),
         ] {
             session.send_command(vec![json!("observe_property"), json!(id), json!(name)])?;
         }
@@ -246,7 +395,9 @@ impl MpvSession {
     }
 
     pub fn load_remote(&mut self, descriptor: &str) -> Result<(), PlayerError> {
-        public_remote_url(descriptor)?;
+        if stremio_service_stream_url(descriptor).is_err() {
+            public_remote_url(descriptor)?;
+        }
         self.load_internal(descriptor)
     }
 
@@ -371,8 +522,31 @@ mod tests {
             "http://127.0.0.1/private",
             "http://[::1]/private",
             "http://localhost/private",
+            "https://user:password@media.example.com/video",
         ] {
             assert!(public_remote_url(value).is_err(), "accepted {value}");
+        }
+    }
+
+    #[test]
+    fn official_stremio_service_paths_are_narrowly_allowlisted() {
+        let hash = "a".repeat(40);
+        assert!(
+            stremio_service_stream_url(&format!(
+                "http://127.0.0.1:11470/{hash}/7?tr=udp%3A%2F%2Ftracker.example"
+            ))
+            .is_ok()
+        );
+        for value in [
+            format!("http://localhost:11470/{hash}/7"),
+            format!("http://127.0.0.1:11470/{hash}/../settings"),
+            format!("http://127.0.0.1:11470/{hash}/7/stats.json"),
+            format!("http://127.0.0.1:11470/{hash}/7?token=secret"),
+        ] {
+            assert!(
+                stremio_service_stream_url(&value).is_err(),
+                "accepted {value}"
+            );
         }
     }
 
@@ -390,6 +564,39 @@ mod tests {
         );
         assert_eq!(
             event_from_message(&json!({ "event": "log-message", "text": "secret" })),
+            None
+        );
+        assert_eq!(
+            event_from_message(&json!({
+                "event": "property-change",
+                "name": "track-list",
+                "data": [{
+                    "type": "sub",
+                    "id": 2,
+                    "lang": "por",
+                    "codec": "ass",
+                    "external": true,
+                    "external-filename": "/private/token.srt",
+                    "decoder-desc": "not allowlisted"
+                }]
+            })),
+            Some(PlayerEvent::Property {
+                name: "track-list".into(),
+                data: json!([{
+                    "type": "sub",
+                    "id": 2,
+                    "lang": "por",
+                    "codec": "ass",
+                    "external": true
+                }])
+            })
+        );
+        assert_eq!(
+            event_from_message(&json!({
+                "event": "property-change",
+                "name": "metadata",
+                "data": {"private": "secret"}
+            })),
             None
         );
     }

@@ -27,6 +27,7 @@ Packaging work must refresh this file from the final dependency graph.
 | Stremio libass-wasm 4.2.6 | HTML subtitle rendering used by Stremio Video | LGPL-2.1-or-later AND (FTL OR GPL-2.0-or-later) AND MIT AND MIT-Modern-Variant AND ISC AND NTP AND Zlib AND BSL-1.0 | Shipped as a transitive browser asset; preserve the generated license inventory and source/notice obligations. |
 | Stremio hls.js fork 1.5.5 canary | HLS playback support used by Stremio Video | Apache-2.0 | Transitive browser dependency. |
 | vtt.js 0.13.0 | WebVTT parsing used by Stremio Video | Apache-2.0 | Transitive browser dependency. |
+| Stremio Service | Optional local torrent/stream conversion runtime | GPL-2.0 | Interoperated with over its fixed loopback HTTP API. It is currently separately installed and is not linked or bundled. |
 | mpv / libmpv | Native playback candidate | GPL-2.0-or-later by default; an LGPL-2.1-or-later build mode exists with caveats | Initial spike targets a separately installed system mpv. No mpv binary is bundled. Packaging remains blocked on a final license/build review. |
 
 ## Explicit exclusions
@@ -42,6 +43,7 @@ Packaging work must refresh this file from the final dependency graph.
 - Tauri architecture and license: <https://github.com/tauri-apps/tauri/blob/dev/ARCHITECTURE.md>
 - Stremio Core license: <https://github.com/Stremio/stremio-core/blob/development/LICENSE.md>
 - Stremio Video license: <https://github.com/Stremio/stremio-video/blob/master/LICENSE>
+- Stremio Service license: <https://github.com/Stremio/stremio-service/blob/master/LICENSE.md>
 - Stremio add-on protocol: <https://stremio.github.io/stremio-addon-sdk/protocol.html>
 - mpv licensing modes and limitations: <https://github.com/mpv-player/mpv/blob/master/Copyright>
 - Vite generated license inventory: <https://vite.dev/config/build-options.html#build-license>

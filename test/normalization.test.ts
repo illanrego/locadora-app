@@ -28,6 +28,21 @@ describe('stream normalization', () => {
     expect(candidate.seeders).toBe(34);
   });
 
+  it('preserves bounded official torrent fields for Stremio Video', () => {
+    const candidate = normalizeStream({
+      name: 'Release 1080p 1 GB Seeders: 20',
+      infoHash: 'A'.repeat(40),
+      fileIdx: 3,
+      sources: ['tracker:udp://tracker.example', '', 'x'.repeat(2_049)],
+    }, 'addon');
+    expect(candidate.playbackDescriptor).toEqual({
+      kind: 'torrent',
+      infoHash: 'a'.repeat(40),
+      fileIndex: 3,
+      announce: ['tracker:udp://tracker.example'],
+    });
+  });
+
   it('leaves ambiguous candidates available but not autoplay-safe', () => {
     const candidate = normalizeStream({ name: 'Mystery release', url: 'https://example.invalid/video' }, 'addon');
     expect(candidate.parseConfidence).toBe('partial');

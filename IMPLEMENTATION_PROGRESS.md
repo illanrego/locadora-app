@@ -17,10 +17,10 @@ player reducer were removed. The native environment supplies bounded HTTPS and
 a deny-by-default mpv adapter while private transport URLs remain in the OS
 credential store.
 
-Next task: expose sanitized mpv track/buffering properties to the official
-ShellVideo model, then connect official Stremio local streaming-service
-discovery so torrent descriptors can use Stremio Video's own conversion path.
-Preserve the Locadora React presentation and Quick Watch policy.
+Next task: expose embedded audio/subtitle selection and subtitle delay through
+Locadora's Watch panel using the official Stremio Video properties already fed
+by the sanitized mpv track list. Then resolve external subtitle add-ons through
+official Stremio Core and add them through Stremio Video's subtitle commands.
 
 ## Phase board
 
@@ -53,6 +53,7 @@ Preserve the Locadora React presentation and Quick Watch policy.
   - [x] Resolve one selected title across all compatible configured stream add-ons.
   - [ ] Resolve subtitle add-ons for the active video/release identity.
   - [x] Add bounded cancellation and sanitized diagnostic aggregation.
+  - [x] Connect torrent descriptors to official Stremio Service conversion.
   - [ ] Meet all Phase 3 exit criteria.
 - [ ] Phase 4 — Quick Watch movies
   - [x] Implement and boundary-test the versioned deterministic movie evaluator.
@@ -62,6 +63,7 @@ Preserve the Locadora React presentation and Quick Watch policy.
 - [ ] Phase 5 — native playback, audio, and subtitles
   - [x] Connect native start/load/events/control/shutdown to the Watch flow.
   - [x] Replace custom frontend player state with official Stremio Video.
+  - [x] Feed sanitized mpv buffering and embedded-track properties into Stremio Video.
   - [x] Allow source switching without crossing into Locadora member state.
   - [ ] Add retry presentation, audio selection, and the complete subtitle flow.
   - [ ] Meet all Phase 5 exit criteria.
@@ -132,6 +134,15 @@ when they need user or real-environment confirmation.
   --no-bundle` produced the optimized Linux executable. The larger production
   bundle includes the official libass/WASM subtitle runtime. No manual testing
   was performed.
+- 2026-09-22: mapped torrent candidates into official Stremio Video's stream
+  shape and enabled its official Stremio Service conversion path at the fixed
+  `127.0.0.1:11470` endpoint. Arbitrary localhost playback remains denied;
+  native-core accepts only a bounded hash/file service URL. Sanitized embedded
+  track, buffering, volume, speed, and video-property events now reach
+  ShellVideo. `npm run check` passed with 51 tests in 9 files and a production
+  build; native-core passed 12 tests, the Tauri shell passed 6 regular tests
+  with 1 ignored credential-store test, and both Rust crates passed strict
+  Clippy. No real torrent or manual playback test was performed.
 
 ## Known blockers and risks
 
@@ -142,9 +153,9 @@ when they need user or real-environment confirmation.
   count as the user-configured sanitized response required by Phase 0.
 - A real user-configured sanitized response is still required before parser
   field reliability and Phase 0 can be closed.
-- The current player can load direct HTTPS stream URLs. Torrent descriptors are
-  intentionally non-playable until a bounded, license-reviewed resolver is
-  selected and implemented.
+- Torrent playback requires a separately installed/running official Stremio
+  Service. Its eventual installer/bundling model and GPL-2.0 obligations remain
+  part of the public distribution review.
 - Series Quick Watch rules are deliberately undefined.
 - Public release licensing must be re-reviewed after the final native/player
   dependency graph is locked.

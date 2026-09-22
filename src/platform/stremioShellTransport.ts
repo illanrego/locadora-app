@@ -128,6 +128,9 @@ export class StremioShellTransport {
       case 'duration':
         this.emit('mpv-prop-change', { name: 'duration', data: event.value });
         break;
+      case 'property':
+        this.emit('mpv-prop-change', event.value);
+        break;
       case 'ended':
         this.emit('mpv-event-ended', { reason: event.value });
         break;
