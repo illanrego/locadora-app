@@ -4,6 +4,7 @@ import { externalId } from '../domain/content';
 import { copy, type Locale } from '../locadora/catalog';
 import { Modal } from './Modal';
 import { TitleReviews } from './TitleReviews';
+import { VhsInspection } from './VhsInspection';
 
 interface TitleInspectionProps {
   title: DiscoveryTitle;
@@ -17,10 +18,6 @@ interface TitleInspectionProps {
   onToggleSaved: (collection: 'watch_later' | 'favorite') => void;
   onWatch: () => void;
   onClose: () => void;
-}
-
-function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 3).map((part) => part[0]).join('');
 }
 
 export function TitleInspection({
@@ -43,11 +40,7 @@ export function TitleInspection({
   const imdbId = externalId(title.identity, 'imdb');
   return (
     <Modal label={title.name} onClose={onClose} className="title-modal">
-      <div className="inspection-art" aria-hidden="true">
-        {title.posterUrl
-          ? <img src={title.posterUrl} alt="" loading="lazy" />
-          : <span>{initials(title.name)}</span>}
-      </div>
+      <VhsInspection title={title} locale={locale} inBasket={isInBasket} onInspectClose={onClose} />
       <section className="inspection-copy">
         <p className="eyebrow">VHS · {title.year ?? '—'} · {title.identity.type === 'series' ? (pt ? 'Série' : 'Series') : (pt ? 'Filme' : 'Movie')}</p>
         <h2>{title.name}</h2>
