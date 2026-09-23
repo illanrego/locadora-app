@@ -471,6 +471,14 @@ when they need user or real-environment confirmation.
   `npm run build`, and `git diff --check` passed. `npm run tauri -- build
   --no-bundle` refreshed `src-tauri/target/release/wills-locadora-player`. No
   manual visual or network-cache acceptance was performed.
+- 2026-09-23: fixed poster priority in the local artwork layer. Posters now
+  receive their known URL immediately while Cache Storage warms in parallel;
+  cached blobs are used on later opens instead of blocking first render. This
+  prevents a shelf poster or inspection cover from waiting behind cache I/O
+  while a backdrop loads. `npm run typecheck`, `npm test` (88 tests in 24
+  files), and `git diff --check` passed. `npm run tauri -- build --no-bundle`
+  refreshed `src-tauri/target/release/wills-locadora-player`. No manual visual
+  or network-cache acceptance was performed.
 
 ## Known blockers and risks
 

@@ -20,6 +20,11 @@ interface ArtworkIndexEntry {
   usedAt: number;
 }
 
+interface ArtworkResolution {
+  blob: Blob;
+  fromCache: boolean;
+}
+
 function cacheStorage(): CacheStorage | null {
   if (typeof window === 'undefined' || !('caches' in window)) return null;
   return window.caches;
@@ -59,9 +64,9 @@ function touchIndex(kind: ArtworkKind, url: string): void {
   ));
 }
 
-const pending = new Map<string, Promise<Blob | null>>();
+const pending = new Map<string, Promise<ArtworkResolution | null>>();
 
-async function resolveArtwork(url: string, kind: ArtworkKind): Promise<Blob | null> {
+async function resolveArtwork(url: string, kind: ArtworkKind): Promise<ArtworkResolution | null> {
   const cachesApi = cacheStorage();
   if (!cachesApi) return null;
 
@@ -73,13 +78,14 @@ async function resolveArtwork(url: string, kind: ArtworkKind): Promise<Blob | nu
     try {
       const store = await cachesApi.open(CACHE_NAMES[kind]);
       let response = await store.match(url);
+      const fromCache = Boolean(response);
       if (!response) {
         response = await fetch(url, { cache: 'force-cache', headers: { accept: 'image/avif,image/webp,image/*' } });
         if (!response.ok) return null;
         await store.put(url, response.clone());
       }
       touchIndex(kind, url);
-      return response.blob();
+      return { blob: await response.blob(), fromCache };
     } catch {
       return null;
     }
@@ -93,17 +99,21 @@ async function resolveArtwork(url: string, kind: ArtworkKind): Promise<Blob | nu
 }
 
 export function useCachedArtwork(url: string | null, kind: ArtworkKind): string | null {
-  const [source, setSource] = useState<string | null>(() => cacheStorage() ? null : url);
+  // The known remote URL must be rendered immediately. Cache Storage is a
+  // persistence layer, not a render gate; waiting here made posters lose to
+  // the backdrop during inspection and made shelves look empty while caching.
+  const [source, setSource] = useState<string | null>(url);
 
   useEffect(() => {
     let cancelled = false;
     let objectUrl: string | null = null;
-    setSource(cacheStorage() ? null : url);
+    setSource(url);
     if (!url) return () => undefined;
 
-    void resolveArtwork(url, kind).then((blob) => {
-      const resolvedSource = blob ? URL.createObjectURL(blob) : url;
-      if (blob) objectUrl = resolvedSource;
+    void resolveArtwork(url, kind).then((resolved) => {
+      if (!resolved?.fromCache) return;
+      const resolvedSource = URL.createObjectURL(resolved.blob);
+      objectUrl = resolvedSource;
       if (cancelled) {
         if (objectUrl) URL.revokeObjectURL(objectUrl);
         return;
