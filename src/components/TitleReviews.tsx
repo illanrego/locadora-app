@@ -1,11 +1,12 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import { externalId, type DiscoveryTitle } from '../domain/content';
+import type { ContentType } from '../domain/content';
 import { normalizePublicReviews, normalizeReviewEligibility, type PublicReviews } from '../member/reviews';
 import { fetchMemberReviewEligibility, fetchTitleReviews, readMemberSession, writeMemberReview } from '../platform/nativeBridge';
 import type { Locale } from '../locadora/catalog';
 
 interface TitleReviewsProps {
-  title: DiscoveryTitle;
+  contentType: ContentType;
+  tmdbId: number;
   locale: Locale;
 }
 
@@ -13,7 +14,7 @@ function errorMessage(cause: unknown, fallback: string): string {
   return cause instanceof Error && cause.message ? cause.message : fallback;
 }
 
-export function TitleReviews({ title, locale }: TitleReviewsProps) {
+export function TitleReviews({ contentType, tmdbId, locale }: TitleReviewsProps) {
   const [data, setData] = useState<PublicReviews | null>(null);
   const [signedIn, setSignedIn] = useState(false);
   const [eligible, setEligible] = useState(false);
@@ -23,15 +24,13 @@ export function TitleReviews({ title, locale }: TitleReviewsProps) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const pt = locale === 'pt-BR';
-  const tmdbId = Number(externalId(title.identity, 'tmdb'));
-
   async function load() {
-    const reviews = normalizePublicReviews(await fetchTitleReviews(title.identity.type, tmdbId));
+    const reviews = normalizePublicReviews(await fetchTitleReviews(contentType, tmdbId));
     setData(reviews);
     const session = await readMemberSession();
     setSignedIn(session.signedIn);
     if (session.signedIn) {
-      setEligible(normalizeReviewEligibility(await fetchMemberReviewEligibility(title.identity.type, tmdbId)));
+      setEligible(normalizeReviewEligibility(await fetchMemberReviewEligibility(contentType, tmdbId)));
     }
   }
 
@@ -39,14 +38,14 @@ export function TitleReviews({ title, locale }: TitleReviewsProps) {
     let active = true;
     void (async () => {
       try {
-        const reviews = normalizePublicReviews(await fetchTitleReviews(title.identity.type, tmdbId));
+        const reviews = normalizePublicReviews(await fetchTitleReviews(contentType, tmdbId));
         if (!active) return;
         setData(reviews);
         const session = await readMemberSession();
         if (!active) return;
         setSignedIn(session.signedIn);
         if (session.signedIn) {
-          const value = await fetchMemberReviewEligibility(title.identity.type, tmdbId);
+          const value = await fetchMemberReviewEligibility(contentType, tmdbId);
           if (active) setEligible(normalizeReviewEligibility(value));
         }
       } catch (cause) {
@@ -54,7 +53,7 @@ export function TitleReviews({ title, locale }: TitleReviewsProps) {
       }
     })();
     return () => { active = false; };
-  }, [pt, title.identity.type, tmdbId]);
+  }, [contentType, pt, tmdbId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,7 +61,7 @@ export function TitleReviews({ title, locale }: TitleReviewsProps) {
     setError('');
     setNotice('');
     try {
-      await writeMemberReview(title.identity.type, tmdbId, rating, body.trim());
+      await writeMemberReview(contentType, tmdbId, rating, body.trim());
       setBody('');
       setNotice(pt ? 'Avaliação publicada.' : 'Review published.');
       await load();

@@ -12,6 +12,7 @@ import {
   updateMemberProfile,
 } from '../platform/nativeBridge';
 import type { Locale } from '../locadora/catalog';
+import { TitleReviews } from './TitleReviews';
 
 interface MemberPanelProps {
   locale: Locale;
@@ -52,6 +53,7 @@ export function MemberPanel({ locale }: MemberPanelProps) {
   const [signup, setSignup] = useState(false);
   const [busy, setBusy] = useState(false);
   const [returningId, setReturningId] = useState('');
+  const [reviewItem, setReviewItem] = useState<MemberTitle | null>(null);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -149,14 +151,20 @@ export function MemberPanel({ locale }: MemberPanelProps) {
     }
   }
 
-  async function returnTape(itemId: string, watchedStatus: 'watched' | 'not_watched' | 'unknown') {
-    setReturningId(itemId);
+  async function returnTape(item: MemberTitle, watchedStatus: 'watched' | 'not_watched' | 'unknown') {
+    setReturningId(item.id);
+    setReviewItem(null);
     setError('');
     setNotice('');
     try {
-      await returnMemberRental(itemId, watchedStatus);
+      await returnMemberRental(item.id, watchedStatus);
       await loadState();
-      setNotice(pt ? 'Fita devolvida e histórico atualizado.' : 'Tape returned and history updated.');
+      if (watchedStatus === 'watched') {
+        setReviewItem(item);
+        setNotice(pt ? 'Fita devolvida. Agora conta o que achou.' : 'Tape returned. Now tell us what you thought.');
+      } else {
+        setNotice(pt ? 'Fita devolvida e histórico atualizado.' : 'Tape returned and history updated.');
+      }
     } catch (cause) {
       setError(messageFrom(cause, pt ? 'Não foi possível devolver a fita.' : 'Could not return the tape.'));
     } finally {
@@ -271,15 +279,22 @@ export function MemberPanel({ locale }: MemberPanelProps) {
                   <li key={item.id}>
                     <span><strong>{item.name}</strong><small>{item.year ?? '—'}</small></span>
                     <div className="return-actions" aria-label={pt ? `Devolver ${item.name}` : `Return ${item.name}`}>
-                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item.id, 'watched')}>{pt ? 'Assisti' : 'Watched'}</button>
-                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item.id, 'not_watched')}>{pt ? 'Não assisti' : 'Not watched'}</button>
-                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item.id, 'unknown')}>{pt ? 'Não dizer' : 'Skip'}</button>
+                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item, 'watched')}>{pt ? 'Assisti' : 'Watched'}</button>
+                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item, 'not_watched')}>{pt ? 'Não assisti' : 'Not watched'}</button>
+                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item, 'unknown')}>{pt ? 'Não dizer' : 'Skip'}</button>
                     </div>
                   </li>
                 ))}
               </ul>
             ) : <p className="member-empty">{pt ? 'Nenhuma fita alugada agora.' : 'No tapes currently rented.'}</p>}
           </section>
+          {reviewItem && (
+            <section className="member-section return-review" aria-label={pt ? `Avaliação de ${reviewItem.name}` : `Review ${reviewItem.name}`}>
+              <h3>{pt ? `O que achou de ${reviewItem.name}?` : `What did you think of ${reviewItem.name}?`}</h3>
+              <p>{pt ? 'Você marcou esta devolução como assistida. Registre sua avaliação agora.' : 'You marked this return as watched. Share your review now.'}</p>
+              <TitleReviews contentType={reviewItem.type} tmdbId={reviewItem.tmdbId} locale={locale} />
+            </section>
+          )}
           <section className="member-section">
             <h3>{pt ? 'Salvas para depois' : 'Saved for later'}</h3>
             <TapeList items={member.collections.watchLater.slice(0, 5)} locale={locale} empty={pt ? 'Nenhuma fita salva.' : 'No saved tapes.'} />

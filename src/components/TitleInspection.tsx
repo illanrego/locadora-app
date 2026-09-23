@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import type { DiscoveryTitle } from '../domain/content';
 import { externalId } from '../domain/content';
 import { copy, type Locale } from '../locadora/catalog';
 import { Modal } from './Modal';
-import { TitleReviews } from './TitleReviews';
 import { VhsInspection } from './VhsInspection';
 
 interface TitleInspectionProps {
@@ -35,7 +33,6 @@ export function TitleInspection({
 }: TitleInspectionProps) {
   const t = copy[locale];
   const pt = locale === 'pt-BR';
-  const [reviewsOpen, setReviewsOpen] = useState(false);
   const tmdbId = externalId(title.identity, 'tmdb');
   const imdbId = externalId(title.identity, 'imdb');
   return (
@@ -67,16 +64,8 @@ export function TitleInspection({
         <button type="button" aria-pressed={favorite} onClick={() => onToggleSaved('favorite')}>
           {favorite ? (pt ? 'Remover das favoritas' : 'Remove from favorites') : (pt ? 'Marcar como favorita' : 'Add to favorites')}
         </button>
-        <button type="button" aria-expanded={reviewsOpen} onClick={() => setReviewsOpen((open) => !open)}>
-          {reviewsOpen ? (pt ? 'Fechar avaliações' : 'Close reviews') : (pt ? 'Ver avaliações' : 'See reviews')}
-        </button>
         <button type="button" className="text-action" onClick={onClose}>{t.close}</button>
       </div>
-      {reviewsOpen && (
-        <div className="tape-reviews">
-          <TitleReviews title={title} locale={locale} />
-        </div>
-      )}
     </Modal>
   );
 }

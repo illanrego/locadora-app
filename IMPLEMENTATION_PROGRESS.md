@@ -99,11 +99,15 @@ instead of promoting it as the primary browsing surface.
    image load order, fetches bounded public credits/rating/runtime/classification
    and Brazilian provider metadata, and closes when its surrounding stage is
    clicked. It still needs the user's visual acceptance.
-3. Pending: subtitles. Add-on subtitle tracks are fetched and handed to Stremio
+3. Done: reviews no longer open from tape inspection. After the return desk
+   successfully records an explicit watched outcome, that exact canonical tape's
+   review form opens immediately below the return desk. Eligibility remains
+   independently enforced by the existing watched-return Worker contract.
+4. Pending: subtitles. Add-on subtitle tracks are fetched and handed to Stremio
    Video, but with the player in its own window its HTML subtitle renderer draws
    into a hidden container, so those tracks never appear. Fix by handing the
    track to mpv, or by embedding the player (next item).
-4. Pending: embed the player. Stremio Video asks the shell for `vo=libmpv` and
+5. Pending: embed the player. Stremio Video asks the shell for `vo=libmpv` and
    the shell currently ignores it and runs a separate mpv window. Implementing
    the render API into a GL widget inside the Tauri window removes the extra
    window and makes HTML subtitle rendering work.
@@ -428,6 +432,16 @@ when they need user or real-environment confirmation.
   `npm run tauri -- build --no-bundle` then refreshed
   `src-tauri/target/release/wills-locadora-player`. No browser/manual visual or
   playback acceptance was performed.
+- 2026-09-23: moved review entry to the natural watched-return flow. Tape
+  inspection no longer exposes the review control; after a successful explicit
+  `watched` return, its matching canonical title renders the review form beneath
+  the return desk. The Worker eligibility check and review-write route remain
+  unchanged, so an unwatched tape cannot become reviewable through the UI or the
+  service. The native year selector explicitly uses the prior dark field and
+  option background. `npm run typecheck`, `npm test` (83 tests in 21 files),
+  `npm run build`, and `git diff --check` passed. `npm run tauri -- build
+  --no-bundle` refreshed `src-tauri/target/release/wills-locadora-player`. No
+  browser/manual visual or playback acceptance was performed.
 
 ## Known blockers and risks
 

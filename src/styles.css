@@ -72,7 +72,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .browse-controls .genre-picker option { color: var(--blue); background: var(--paper); }
 .year-machine { grid-template-columns: 34px 92px 34px 44px; }
 .year-machine > span { grid-column: 1 / -1; }
-.year-machine select { padding: .25rem; color: #ff765a; text-align: center; font: 800 1.1rem/1 "Courier New", monospace; text-shadow: 0 0 12px #f2381e; }
+.year-machine select { padding: .25rem; color: #ff765a; background: #101a28; text-align: center; font: 800 1.1rem/1 "Courier New", monospace; text-shadow: 0 0 12px #f2381e; }
+.year-machine select option { color: #ff765a; background: #101a28; }
 .year-machine button { min-height: 40px; padding: .45rem; }
 
 .settings-drawer { display: flex; align-items: end; justify-content: flex-end; gap: 1.5rem; padding: .8rem clamp(1rem, 4vw, 3.5rem); background: #203958; border-top: 1px dashed #ffffff36; }
@@ -167,7 +168,6 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .tape-member-actions button:disabled, .tape-actions button:disabled { opacity: .58; cursor: not-allowed; }
 .tape-member-actions .tape-primary { background: var(--red); }
 .tape-actions .text-action { background: transparent; border-color: #ffffff40; box-shadow: none; }
-.tape-reviews { position: fixed; z-index: 5; right: clamp(.75rem, 5vw, 4rem); bottom: 1rem; width: min(420px, 32vw); max-height: 42vh; overflow: auto; padding: 1rem; background: #080d15; border: 2px solid #ffffff2c; }
 .inspection-copy { padding: clamp(1.4rem, 4vw, 3.5rem); }
 .eyebrow { margin: 0 0 .45rem; color: var(--yellow); font: 800 .64rem/1.4 "Courier New", monospace; letter-spacing: .12em; text-transform: uppercase; }
 .inspection-copy h2, .panel-header h2 { margin: 0 0 .6rem; font: 900 clamp(2.2rem, 6vw, 4.2rem)/.9 Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; letter-spacing: .03em; text-transform: uppercase; }
@@ -234,6 +234,9 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .member-counts dd { margin: .25rem 0 0; color: var(--yellow); font: 900 1.25rem "Courier New", monospace; }
 .member-section { border-top: 2px solid #ffffff25; }
 .member-section h3 { margin: .9rem 0 .6rem; color: var(--cyan); font: 900 .85rem "Arial Narrow", Arial, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+.return-review { padding: .8rem; border: 2px solid var(--yellow); background: #172c4966; }
+.return-review h3 { margin-top: 0; color: var(--yellow); }
+.return-review > p { margin: 0 0 .8rem; color: #d6ccb7; font-size: .75rem; line-height: 1.5; }
 .member-tape-list { display: grid; gap: .45rem; margin: 0; padding: 0; list-style: none; }
 .member-tape-list li { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .6rem .7rem; background: #ffffff08; border-left: 4px solid var(--red); }
 .member-tape-list li span { display: grid; min-width: 0; gap: .15rem; }
@@ -309,7 +312,6 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   .title-modal { grid-template-columns: minmax(190px, .7fr) 1fr; }
   .tape-member-actions { top: auto; bottom: .75rem; left: 50%; transform: translateX(-50%); }
   .tape-actions { top: auto; right: 50%; bottom: 4rem; display: flex; flex-wrap: wrap; justify-content: center; width: min(760px, 94vw); transform: translateX(50%); }
-  .tape-reviews { right: 3vw; bottom: 10rem; width: min(760px, 94vw); }
   .inspection-art { min-height: 480px; }
 }
 
@@ -342,7 +344,6 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   .title-modal { display: block; }
   .tape-member-actions { bottom: .5rem; }
   .tape-actions { bottom: 3.8rem; }
-  .tape-reviews { right: 3vw; bottom: 9.5rem; max-height: 38vh; }
   .inspection-art { min-height: 260px; border: 0; border-bottom: 8px solid #080b10; }
   .inspection-copy { padding: 1.3rem; }
   .basket-list li { align-items: stretch; flex-direction: column; }

@@ -4,7 +4,6 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FIXTURE_TITLES } from '../src/locadora/fixture';
 
 const native = vi.hoisted(() => ({
   fetchTitleReviews: vi.fn(),
@@ -31,7 +30,7 @@ describe('title reviews', () => {
     native.fetchMemberReviewEligibility.mockResolvedValue({ eligible: true });
     native.writeMemberReview.mockResolvedValue({ review: { id: 'review-1' } });
     const user = userEvent.setup();
-    render(<TitleReviews title={FIXTURE_TITLES[0]} locale="pt-BR" />);
+    render(<TitleReviews contentType="movie" tmdbId={101} locale="pt-BR" />);
 
     await user.selectOptions(await screen.findByLabelText('Sua nota'), '4.5');
     await user.type(screen.getByLabelText('Sua resenha'), 'Muito bom.');

@@ -14,6 +14,9 @@ const native = vi.hoisted(() => ({
   returnMemberRental: vi.fn(),
   fetchMemberState: vi.fn(),
   fetchMemberHistory: vi.fn(),
+  fetchTitleReviews: vi.fn(),
+  fetchMemberReviewEligibility: vi.fn(),
+  writeMemberReview: vi.fn(),
 }));
 
 vi.mock('../src/platform/nativeBridge', () => native);
@@ -67,13 +70,17 @@ describe('Locadora member panel', () => {
       .mockResolvedValueOnce({ profile: { userId: 'user-1', username: 'will' }, activeRental: { id: 'rental-1', items: [item] }, collections: {}, history: [] })
       .mockResolvedValueOnce({ profile: { userId: 'user-1', username: 'will' }, activeRental: null, collections: {}, history: [{ ...item, returnedAt: '2026-09-22T00:00:00Z', watchedStatus: 'watched' }] });
     native.returnMemberRental.mockResolvedValue({ rentalItem: { id: item.id, watchedStatus: 'watched' } });
+    native.fetchTitleReviews.mockResolvedValue({ summary: { averageRating: 0, ratingCount: 0 }, reviews: [] });
+    native.fetchMemberReviewEligibility.mockResolvedValue({ eligible: true });
     const user = userEvent.setup();
     render(<MemberPanel locale="pt-BR" />);
 
     await user.click(await screen.findByRole('button', { name: 'Assisti' }));
 
     expect(native.returnMemberRental).toHaveBeenCalledWith(item.id, 'watched');
-    expect(await screen.findByText('Fita devolvida e histórico atualizado.')).toBeInTheDocument();
+    expect(await screen.findByText('Fita devolvida. Agora conta o que achou.')).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Avaliação de The Matrix' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Avalie esta fita' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Assisti' })).not.toBeInTheDocument();
   });
 
