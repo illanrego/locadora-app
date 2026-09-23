@@ -73,9 +73,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .browse-controls .genre-picker option { color: var(--blue); background: var(--paper); }
 .year-machine { grid-template-columns: 34px 92px 34px 44px; }
 .year-machine > span { grid-column: 1 / -1; }
-.year-machine select { padding: .25rem; color: #ff765a; background: #101a28; text-align: center; font: 800 1.1rem/1 "Courier New", monospace; text-shadow: 0 0 12px #f2381e; }
-.year-machine select option { color: #ff765a; background: #101a28; }
-.year-machine button { min-height: 40px; padding: .45rem; }
+.year-machine > button, .year-picker-trigger { min-height: 40px; padding: .45rem; }
+.year-picker { position: relative; min-width: 0; }
+.year-picker-trigger { width: 100%; color: #ff765a; background: #101a28; text-align: center; font: 800 1.1rem/1 "Courier New", monospace; text-shadow: 0 0 12px #f2381e; }
+.year-picker-options { position: absolute; z-index: 40; top: calc(100% + 4px); right: 0; left: 0; max-height: min(50vh, 18rem); overflow-y: auto; border: 2px solid #3f526b; background: #101a28; box-shadow: 5px 7px 0 #080d15; scrollbar-color: #ff765a #101a28; }
+.year-picker-options button { display: block; width: 100%; min-height: 34px; padding: .4rem; border: 0; border-bottom: 1px solid #3f526b; color: #ff765a; background: #101a28; font: 800 .85rem/1 "Courier New", monospace; text-align: center; }
+.year-picker-options button[aria-selected="true"] { color: var(--yellow); background: #243e61; }
+.year-picker-options button:last-child { border-bottom: 0; }
 
 .settings-drawer { display: flex; align-items: end; justify-content: flex-end; gap: 1.5rem; padding: .8rem clamp(1rem, 4vw, 3.5rem); background: #203958; border-top: 1px dashed #ffffff36; }
 .settings-drawer fieldset { display: flex; gap: .5rem; margin: 0; padding: 0; border: 0; }

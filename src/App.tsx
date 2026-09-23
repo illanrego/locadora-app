@@ -29,6 +29,7 @@ export default function App() {
   const [genreIndex, setGenreIndex] = useState(0);
   const [yearDraft, setYearDraft] = useState(1999);
   const [year, setYear] = useState(1999);
+  const [yearPickerOpen, setYearPickerOpen] = useState(false);
   const [type, setType] = useState<ContentType>('movie');
   const [pages, setPages] = useState<ShelfPage[]>([]);
   const [stand, setStand] = useState(0);
@@ -50,6 +51,7 @@ export default function App() {
   const [immersiveError, setImmersiveError] = useState('');
   const shelfRequestRef = useRef(0);
   const inspectionRequestRef = useRef(0);
+  const yearPickerRef = useRef<HTMLDivElement>(null);
   const t = copy[locale];
   const genre = GENRES[genreIndex];
 
@@ -166,6 +168,27 @@ export default function App() {
   }, [locale]);
 
   useEffect(() => {
+    if (!yearPickerOpen) return;
+
+    const selectedOption = yearPickerRef.current?.querySelector<HTMLElement>('[aria-selected="true"]');
+    selectedOption?.focus({ preventScroll: true });
+    selectedOption?.scrollIntoView?.({ block: 'nearest' });
+
+    const closeOutside = (event: PointerEvent) => {
+      if (!yearPickerRef.current?.contains(event.target as Node)) setYearPickerOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setYearPickerOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [yearPickerOpen]);
+
+  useEffect(() => {
     void readNativeCapabilities().then(setNativeCapabilities).catch(() => {
       setNativeCapabilities({ mpv: { available: false, version: null } });
     });
@@ -203,9 +226,36 @@ export default function App() {
           <form className="year-machine" onSubmit={(event) => { event.preventDefault(); applyYear(); }}>
             <span>{t.year}</span>
             <button type="button" onClick={() => setYearDraft((value) => clampYear(value - 1))} aria-label={locale === 'pt-BR' ? 'Ano anterior' : 'Previous year'}>−</button>
-            <select value={yearDraft} onChange={(event) => setYearDraft(Number(event.target.value))} aria-label={t.year}>
-              {YEAR_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
+            <div className="year-picker" ref={yearPickerRef}>
+              <button
+                type="button"
+                className="year-picker-trigger"
+                aria-label={t.year}
+                aria-haspopup="listbox"
+                aria-expanded={yearPickerOpen}
+                onClick={() => setYearPickerOpen((open) => !open)}
+              >
+                {yearDraft}
+              </button>
+              {yearPickerOpen && (
+                <div className="year-picker-options" role="listbox" aria-label={t.year}>
+                  {YEAR_OPTIONS.map((option) => (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={option === yearDraft}
+                      key={option}
+                      onClick={() => {
+                        setYearDraft(option);
+                        setYearPickerOpen(false);
+                      }}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button type="button" onClick={() => setYearDraft((value) => clampYear(value + 1))} aria-label={locale === 'pt-BR' ? 'Próximo ano' : 'Next year'}>+</button>
             <button type="submit">{t.go}</button>
           </form>

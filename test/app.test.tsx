@@ -89,6 +89,21 @@ describe('accessible Locadora shelf', () => {
     expect(screen.queryByRole('button', { name: /Agent 327/i })).not.toBeInTheDocument();
   });
 
+  it('opens the year choices in the app-rendered picker', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const picker = screen.getByRole('button', { name: 'Ano da loja' });
+    expect(picker).toHaveAttribute('aria-expanded', 'false');
+    await user.click(picker);
+
+    const options = screen.getByRole('listbox', { name: 'Ano da loja' });
+    expect(picker).toHaveAttribute('aria-expanded', 'true');
+    await user.click(within(options).getByRole('option', { name: '1998' }));
+    expect(picker).toHaveTextContent('1998');
+    expect(screen.queryByRole('listbox', { name: 'Ano da loja' })).not.toBeInTheDocument();
+  });
+
   it('keeps media configuration in secondary settings and desktop-only', async () => {
     const user = userEvent.setup();
     render(<App />);

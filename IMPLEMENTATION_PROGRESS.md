@@ -454,6 +454,14 @@ when they need user or real-environment confirmation.
   build`, and `git diff --check` passed. `npm run tauri -- build --no-bundle`
   refreshed `src-tauri/target/release/wills-locadora-player`. No manual visual
   acceptance was performed.
+- 2026-09-23: replaced the year field's system-native select with an accessible
+  app-rendered dropdown after WebKitGTK kept painting the native option popup
+  white despite explicit option styles. The closed field, scrollable year list,
+  and selected state now use controlled dark Locadora colors while retaining
+  the side minus/plus buttons. `npm run typecheck`, `npm test` (85 tests in 22
+  files), `npm run build`, and `git diff --check` passed. `npm run tauri -- build
+  --no-bundle` refreshed `src-tauri/target/release/wills-locadora-player`. No
+  manual visual acceptance was performed.
 
 ## Known blockers and risks
 
