@@ -23,7 +23,7 @@ export function VhsTape({ title, accent, locale, onInspect }: VhsTapeProps) {
       <button className="vhs-case" type="button" aria-label={label} onClick={() => onInspect(title)}>
         <span className="case-art" aria-hidden="true">
           {title.posterUrl
-            ? <img src={title.posterUrl} alt="" loading="lazy" />
+            ? <img src={title.posterUrl} alt="" loading="eager" decoding="async" />
             : <span className="case-initials">{initials(title.name)}</span>}
         </span>
         <span className="case-spine"><span>{title.year ?? '—'}</span></span>

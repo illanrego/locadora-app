@@ -60,9 +60,9 @@ export default function App() {
     try {
       const page = await loadShelf({ genres: genre.apiGenres, year, type, stand: nextStand, locale }, signal);
       if (request !== shelfRequestRef.current) return;
-      // Each stand is its own physical shelf. Replacing this page preserves the
-      // video-store browsing model instead of silently combining its tapes.
-      setPages([page]);
+      // Each API page is one physical stand. Additional pages stay separate in
+      // the DOM so the store grows downward without becoming one giant rack.
+      setPages((current) => nextStand === 0 ? [page] : [...current, page]);
       setStand(nextStand);
       setStatus('ready');
     } catch (cause) {
@@ -79,14 +79,18 @@ export default function App() {
     return () => controller.abort();
   }, [fetchPage]);
 
-  const allTitles = useMemo(() => pages[0]?.titles ?? [], [pages]);
-
-  const visibleTitles = useMemo(() => {
+  const visiblePages = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase(locale);
-    return normalized ? allTitles.filter((title) => title.name.toLocaleLowerCase(locale).includes(normalized)) : allTitles;
-  }, [allTitles, locale, query]);
+    return pages.map((page) => ({
+      ...page,
+      titles: normalized
+        ? page.titles.filter((title) => title.name.toLocaleLowerCase(locale).includes(normalized))
+        : page.titles,
+    }));
+  }, [locale, pages, query]);
+  const visibleTitles = useMemo(() => visiblePages.flatMap((page) => page.titles), [visiblePages]);
 
-  const hasNextStand = pages[0]?.hasNextStand ?? false;
+  const hasNextStand = pages.at(-1)?.hasNextStand ?? false;
   const source = pages[0]?.source ?? 'fixture';
   const inBasket = (title: DiscoveryTitle) => basket.some((item) => item.identity.canonicalKey === title.identity.canonicalKey);
   const toggleBasket = (title: DiscoveryTitle) => {
@@ -278,7 +282,7 @@ export default function App() {
             </Suspense>
           )}
 
-          {status === 'error' ? (
+          {status === 'error' && !pages.length ? (
             <div className="empty-state">
               <span className="empty-tape" aria-hidden="true" />
               <h2>{t.empty}</h2>
@@ -286,12 +290,33 @@ export default function App() {
               <button type="button" onClick={() => void fetchPage(stand)}>{t.retry}</button>
             </div>
           ) : (
-            <div id="shelf" className="shelf" aria-busy={status === 'loading'} hidden={immersiveEnabled && immersiveReady}>
-              {visibleTitles.map((title) => (
-                <VhsTape key={title.identity.canonicalKey} title={title} accent={genre.accent} locale={locale} onInspect={inspectTitle} />
+            <div id="shelf" className="shelf-stack" aria-busy={status === 'loading'} hidden={immersiveEnabled && immersiveReady}>
+              {visiblePages.map((page, pageIndex) => (
+                <section className="shelf-stand" aria-label={`${locale === 'pt-BR' ? 'Estante' : 'Stand'} ${pageIndex + 1}`} key={pageIndex}>
+                  <span className="shelf-stand-label" aria-hidden="true">
+                    {locale === 'pt-BR' ? 'ESTANTE' : 'STAND'} {String(pageIndex + 1).padStart(2, '0')}
+                  </span>
+                  <div className="shelf">
+                    {page.titles.map((title) => (
+                      <VhsTape key={title.identity.canonicalKey} title={title} accent={genre.accent} locale={locale} onInspect={inspectTitle} />
+                    ))}
+                  </div>
+                </section>
               ))}
-              {status === 'loading' && !visibleTitles.length && Array.from({ length: 8 }, (_, index) => <span className="tape-skeleton" key={index} aria-hidden="true" />)}
+              {status === 'loading' && !pages.length && (
+                <section className="shelf-stand" aria-label={locale === 'pt-BR' ? 'Abrindo primeira estante' : 'Opening first stand'}>
+                  <div className="shelf">
+                    {Array.from({ length: 8 }, (_, index) => <span className="tape-skeleton" key={index} aria-hidden="true" />)}
+                  </div>
+                </section>
+              )}
             </div>
+          )}
+
+          {status === 'error' && pages.length > 0 && (
+            <p className="shelf-load-error" role="alert">
+              {error} <button type="button" onClick={() => void fetchPage(stand + 1)}>{t.retry}</button>
+            </p>
           )}
 
           {hasNextStand && status !== 'loading' && (

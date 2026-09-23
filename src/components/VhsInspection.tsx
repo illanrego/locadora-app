@@ -57,20 +57,58 @@ function paintBackdrop(context: CanvasRenderingContext2D, accent: string): void 
   context.fillRect(32, TEX_H - 40, TEX_W - 64, 8);
 }
 
-function drawBarcode(context: CanvasRenderingContext2D, seed: string, x: number, y: number, width: number, height: number): void {
-  context.fillStyle = '#eadcae';
-  context.fillRect(x, y, width, height);
-  context.fillStyle = '#101827';
-  let cursor = x + 8;
-  let hash = 0;
-  for (const character of seed) hash = (hash * 31 + character.charCodeAt(0)) % 100000;
-  while (cursor < x + width - 12) {
-    const bar = 2 + ((hash >> (cursor % 7)) % 4);
-    context.fillRect(cursor, y + 8, bar, height - 30);
-    cursor += bar + 3 + (hash % 3);
+const EAN_L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'];
+const EAN_G = ['0100111', '0110011', '0011011', '0100001', '0011101', '0111001', '0000101', '0010001', '0001001', '0010111'];
+const EAN_R = ['1110010', '1100110', '1101100', '1000010', '1011100', '1001110', '1010000', '1000100', '1001000', '1110100'];
+const EAN_PARITY = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL'];
+
+function barcodeDigits(seed: string): string {
+  let hash = 2166136261;
+  for (const character of seed) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619) >>> 0;
   }
-  context.font = '700 18px "Courier New", monospace';
-  context.fillText(seed.slice(0, 18).toUpperCase(), x + 8, y + height - 8);
+  const sourceDigits = seed.replace(/\D/g, '');
+  const payload = `${String(hash).padStart(10, '0')}${sourceDigits}`.slice(-12).padStart(12, '0');
+  const weighted = [...payload].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
+  return `${payload}${(10 - (weighted % 10)) % 10}`;
+}
+
+function drawBarcode(context: CanvasRenderingContext2D, seed: string, x: number, y: number, width: number, height: number): void {
+  const digits = barcodeDigits(seed);
+  const parity = EAN_PARITY[Number(digits[0])];
+  const left = [...digits.slice(1, 7)].map((digit, index) => (parity[index] === 'G' ? EAN_G : EAN_L)[Number(digit)]).join('');
+  const right = [...digits.slice(7)].map((digit) => EAN_R[Number(digit)]).join('');
+  const modules = `101${left}01010${right}101`;
+  const moduleWidth = Math.max(1, Math.floor((width - 34) / modules.length));
+  const barsWidth = moduleWidth * modules.length;
+  const barsX = x + (width - barsWidth) / 2;
+  const barsY = y + 10;
+  const normalHeight = height - 43;
+
+  context.save();
+  context.fillStyle = '#f7f3e7';
+  context.fillRect(x, y, width, height);
+  context.strokeStyle = '#101010';
+  context.lineWidth = 2;
+  context.strokeRect(x + 1, y + 1, width - 2, height - 2);
+  context.fillStyle = '#101010';
+  for (let index = 0; index < modules.length; index += 1) {
+    if (modules[index] !== '1') continue;
+    const guard = index < 3 || (index >= 45 && index < 50) || index >= 92;
+    context.fillRect(barsX + index * moduleWidth, barsY, moduleWidth, normalHeight + (guard ? 7 : 0));
+  }
+  context.font = '700 17px "Courier New", monospace';
+  context.textAlign = 'center';
+  context.fillText(`${digits[0]}  ${digits.slice(1, 7)}  ${digits.slice(7)}`, x + width / 2, y + height - 8);
+  context.restore();
+}
+
+function ellipsize(context: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (context.measureText(text).width <= maxWidth) return text;
+  let end = text.length;
+  while (end > 0 && context.measureText(`${text.slice(0, end).trimEnd()}…`).width > maxWidth) end -= 1;
+  return `${text.slice(0, end).trimEnd()}…`;
 }
 
 function wrapText(
@@ -83,23 +121,26 @@ function wrapText(
   maxLines: number,
 ): void {
   const words = text.split(/\s+/).filter(Boolean);
+  if (!words.length || maxLines < 1) return;
+  const output: string[] = [];
   let line = '';
-  let lines = 0;
-  for (const word of words) {
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
     const candidate = line ? `${line} ${word}` : word;
     if (context.measureText(candidate).width > maxWidth && line) {
-      context.fillText(line, x, y + lines * lineHeight);
-      lines += 1;
-      line = word;
-      if (lines >= maxLines) {
-        context.fillText(`${line}…`, x, y + lines * lineHeight);
-        return;
+      output.push(line);
+      if (output.length === maxLines - 1) {
+        output.push(ellipsize(context, words.slice(index).join(' '), maxWidth));
+        line = '';
+        break;
       }
+      line = word;
     } else {
       line = candidate;
     }
   }
-  if (line && lines < maxLines) context.fillText(line, x, y + lines * lineHeight);
+  if (line && output.length < maxLines) output.push(ellipsize(context, line, maxWidth));
+  output.slice(0, maxLines).forEach((value, index) => context.fillText(value, x, y + index * lineHeight));
 }
 
 function drawFront(context: CanvasRenderingContext2D, title: DiscoveryTitle, locale: Locale, image: HTMLImageElement | null): void {
@@ -154,15 +195,17 @@ function drawBack(
   const t = copy[locale];
   const pt = locale === 'pt-BR';
   paintBackdrop(context, accent);
+  context.save();
+  context.beginPath();
+  context.rect(54, 50, TEX_W - 108, TEX_H - 100);
+  context.clip();
 
   context.fillStyle = '#eadcae';
   context.font = '900 24px "Arial Narrow", Arial, sans-serif';
-  context.fillText("WILL'S LOCADORA · ACERVO EM VHS", 72, 92);
-  context.fillText(
-    `${title.identity.type === 'series' ? (pt ? 'SÉRIE PARA CASA' : 'HOME VIDEO SERIES') : (pt ? 'LONGA-METRAGEM' : 'FEATURE PRESENTATION')} · ${title.year ?? (pt ? 'ANO DESCONHECIDO' : 'UNKNOWN YEAR')}`,
-    72,
-    130,
-  );
+  context.fillText(ellipsize(context, "WILL'S LOCADORA · ACERVO EM VHS", 490), 72, 92);
+  context.font = '800 19px "Courier New", monospace';
+  const edition = `${title.identity.type === 'series' ? (pt ? 'SÉRIE PARA CASA' : 'HOME VIDEO SERIES') : (pt ? 'LONGA-METRAGEM' : 'FEATURE PRESENTATION')} · ${title.year ?? (pt ? 'ANO DESCONHECIDO' : 'UNKNOWN YEAR')}`;
+  context.fillText(ellipsize(context, edition, 490), 72, 130);
 
   drawBarcode(context, externalId(title.identity, 'tmdb') ?? title.identity.canonicalKey, 596, 68, 356, 126);
 
@@ -178,7 +221,7 @@ function drawBack(
     title.runtimeMinutes ? `${title.runtimeMinutes} min` : null,
     title.certificationBR ? `BR ${title.certificationBR}` : null,
   ].filter(Boolean).join('  ·  ') || (pt ? 'EDIÇÃO DE CATÁLOGO' : 'CATALOGUE EDITION');
-  context.fillText(meta, 72, 372);
+  context.fillText(ellipsize(context, meta, TEX_W - 144), 72, 372);
 
   const frames: Array<[HTMLImageElement | null, number, number, number, number]> = [
     [poster, 72, 405, 348, 285],
@@ -236,7 +279,11 @@ function drawBack(
   context.fillText(pt ? 'ONDE ASSISTIR NO BRASIL' : 'STREAMING IN BRAZIL', 72, 1005);
   context.fillStyle = '#eadcae';
   context.font = '700 20px Arial, sans-serif';
-  context.fillText(title.providers.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED'), 340, 1005);
+  context.fillText(
+    ellipsize(context, title.providers.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED'), TEX_W - 412),
+    340,
+    1005,
+  );
 
   const credits: Array<[string, string]> = [
     [pt ? 'DIREÇÃO' : 'DIRECTED BY', title.director.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED')],
@@ -256,12 +303,13 @@ function drawBack(
 
   context.fillStyle = '#b5aa92';
   context.font = '700 19px "Courier New", monospace';
-  context.fillText(
+  context.fillText(ellipsize(
+    context,
     `TMDB ${externalId(title.identity, 'tmdb') ?? '—'}  ·  ${externalId(title.identity, 'imdb') ?? '—'}`,
-    72,
-    1325,
-  );
-  context.fillText(t.vhsFooter, 72, 1480);
+    TEX_W - 144,
+  ), 72, 1325);
+  context.fillText(ellipsize(context, t.vhsFooter, TEX_W - 144), 72, 1480);
+  context.restore();
 }
 
 const ACCENT = '#e24730';

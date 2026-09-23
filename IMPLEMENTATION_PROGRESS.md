@@ -90,8 +90,9 @@ inspection flow, then continue the immersive shelf as an opt-in experiment
 instead of promoting it as the primary browsing surface.
 
 1. Done: the accessible 2D shelf is now the default surface and the immersive
-   shelf is an explicit opt-in. Loading another stand replaces the displayed
-   shelf rather than merging titles. The counter action is "Alugar" and rents
+   shelf is an explicit opt-in. Loading another stand appends a distinct
+   physical rack below the prior rack instead of replacing it or merging both
+   result pages into one giant shelf. The counter action is "Alugar" and rents
    only the tapes selected at checkout, and every stream candidate is listed
    while watching so sources can be switched without waiting for a failure.
 2. In progress: the 3D tape inspection (port of the reference web inspector),
@@ -442,6 +443,17 @@ when they need user or real-environment confirmation.
   `npm run build`, and `git diff --check` passed. `npm run tauri -- build
   --no-bundle` refreshed `src-tauri/target/release/wills-locadora-player`. No
   browser/manual visual or playback acceptance was performed.
+- 2026-09-23: corrected stand pagination after clarifying the physical-store
+  model. Each catalogue page now remains its own bordered rack and subsequent
+  stands append vertically; titles are filtered per stand rather than flattened
+  into one rack. Appended cover images request eagerly to avoid WebKit failing
+  to activate newly inserted lazy images. Tape-back text now honors its exact
+  line limit, single-line metadata is width-bounded, the printable area is
+  clipped, and the random barcode was replaced with a deterministic EAN-13-like
+  rendering. `npm run typecheck`, `npm test` (84 tests in 22 files), `npm run
+  build`, and `git diff --check` passed. `npm run tauri -- build --no-bundle`
+  refreshed `src-tauri/target/release/wills-locadora-player`. No manual visual
+  acceptance was performed.
 
 ## Known blockers and risks
 
