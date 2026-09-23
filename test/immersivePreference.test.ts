@@ -6,11 +6,11 @@ import { readImmersiveEnabled, writeImmersiveEnabled } from '../src/locadora/imm
 beforeEach(() => window.localStorage.clear());
 
 describe('Locadora immersive preference', () => {
-  it('starts on the immersive shelf and remembers an explicit opt-out', () => {
-    expect(readImmersiveEnabled()).toBe(true);
-    writeImmersiveEnabled(false);
+  it('starts on the 2D shelf and remembers an explicit immersive opt-in', () => {
     expect(readImmersiveEnabled()).toBe(false);
     writeImmersiveEnabled(true);
     expect(readImmersiveEnabled()).toBe(true);
+    writeImmersiveEnabled(false);
+    expect(readImmersiveEnabled()).toBe(false);
   });
 });

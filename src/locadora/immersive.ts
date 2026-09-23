@@ -21,15 +21,15 @@ export const IMMERSIVE_THEMES: Record<string, ImmersiveTheme> = Object.freeze({
 
 export const DEFAULT_IMMERSIVE_THEME = IMMERSIVE_THEMES.family;
 
-const IMMERSIVE_KEY = 'locadora:immersive:v1:enabled';
+const IMMERSIVE_KEY = 'locadora:immersive:v2:enabled';
 
 export function readImmersiveEnabled(): boolean {
   try {
-    // The 3D shelf is the intended surface; the 2D shelf stays as the accessible
-    // fallback and is restored automatically when WebGL cannot start.
-    return window.localStorage.getItem(IMMERSIVE_KEY) !== 'false';
+    // Keep the dependable, accessible 2D shelf as the starting surface while
+    // immersive browsing continues as an opt-in enhancement.
+    return window.localStorage.getItem(IMMERSIVE_KEY) === 'true';
   } catch {
-    return true;
+    return false;
   }
 }
 

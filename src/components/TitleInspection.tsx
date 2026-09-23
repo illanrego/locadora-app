@@ -51,11 +51,13 @@ export function TitleInspection({
         ].filter(Boolean).join(' · ')}
       </p>
       <button type="button" className="tape-close" onClick={onClose} aria-label={pt ? 'Fechar inspeção' : 'Close inspection'}>×</button>
-      <VhsInspection title={title} locale={locale} inBasket={isInBasket} onInspectClose={onClose} />
-      <div className="tape-actions" role="group" aria-label={pt ? 'Ações da fita' : 'Tape actions'}>
+      <VhsInspection title={title} locale={locale} onInspectClose={onClose} />
+      <div className="tape-member-actions" role="group" aria-label={pt ? 'Cesta' : 'Basket'}>
         <button type="button" className="tape-primary" onClick={onToggleBasket} disabled={!isInBasket && basketFull}>
           {isInBasket ? t.removeBasket : t.addBasket}
         </button>
+      </div>
+      <div className="tape-actions" role="group" aria-label={pt ? 'Ações da fita' : 'Tape actions'}>
         <button type="button" disabled={!canWatch} title={canWatch ? undefined : t.development} onClick={onWatch}>
           {canWatch ? (pt ? 'Assistir' : 'Watch') : t.watchDevelopment}
         </button>

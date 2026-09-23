@@ -76,6 +76,14 @@ pub struct PublicShelfRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PublicTitleRequest {
+    content_type: String,
+    tmdb_id: u32,
+    locale: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MemberCredentials {
     identifier: String,
     password: String,
@@ -1362,6 +1370,27 @@ pub async fn fetch_public_shelf(request: PublicShelfRequest) -> Result<Value, St
         .map_err(|error| error.to_string())
 }
 
+fn public_title_url(request: &PublicTitleRequest) -> Result<String, String> {
+    if !matches!(request.content_type.as_str(), "movie" | "series")
+        || request.tmdb_id == 0
+        || !matches!(request.locale.as_str(), "pt-BR" | "en-US")
+    {
+        return Err("Invalid public title request".into());
+    }
+    Ok(format!(
+        "{PUBLIC_API_BASE}/title?type={}&id=tmdb%3A{}&locale={}",
+        request.content_type, request.tmdb_id, request.locale,
+    ))
+}
+
+#[tauri::command]
+pub async fn fetch_public_title(request: PublicTitleRequest) -> Result<Value, String> {
+    let url = public_title_url(&request)?;
+    fetch_bounded_https_json(&url)
+        .await
+        .map_err(|error| error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1375,6 +1404,29 @@ mod tests {
         assert_eq!(
             PUBLIC_API_BASE,
             "https://locadora-api.willstartpage.workers.dev/v1"
+        );
+    }
+
+    #[test]
+    fn public_title_request_is_bounded_to_the_catalogue_contract() {
+        let request = PublicTitleRequest {
+            content_type: "movie".into(),
+            tmdb_id: 603,
+            locale: "pt-BR".into(),
+        };
+        assert_eq!(
+            public_title_url(&request).as_deref(),
+            Ok(
+                "https://locadora-api.willstartpage.workers.dev/v1/title?type=movie&id=tmdb%3A603&locale=pt-BR"
+            )
+        );
+        assert!(
+            public_title_url(&PublicTitleRequest {
+                content_type: "movie&stand=1".into(),
+                tmdb_id: 603,
+                locale: "pt-BR".into(),
+            })
+            .is_err()
         );
     }
 

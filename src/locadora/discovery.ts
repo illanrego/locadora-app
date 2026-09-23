@@ -1,5 +1,5 @@
-import { normalizeDiscoveryTitle, type ContentType, type DiscoveryTitle, type PublicTitlePayload } from '../domain/content';
-import { fetchNativePublicShelf, isNativeShell } from '../platform/nativeBridge';
+import { externalId, normalizeDiscoveryTitle, type ContentType, type DiscoveryTitle, type PublicTitlePayload } from '../domain/content';
+import { fetchNativePublicShelf, fetchNativePublicTitle, isNativeShell } from '../platform/nativeBridge';
 import { FIXTURE_TITLES } from './fixture';
 
 export interface ShelfQuery {
@@ -34,6 +34,14 @@ function endpoint(): string | null {
   } catch {
     return null;
   }
+}
+
+function publicTitlePayload(body: unknown): PublicTitlePayload | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const record = body as Record<string, unknown>;
+  const meta = record.meta;
+  if (meta && typeof meta === 'object' && !Array.isArray(meta)) return meta as PublicTitlePayload;
+  return record as PublicTitlePayload;
 }
 
 export async function loadShelf(query: ShelfQuery, signal?: AbortSignal): Promise<ShelfPage> {
@@ -71,4 +79,37 @@ export async function loadShelf(query: ShelfQuery, signal?: AbortSignal): Promis
     hasNextStand: Boolean(body.hasNextStand),
     source: 'public-api',
   };
+}
+
+/**
+ * Shelf responses deliberately stay lightweight. Inspection fetches the public
+ * metadata record separately so credits and availability never become member
+ * or media-engine state.
+ */
+export async function loadTitleDetails(
+  title: DiscoveryTitle,
+  locale: ShelfQuery['locale'],
+  signal?: AbortSignal,
+): Promise<DiscoveryTitle> {
+  const tmdbId = Number(externalId(title.identity, 'tmdb'));
+  if (!Number.isSafeInteger(tmdbId) || tmdbId <= 0) return title;
+
+  let body: unknown;
+  if (isNativeShell()) {
+    body = await fetchNativePublicTitle({ contentType: title.identity.type, tmdbId, locale });
+  } else {
+    const base = endpoint();
+    if (!base) return title;
+    const url = new URL(`${base}/title`);
+    url.search = new URLSearchParams({ type: title.identity.type, id: `tmdb:${tmdbId}`, locale }).toString();
+    const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
+    if (!response.ok) return title;
+    body = await response.json();
+  }
+
+  const payload = publicTitlePayload(body);
+  if (!payload) return title;
+  const normalized = normalizeDiscoveryTitle(payload);
+  if (!normalized || normalized.identity.canonicalKey !== title.identity.canonicalKey) return title;
+  return normalized;
 }

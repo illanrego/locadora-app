@@ -7,7 +7,7 @@ import { copy, type Locale } from '../locadora/catalog';
 /**
  * 3D tape inspection, ported from the reference web inspector
  * (`locadora/public/vhs-3d.mjs`): one VHS case with painted front and back
- * faces, drag to rotate, double-click/Enter to flip, wheel or pinch to zoom.
+ * faces, drag to rotate, tap/Enter to flip, wheel or pinch to zoom.
  *
  * Every label lives on the tape, as in the reference. The DOM action row stays
  * outside this component so browsing remains usable when WebGL is unavailable.
@@ -40,7 +40,6 @@ function fittedCameraDistance(width: number, height: number): number {
 interface VhsInspectionProps {
   title: DiscoveryTitle;
   locale: Locale;
-  inBasket: boolean;
   onInspectClose: () => void;
 }
 
@@ -175,13 +174,15 @@ function drawBack(
   context.font = '700 26px "Courier New", monospace';
   const meta = [
     title.genres.slice(0, 3).join(' · '),
-    externalId(title.identity, 'imdb') ?? null,
+    title.imdbRating ? `IMDb ★ ${title.imdbRating}` : null,
+    title.runtimeMinutes ? `${title.runtimeMinutes} min` : null,
+    title.certificationBR ? `BR ${title.certificationBR}` : null,
   ].filter(Boolean).join('  ·  ') || (pt ? 'EDIÇÃO DE CATÁLOGO' : 'CATALOGUE EDITION');
   context.fillText(meta, 72, 372);
 
   const frames: Array<[HTMLImageElement | null, number, number, number, number]> = [
     [poster, 72, 405, 348, 285],
-    [backdrop, 448, 405, 504, 285],
+    [backdrop ?? poster, 448, 405, 504, 285],
   ];
   for (const [image, x, y, width, height] of frames) {
     context.fillStyle = '#05080d';
@@ -219,23 +220,53 @@ function drawBack(
     72,
     806,
     TEX_W - 144,
-    36,
-    6,
+    32,
+    4,
   );
 
+  context.strokeStyle = '#b7392d';
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(72, 962);
+  context.lineTo(TEX_W - 72, 962);
+  context.stroke();
+
+  context.fillStyle = '#ffd447';
+  context.font = '900 20px "Arial Narrow", Arial, sans-serif';
+  context.fillText(pt ? 'ONDE ASSISTIR NO BRASIL' : 'STREAMING IN BRAZIL', 72, 1005);
+  context.fillStyle = '#eadcae';
+  context.font = '700 20px Arial, sans-serif';
+  context.fillText(title.providers.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED'), 340, 1005);
+
+  const credits: Array<[string, string]> = [
+    [pt ? 'DIREÇÃO' : 'DIRECTED BY', title.director.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED')],
+    [pt ? 'ROTEIRO' : 'WRITTEN BY', title.writer.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED')],
+    [pt ? 'ELENCO' : 'STARRING', title.cast.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED')],
+  ];
+  let creditY = 1060;
+  for (const [label, value] of credits) {
+    context.fillStyle = '#ffd447';
+    context.font = '900 20px "Arial Narrow", Arial, sans-serif';
+    context.fillText(label, 72, creditY);
+    context.fillStyle = '#eadcae';
+    context.font = '700 20px Arial, sans-serif';
+    wrapText(context, value, 250, creditY, TEX_W - 322, 26, 2);
+    creditY += 70;
+  }
+
   context.fillStyle = '#b5aa92';
-  context.font = '700 22px "Courier New", monospace';
+  context.font = '700 19px "Courier New", monospace';
   context.fillText(
     `TMDB ${externalId(title.identity, 'tmdb') ?? '—'}  ·  ${externalId(title.identity, 'imdb') ?? '—'}`,
     72,
-    1140,
+    1325,
   );
   context.fillText(t.vhsFooter, 72, 1480);
 }
 
 const ACCENT = '#e24730';
 
-export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsInspectionProps) {
+export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [flat, setFlat] = useState(false);
   const [focused, setFocused] = useState<'front' | 'back' | 'whole'>('whole');
@@ -333,6 +364,8 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
         ridge.position.x = x;
         group.add(ridge);
       }
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
 
       // The poster is only painted onto the cover when the canvas stays clean;
       // a cross-origin image without CORS headers would taint it and fail the
@@ -359,17 +392,21 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
         image.src = url;
       };
 
+      let posterImage: HTMLImageElement | null = null;
+      let backdropImage: HTMLImageElement | null = null;
+      const redrawBack = () => {
+        drawBack(backContext, title, locale, ACCENT, posterImage, backdropImage);
+        backTexture.needsUpdate = true;
+      };
       paintImage(title.posterUrl, (image) => {
+        posterImage = image;
         drawFront(frontContext, title, locale, image);
         frontTexture.needsUpdate = true;
-      });
-      paintImage(title.posterUrl, (image) => {
-        drawBack(backContext, title, locale, ACCENT, image, null);
-        backTexture.needsUpdate = true;
+        redrawBack();
       });
       paintImage(title.backdropUrl, (image) => {
-        drawBack(backContext, title, locale, ACCENT, null, image);
-        backTexture.needsUpdate = true;
+        backdropImage = image;
+        redrawBack();
       });
 
       const resize = () => {
@@ -418,6 +455,21 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
       };
       canvas.setAttribute('aria-label', `${title.name} VHS · ${text.inspectLabel}`);
 
+      const hitCase = (event: PointerEvent): boolean => {
+        const bounds = canvas.getBoundingClientRect();
+        if (!bounds.width || !bounds.height) return false;
+        pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+        pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+        scene.updateMatrixWorld(true);
+        raycaster.setFromCamera(pointer, camera);
+        return raycaster.intersectObjects([shell, front, back], false).length > 0;
+      };
+      const flipCase = () => {
+        const nextTarget: 'front' | 'back' = Math.abs(targetY / Math.PI) % 2 < 1 ? 'back' : 'front';
+        focusTarget(nextTarget);
+        setFocused(nextTarget);
+      };
+
       const onPointerDown = (event: PointerEvent) => {
         if (pointerId !== null) return;
         pointerId = event.pointerId;
@@ -448,12 +500,12 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
           targetY += velocity * 2.5;
           return;
         }
-        // A tap on the case flips it; closing stays on the dialog's own button.
-        onDoubleClick();
-      };
-      const onDoubleClick = () => {
-        targetY += Math.PI;
-        focusTarget(targetY % (2 * Math.PI) === 0 ? 'front' : 'back');
+        // The surrounding stage is an exit target; only the physical case flips.
+        if (!hitCase(event)) {
+          onInspectClose();
+          return;
+        }
+        flipCase();
       };
       const onWheel = (event: WheelEvent) => {
         event.preventDefault();
@@ -464,7 +516,7 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
         else if (event.key === 'ArrowRight') targetY += 0.22;
         else if (event.key === 'ArrowUp') targetX = Math.max(-0.72, targetX - 0.16);
         else if (event.key === 'ArrowDown') targetX = Math.min(0.72, targetX + 0.16);
-        else if (event.key === 'Enter' || event.key === ' ') onDoubleClick();
+        else if (event.key === 'Enter' || event.key === ' ') flipCase();
         else if (event.key === '+' || event.key === '=') zoomRef.current(ZOOM_STEP);
         else if (event.key === '-') zoomRef.current(-ZOOM_STEP);
         else return;
@@ -484,7 +536,6 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
       canvas.addEventListener('pointerdown', onPointerDown);
       canvas.addEventListener('pointermove', onPointerMove);
       canvas.addEventListener('pointerup', onPointerUp);
-      canvas.addEventListener('dblclick', onDoubleClick);
       canvas.addEventListener('wheel', onWheel, { passive: false });
       canvas.addEventListener('keydown', onKeyDown);
       canvas.addEventListener('touchmove', onTouchMove, { passive: true });
@@ -499,7 +550,6 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
         canvas.removeEventListener('pointerdown', onPointerDown);
         canvas.removeEventListener('pointermove', onPointerMove);
         canvas.removeEventListener('pointerup', onPointerUp);
-        canvas.removeEventListener('dblclick', onDoubleClick);
         canvas.removeEventListener('wheel', onWheel);
         canvas.removeEventListener('keydown', onKeyDown);
         canvas.removeEventListener('touchmove', onTouchMove);
@@ -523,7 +573,9 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
 
   return (
     <div className="vhs-stage">
-      <div ref={hostRef} className="vhs-stage-host">
+      <div ref={hostRef} className="vhs-stage-host" onClick={(event) => {
+        if (event.target === event.currentTarget) onInspectClose();
+      }}>
         {flat && (
           <div className="vhs-stage-flat">
             {title.posterUrl

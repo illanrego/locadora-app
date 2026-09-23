@@ -68,9 +68,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .browse-controls label > span, .year-machine > span, .settings-drawer legend, .language-setting > span { color: var(--yellow); font: 800 .6rem/1 "Courier New", monospace; letter-spacing: .12em; text-transform: uppercase; }
 .browse-controls select, .browse-controls input { min-height: 40px; width: 100%; border: 2px solid #3f526b; border-radius: 0; color: var(--cream); background: #101a28; }
 .browse-controls select, .search-control input { padding: .55rem .65rem; }
+.browse-controls .genre-picker { color: var(--blue); background: var(--paper); border-color: #f8e8bc; font-weight: 800; }
+.browse-controls .genre-picker option { color: var(--blue); background: var(--paper); }
 .year-machine { grid-template-columns: 34px 92px 34px 44px; }
 .year-machine > span { grid-column: 1 / -1; }
-.year-machine input { padding: .25rem; color: #ff765a; text-align: center; font: 800 1.35rem/1 "Courier New", monospace; text-shadow: 0 0 12px #f2381e; }
+.year-machine select { padding: .25rem; color: #ff765a; text-align: center; font: 800 1.1rem/1 "Courier New", monospace; text-shadow: 0 0 12px #f2381e; }
 .year-machine button { min-height: 40px; padding: .45rem; }
 
 .settings-drawer { display: flex; align-items: end; justify-content: flex-end; gap: 1.5rem; padding: .8rem clamp(1rem, 4vw, 3.5rem); background: #203958; border-top: 1px dashed #ffffff36; }
@@ -157,12 +159,13 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .tape-modal.title-modal { position: fixed; inset: 0; display: block; width: 100vw; max-width: none; height: 100vh; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; overflow: hidden; }
 .tape-modal::backdrop { background: rgba(8, 6, 5, .78); backdrop-filter: blur(3px); }
 .tape-close { position: fixed; top: 1rem; right: 1rem; min-width: 44px; min-height: 44px; color: var(--cream); background: #243e61; border: 2px solid #050a12; box-shadow: 3px 3px #08101d; font-size: 1.4rem; cursor: pointer; }
+.tape-member-actions { position: fixed; z-index: 4; top: 50%; left: clamp(.75rem, 9vw, 7rem); transform: translateY(-50%); }
 .tape-actions { position: fixed; z-index: 4; top: 50%; right: clamp(.75rem, 5vw, 4rem); display: grid; width: min(220px, 32vw); gap: .4rem; transform: translateY(-50%); }
-.tape-actions button { min-height: 42px; padding: .6rem .8rem; color: var(--cream); background: #243e61; border: 2px solid #050a12; box-shadow: 3px 3px #08101d; font: 800 .64rem/1 "Courier New", monospace; letter-spacing: .035em; text-transform: uppercase; cursor: pointer; }
-.tape-actions button:hover:not(:disabled) { color: var(--ink); background: var(--yellow); }
+.tape-member-actions button, .tape-actions button { min-height: 42px; padding: .6rem .8rem; color: var(--cream); background: #243e61; border: 2px solid #050a12; box-shadow: 3px 3px #08101d; font: 800 .64rem/1 "Courier New", monospace; letter-spacing: .035em; text-transform: uppercase; cursor: pointer; }
+.tape-member-actions button:hover:not(:disabled), .tape-actions button:hover:not(:disabled) { color: var(--ink); background: var(--yellow); }
 .tape-actions button[aria-pressed="true"] { color: var(--ink); background: var(--yellow); }
-.tape-actions button:disabled { opacity: .58; cursor: not-allowed; }
-.tape-actions .tape-primary { position: fixed; top: 50%; right: auto; left: clamp(.75rem, 9vw, 7rem); background: var(--red); transform: translateY(-50%); }
+.tape-member-actions button:disabled, .tape-actions button:disabled { opacity: .58; cursor: not-allowed; }
+.tape-member-actions .tape-primary { background: var(--red); }
 .tape-actions .text-action { background: transparent; border-color: #ffffff40; box-shadow: none; }
 .tape-reviews { position: fixed; z-index: 5; right: clamp(.75rem, 5vw, 4rem); bottom: 1rem; width: min(420px, 32vw); max-height: 42vh; overflow: auto; padding: 1rem; background: #080d15; border: 2px solid #ffffff2c; }
 .inspection-copy { padding: clamp(1.4rem, 4vw, 3.5rem); }
@@ -304,9 +307,9 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   .search-control { grid-column: 1 / -1; }
   .settings-drawer { align-items: stretch; flex-wrap: wrap; justify-content: flex-start; }
   .title-modal { grid-template-columns: minmax(190px, .7fr) 1fr; }
-  .tape-actions { top: auto; right: 50%; bottom: .75rem; display: flex; flex-wrap: wrap; justify-content: center; width: min(760px, 94vw); transform: translateX(50%); }
-  .tape-actions .tape-primary { position: static; transform: none; }
-  .tape-reviews { right: 3vw; bottom: 5rem; width: min(760px, 94vw); }
+  .tape-member-actions { top: auto; bottom: .75rem; left: 50%; transform: translateX(-50%); }
+  .tape-actions { top: auto; right: 50%; bottom: 4rem; display: flex; flex-wrap: wrap; justify-content: center; width: min(760px, 94vw); transform: translateX(50%); }
+  .tape-reviews { right: 3vw; bottom: 10rem; width: min(760px, 94vw); }
   .inspection-art { min-height: 480px; }
 }
 
@@ -337,8 +340,9 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   .case-label small { display: none; }
   .tape-skeleton { height: 168px; aspect-ratio: auto; }
   .title-modal { display: block; }
-  .tape-actions { bottom: .5rem; }
-  .tape-reviews { right: 3vw; bottom: 4.5rem; max-height: 38vh; }
+  .tape-member-actions { bottom: .5rem; }
+  .tape-actions { bottom: 3.8rem; }
+  .tape-reviews { right: 3vw; bottom: 9.5rem; max-height: 38vh; }
   .inspection-art { min-height: 260px; border: 0; border-bottom: 8px solid #080b10; }
   .inspection-copy { padding: 1.3rem; }
   .basket-list li { align-items: stretch; flex-direction: column; }

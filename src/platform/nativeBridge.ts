@@ -143,6 +143,15 @@ export async function fetchNativePublicShelf(request: {
   return invoke('fetch_public_shelf', { request });
 }
 
+export async function fetchNativePublicTitle(request: {
+  contentType: ContentType;
+  tmdbId: number;
+  locale: 'pt-BR' | 'en-US';
+}): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Native catalogue transport is unavailable');
+  return invoke('fetch_public_title', { request });
+}
+
 export async function startNativePlayer(): Promise<void> {
   if (!isNativeShell()) throw new Error('Native player is unavailable');
   return invoke('player_start');

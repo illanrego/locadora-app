@@ -85,18 +85,20 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: player UX parity with the web version, in this order.
+Next task: obtain the user's visual acceptance for the current 2D shelf and
+inspection flow, then continue the immersive shelf as an opt-in experiment
+instead of promoting it as the primary browsing surface.
 
-1. Done: the 3D shelf is the default surface (2D stays as the WebGL fallback),
-   the counter action is "Alugar" and rents only the tapes selected at checkout,
-   and every stream candidate is listed while watching so sources can be
-   switched without waiting for a failure. The inspection shows poster art,
-   type, year, genres, synopsis, and identifiers.
+1. Done: the accessible 2D shelf is now the default surface and the immersive
+   shelf is an explicit opt-in. Loading another stand replaces the displayed
+   shelf rather than merging titles. The counter action is "Alugar" and rents
+   only the tapes selected at checkout, and every stream candidate is listed
+   while watching so sources can be switched without waiting for a failure.
 2. In progress: the 3D tape inspection (port of the reference web inspector),
-   which also needs the remaining reference details for the counter flow. The
-   inspection viewport now fills the full dialog like the web reference; the
-  case is no longer constrained to a 620px canvas or cropped focus zoom, and
-  desktop actions float beside the tape while smaller layouts use a dock.
+   which now fills the viewport, preserves both poster and backdrop after either
+   image load order, fetches bounded public credits/rating/runtime/classification
+   and Brazilian provider metadata, and closes when its surrounding stage is
+   clicked. It still needs the user's visual acceptance.
 3. Pending: subtitles. Add-on subtitle tracks are fetched and handed to Stremio
    Video, but with the player in its own window its HTML subtitle renderer draws
    into a hidden container, so those tracks never appear. Fix by handing the
@@ -411,6 +413,21 @@ when they need user or real-environment confirmation.
   explicitly occupies the viewport, and the focus controls overlay the canvas.
   `npm run check` passed with 82 tests in 21 files. No manual visual/playback
   acceptance was performed.
+- 2026-09-23: made the 2D shelf the default while immersive remains an explicit
+  opt-in, and changed "Carregar outra estante" to replace its physical shelf
+  instead of merging its titles. Replaced the numeric year field with a native
+  dropdown while retaining the side minus/plus controls, made the genre chooser
+  dark Locadora blue on paper for contrast, and split the Cesta action from the
+  utility dock so it cannot overlap saved/favorite controls. Inspection now
+  closes when a short click lands outside the rendered case, retains poster and
+  backdrop independently regardless of their image-load order, and requests
+  bounded public title metadata for rating, runtime, BR classification, main
+  credits, and BR providers through a new fixed native title route. `npm run
+  typecheck`, `npm test` (83 tests in 21 files), `npm run build`,
+  `npm run check:native` (19 passed, 2 ignored), and `git diff --check` passed.
+  `npm run tauri -- build --no-bundle` then refreshed
+  `src-tauri/target/release/wills-locadora-player`. No browser/manual visual or
+  playback acceptance was performed.
 
 ## Known blockers and risks
 

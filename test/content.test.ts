@@ -22,4 +22,29 @@ describe('normalizeDiscoveryTitle', () => {
     expect(normalizeDiscoveryTitle({ id: 1, name: 'Missing type' })).toBeNull();
     expect(normalizeDiscoveryTitle({ id: 1, type: 'movie', name: 'Unsafe', poster: 'file:///secret' })?.posterUrl).toBeNull();
   });
+
+  it('keeps bounded inspection credits and catalogue metadata', () => {
+    const title = normalizeDiscoveryTitle({
+      id: 603,
+      type: 'movie',
+      name: 'The Matrix',
+      imdbRating: '8.7',
+      runtime: '136 min',
+      certificationBR: '14',
+      director: ['Lana Wachowski', 'Lana Wachowski', 42],
+      writer: ['Lilly Wachowski'],
+      cast: ['Keanu Reeves', 'Laurence Fishburne'],
+      availabilityBR: { providers: ['Netflix', 'Netflix', 9] },
+    });
+
+    expect(title).toMatchObject({
+      imdbRating: '8.7',
+      runtimeMinutes: 136,
+      certificationBR: '14',
+      director: ['Lana Wachowski'],
+      writer: ['Lilly Wachowski'],
+      cast: ['Keanu Reeves', 'Laurence Fishburne'],
+      providers: ['Netflix'],
+    });
+  });
 });

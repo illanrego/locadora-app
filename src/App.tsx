@@ -1,7 +1,7 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { externalId, type ContentType, type DiscoveryTitle } from './domain/content';
 import { GENRES, copy, type Locale } from './locadora/catalog';
-import { loadShelf, type ShelfPage } from './locadora/discovery';
+import { loadShelf, loadTitleDetails, type ShelfPage } from './locadora/discovery';
 import { SidePanel } from './components/SidePanel';
 import { MediaSettings } from './components/MediaSettings';
 import { TitleInspection } from './components/TitleInspection';
@@ -22,6 +22,8 @@ function clampYear(value: number): number {
   return Math.min(new Date().getFullYear(), Math.max(1920, Math.round(value)));
 }
 
+const YEAR_OPTIONS = Array.from({ length: new Date().getFullYear() - 1920 + 1 }, (_, index) => new Date().getFullYear() - index);
+
 export default function App() {
   const [locale, setLocale] = useState<Locale>('pt-BR');
   const [genreIndex, setGenreIndex] = useState(0);
@@ -29,6 +31,7 @@ export default function App() {
   const [year, setYear] = useState(1999);
   const [type, setType] = useState<ContentType>('movie');
   const [pages, setPages] = useState<ShelfPage[]>([]);
+  const [stand, setStand] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -45,18 +48,26 @@ export default function App() {
   const [immersiveEnabled, setImmersiveEnabled] = useState(readImmersiveEnabled);
   const [immersiveReady, setImmersiveReady] = useState(false);
   const [immersiveError, setImmersiveError] = useState('');
+  const shelfRequestRef = useRef(0);
+  const inspectionRequestRef = useRef(0);
   const t = copy[locale];
   const genre = GENRES[genreIndex];
 
-  const fetchPage = useCallback(async (stand: number, append: boolean, signal?: AbortSignal) => {
+  const fetchPage = useCallback(async (nextStand: number, signal?: AbortSignal) => {
+    const request = ++shelfRequestRef.current;
     setStatus('loading');
     setError('');
     try {
-      const page = await loadShelf({ genres: genre.apiGenres, year, type, stand, locale }, signal);
-      setPages((current) => append ? [...current, page] : [page]);
+      const page = await loadShelf({ genres: genre.apiGenres, year, type, stand: nextStand, locale }, signal);
+      if (request !== shelfRequestRef.current) return;
+      // Each stand is its own physical shelf. Replacing this page preserves the
+      // video-store browsing model instead of silently combining its tapes.
+      setPages([page]);
+      setStand(nextStand);
       setStatus('ready');
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === 'AbortError') return;
+      if (request !== shelfRequestRef.current) return;
       setStatus('error');
       setError(cause instanceof Error ? cause.message : (locale === 'pt-BR' ? 'Não foi possível abrir a estante.' : 'Could not open the shelf.'));
     }
@@ -64,22 +75,18 @@ export default function App() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetchPage(0, false, controller.signal);
+    void fetchPage(0, controller.signal);
     return () => controller.abort();
   }, [fetchPage]);
 
-  const allTitles = useMemo(() => {
-    const unique = new Map<string, DiscoveryTitle>();
-    for (const page of pages) for (const title of page.titles) unique.set(title.identity.canonicalKey, title);
-    return [...unique.values()];
-  }, [pages]);
+  const allTitles = useMemo(() => pages[0]?.titles ?? [], [pages]);
 
   const visibleTitles = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase(locale);
     return normalized ? allTitles.filter((title) => title.name.toLocaleLowerCase(locale).includes(normalized)) : allTitles;
   }, [allTitles, locale, query]);
 
-  const hasNextStand = pages.at(-1)?.hasNextStand ?? false;
+  const hasNextStand = pages[0]?.hasNextStand ?? false;
   const source = pages[0]?.source ?? 'fixture';
   const inBasket = (title: DiscoveryTitle) => basket.some((item) => item.identity.canonicalKey === title.identity.canonicalKey);
   const toggleBasket = (title: DiscoveryTitle) => {
@@ -116,6 +123,20 @@ export default function App() {
     setQuery('');
   };
   const applyYear = () => setYear(clampYear(yearDraft));
+  const inspectTitle = useCallback((title: DiscoveryTitle) => {
+    const request = ++inspectionRequestRef.current;
+    setSelected(title);
+    void loadTitleDetails(title, locale).then((details) => {
+      if (request !== inspectionRequestRef.current) return;
+      setSelected((current) => current?.identity.canonicalKey === title.identity.canonicalKey ? details : current);
+    }).catch(() => {
+      // Inspection remains useful with the lightweight shelf record offline.
+    });
+  }, [locale]);
+  const closeInspection = useCallback(() => {
+    inspectionRequestRef.current += 1;
+    setSelected(null);
+  }, []);
   const toggleImmersive = () => {
     setImmersiveEnabled((enabled) => {
       const next = !enabled;
@@ -171,14 +192,16 @@ export default function App() {
         <div className="browse-controls">
           <label>
             <span>{t.genre}</span>
-            <select value={genreIndex} onChange={(event) => chooseGenre(Number(event.target.value))}>
+            <select className="genre-picker" value={genreIndex} onChange={(event) => chooseGenre(Number(event.target.value))}>
               {GENRES.map((item, index) => <option key={item.id} value={index}>{item.label[locale]}</option>)}
             </select>
           </label>
           <form className="year-machine" onSubmit={(event) => { event.preventDefault(); applyYear(); }}>
             <span>{t.year}</span>
             <button type="button" onClick={() => setYearDraft((value) => clampYear(value - 1))} aria-label={locale === 'pt-BR' ? 'Ano anterior' : 'Previous year'}>−</button>
-            <input type="number" min="1920" max={new Date().getFullYear()} value={yearDraft} onChange={(event) => setYearDraft(Number(event.target.value))} aria-label={t.year} />
+            <select value={yearDraft} onChange={(event) => setYearDraft(Number(event.target.value))} aria-label={t.year}>
+              {YEAR_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
             <button type="button" onClick={() => setYearDraft((value) => clampYear(value + 1))} aria-label={locale === 'pt-BR' ? 'Próximo ano' : 'Next year'}>+</button>
             <button type="submit">{t.go}</button>
           </form>
@@ -248,7 +271,7 @@ export default function App() {
                 year={year}
                 locale={locale}
                 paused={watchTitle !== null}
-                onInspect={setSelected}
+                onInspect={inspectTitle}
                 onReady={immersiveStarted}
                 onFailure={immersiveFailed}
               />
@@ -260,19 +283,19 @@ export default function App() {
               <span className="empty-tape" aria-hidden="true" />
               <h2>{t.empty}</h2>
               <p>{error}</p>
-              <button type="button" onClick={() => void fetchPage(0, false)}>{t.retry}</button>
+              <button type="button" onClick={() => void fetchPage(stand)}>{t.retry}</button>
             </div>
           ) : (
             <div id="shelf" className="shelf" aria-busy={status === 'loading'} hidden={immersiveEnabled && immersiveReady}>
               {visibleTitles.map((title) => (
-                <VhsTape key={title.identity.canonicalKey} title={title} accent={genre.accent} locale={locale} onInspect={setSelected} />
+                <VhsTape key={title.identity.canonicalKey} title={title} accent={genre.accent} locale={locale} onInspect={inspectTitle} />
               ))}
               {status === 'loading' && !visibleTitles.length && Array.from({ length: 8 }, (_, index) => <span className="tape-skeleton" key={index} aria-hidden="true" />)}
             </div>
           )}
 
           {hasNextStand && status !== 'loading' && (
-            <button className="load-more" type="button" onClick={() => void fetchPage(pages.length, true)}>{t.loadMore}</button>
+            <button className="load-more" type="button" onClick={() => void fetchPage(stand + 1)}>{t.loadMore}</button>
           )}
           {!visibleTitles.length && status === 'ready' && <p className="search-empty">{t.empty}</p>}
         </section>
@@ -294,8 +317,8 @@ export default function App() {
           favorite={hasLocalSavedTitle(saved, selected, 'favorite')}
           onToggleBasket={() => toggleBasket(selected)}
           onToggleSaved={(collection) => void setSavedTitle(selected, collection, !hasLocalSavedTitle(saved, selected, collection))}
-          onWatch={() => { setWatchTitle(selected); setSelected(null); }}
-          onClose={() => setSelected(null)}
+          onWatch={() => { setWatchTitle(selected); closeInspection(); }}
+          onClose={closeInspection}
         />
       )}
       {panel && <SidePanel

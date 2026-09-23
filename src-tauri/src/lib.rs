@@ -7,6 +7,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::native_capabilities,
             commands::fetch_public_shelf,
+            commands::fetch_public_title,
             commands::member_session_status,
             commands::member_sign_in,
             commands::member_sign_up,
