@@ -144,7 +144,7 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .vhs-canvas { display: block; width: 100%; height: 100%; outline: 0; cursor: grab; }
 .vhs-canvas.is-dragging { cursor: grabbing; }
 .vhs-canvas:focus-visible { box-shadow: inset 0 0 0 3px var(--yellow); }
-.vhs-focus-controls { display: flex; flex-wrap: wrap; gap: .35rem; }
+.vhs-focus-controls { position: absolute; z-index: 3; right: .75rem; bottom: .75rem; display: flex; flex-wrap: wrap; gap: .35rem; }
 .vhs-focus-controls button { min-height: 34px; padding: .35rem .5rem; color: var(--cream); background: #243e61; border: 2px solid #050a12; box-shadow: 2px 2px #08101d; font: 800 .58rem/1 "Courier New", monospace; text-transform: uppercase; cursor: pointer; }
 .vhs-focus-controls button[aria-pressed="true"] { color: var(--ink); background: var(--yellow); }
 .vhs-caption { margin: 0; color: #d6ccb7; font: 700 .6rem/1.4 "Courier New", monospace; text-align: center; }
@@ -154,7 +154,7 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .vhs-stage-flat p { margin: 0; color: #d6ccb7; font-size: .78rem; line-height: 1.5; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 /* Tape-centred inspection: the case is the information surface, the actions float. */
-.tape-modal { display: block; width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; overflow: hidden; }
+.tape-modal.title-modal { position: fixed; inset: 0; display: block; width: 100vw; max-width: none; height: 100vh; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; overflow: hidden; }
 .tape-modal::backdrop { background: rgba(8, 6, 5, .78); backdrop-filter: blur(3px); }
 .tape-close { position: fixed; top: 1rem; right: 1rem; min-width: 44px; min-height: 44px; color: var(--cream); background: #243e61; border: 2px solid #050a12; box-shadow: 3px 3px #08101d; font-size: 1.4rem; cursor: pointer; }
 .tape-actions { position: fixed; z-index: 4; top: 50%; right: clamp(.75rem, 5vw, 4rem); display: grid; width: min(220px, 32vw); gap: .4rem; transform: translateY(-50%); }

@@ -95,8 +95,8 @@ Next task: player UX parity with the web version, in this order.
 2. In progress: the 3D tape inspection (port of the reference web inspector),
    which also needs the remaining reference details for the counter flow. The
    inspection viewport now fills the full dialog like the web reference; the
-   case is no longer constrained to a 620px canvas or reduced default zoom,
-   and desktop actions float beside the tape while smaller layouts use a dock.
+  case is no longer constrained to a 620px canvas or cropped focus zoom, and
+  desktop actions float beside the tape while smaller layouts use a dock.
 3. Pending: subtitles. Add-on subtitle tracks are fetched and handed to Stremio
    Video, but with the player in its own window its HTML subtitle renderer draws
    into a hidden container, so those tracks never appear. Fix by handing the
@@ -400,11 +400,17 @@ when they need user or real-environment confirmation.
   acceptance was claimed.
 - 2026-09-23: matched the tape inspection presentation to the reference web
   viewport. The Three.js host now uses the full dialog height, whole-case
-  focus starts at the reference scale, front/back focus uses the reference
-  detail scale, and desktop action controls float beside the case with a
-  responsive bottom dock below 900px. `npm test` passed with 82 tests in 21
-  files; `npm run build` and `git diff --check` also passed. No browser or
-  manual visual/playback acceptance was performed.
+  focus starts at a full-case-safe scale, and desktop action controls float
+  beside the case with a responsive bottom dock below 900px. `npm test` passed
+  with 82 tests in 21 files; `npm run build` and `git diff --check` also
+  passed. No browser or manual visual/playback acceptance was performed.
+- 2026-09-23: corrected the first viewport parity pass after user feedback.
+  Front/back focus no longer forces a 1.35× crop; camera distance is now
+  calculated from the case dimensions and live viewport aspect ratio, with a
+  4% framing margin and no zoom level above the complete-case view. The dialog
+  explicitly occupies the viewport, and the focus controls overlay the canvas.
+  `npm run check` passed with 82 tests in 21 files. No manual visual/playback
+  acceptance was performed.
 
 ## Known blockers and risks
 

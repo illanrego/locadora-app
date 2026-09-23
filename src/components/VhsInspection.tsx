@@ -16,8 +16,26 @@ import { copy, type Locale } from '../locadora/catalog';
 const TEX_W = 1024;
 const TEX_H = 1536;
 const MIN_ZOOM = 0.62;
-const MAX_ZOOM = 1.45;
+// A full case is the closest permitted view: all focus modes must retain its
+// top and bottom edges instead of turning the viewport into a crop window.
+const MAX_ZOOM = 1;
 const ZOOM_STEP = 0.12;
+const CASE_WIDTH = 4.08;
+const CASE_HEIGHT = 6.08;
+const CASE_DEPTH = 0.54;
+const CAMERA_FOV = 35;
+const CASE_VIEWPORT_FILL = 0.96;
+
+function fittedCameraDistance(width: number, height: number): number {
+  const verticalHalfAngle = THREE.MathUtils.degToRad(CAMERA_FOV / 2);
+  const horizontalHalfAngle = Math.atan(Math.tan(verticalHalfAngle) * (width / height));
+  const verticalDistance = (CASE_HEIGHT / 2) / Math.tan(verticalHalfAngle);
+  const horizontalDistance = (CASE_WIDTH / 2) / Math.tan(horizontalHalfAngle);
+
+  // Leave a narrow, deliberate frame around the shell. The depth allowance
+  // covers the front/back faces while the case is being rotated.
+  return Math.max(verticalDistance, horizontalDistance) / CASE_VIEWPORT_FILL + CASE_DEPTH;
+}
 
 interface VhsInspectionProps {
   title: DiscoveryTitle;
@@ -249,7 +267,7 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
 
     try {
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+      const camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 100);
       camera.position.set(0, 0, 11.5);
       const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: window.devicePixelRatio <= 1.5 });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -359,7 +377,7 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
         const height = Math.max(1, host.clientHeight);
         renderer.setSize(width, height, false);
         camera.aspect = width / height;
-        camera.position.z = (width / height < 0.7 ? 13.5 : 11.5) / zoom;
+        camera.position.z = fittedCameraDistance(width, height) / zoom;
         camera.updateProjectionMatrix();
       };
       const observer = new ResizeObserver(resize);
@@ -378,10 +396,10 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
       const focusTarget = (target: 'front' | 'back' | 'whole') => {
         if (target === 'front') {
           targetY = 0;
-          zoom = 1.35;
+          zoom = 1;
         } else if (target === 'back') {
           targetY = Math.PI;
-          zoom = 1.35;
+          zoom = 1;
         } else {
           targetY = 0;
           targetX = 0;
