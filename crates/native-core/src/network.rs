@@ -9,6 +9,7 @@ use thiserror::Error;
 use url::{Host, Url};
 
 pub const MAX_JSON_BYTES: usize = 1024 * 1024;
+pub const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 3;
 const TIMEOUT: Duration = Duration::from_secs(8);
 const MAX_AUTH_TOKEN_BYTES: usize = 16 * 1024;
@@ -39,6 +40,12 @@ pub struct BoundedJsonResponse {
     pub refreshed_token: Option<String>,
 }
 
+#[derive(Debug)]
+pub struct BoundedImageResponse {
+    pub content_type: String,
+    pub body: Vec<u8>,
+}
+
 #[derive(Debug, Error)]
 pub enum NativeNetworkError {
     #[error("Invalid remote URL")]
@@ -61,6 +68,8 @@ pub enum NativeNetworkError {
     ResponseTooLarge,
     #[error("Remote response is not valid JSON")]
     InvalidJson,
+    #[error("Remote response is not a supported image")]
+    InvalidImage,
     #[error("Remote source returned too many redirects")]
     TooManyRedirects,
 }
@@ -182,6 +191,43 @@ async fn bounded_json_body(response: reqwest::Response) -> Result<Value, NativeN
     serde_json::from_slice(&bytes).map_err(|_| NativeNetworkError::InvalidJson)
 }
 
+async fn bounded_image_body(
+    response: reqwest::Response,
+) -> Result<BoundedImageResponse, NativeNetworkError> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_IMAGE_BYTES as u64)
+    {
+        return Err(NativeNetworkError::ResponseTooLarge);
+    }
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::trim)
+        .filter(|value| value.starts_with("image/"))
+        .ok_or(NativeNetworkError::InvalidImage)?
+        .to_owned();
+
+    let mut bytes = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|_| NativeNetworkError::RequestFailed)?;
+        if bytes.len() + chunk.len() > MAX_IMAGE_BYTES {
+            return Err(NativeNetworkError::ResponseTooLarge);
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    if bytes.is_empty() {
+        return Err(NativeNetworkError::InvalidImage);
+    }
+    Ok(BoundedImageResponse {
+        content_type,
+        body: bytes,
+    })
+}
+
 pub async fn fetch_bounded_https_json_request(
     input: &str,
     method: JsonRequestMethod,
@@ -272,6 +318,51 @@ pub async fn fetch_bounded_https_json(input: &str) -> Result<Value, NativeNetwor
             return Err(NativeNetworkError::RequestFailed);
         }
         return bounded_json_body(response).await;
+    }
+    Err(NativeNetworkError::TooManyRedirects)
+}
+
+pub async fn fetch_bounded_https_image(
+    input: &str,
+) -> Result<BoundedImageResponse, NativeNetworkError> {
+    let mut target = validate_https_url(input)?;
+    for redirect_count in 0..=MAX_REDIRECTS {
+        let (host, addresses) = resolve_public_addresses(&target)?;
+        let client = pinned_client(&host, &addresses)?;
+        let response = client
+            .get(target.clone())
+            .header(header::ACCEPT, "image/avif,image/webp,image/*")
+            .header(header::USER_AGENT, "WillsLocadoraPlayer/0.1")
+            .send()
+            .await
+            .map_err(|error| {
+                if error.is_timeout() {
+                    NativeNetworkError::Timeout
+                } else {
+                    NativeNetworkError::RequestFailed
+                }
+            })?;
+
+        if response.status().is_redirection() {
+            if redirect_count == MAX_REDIRECTS {
+                return Err(NativeNetworkError::TooManyRedirects);
+            }
+            let location = response
+                .headers()
+                .get(header::LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .ok_or(NativeNetworkError::RequestFailed)?;
+            let next = target
+                .join(location)
+                .map_err(|_| NativeNetworkError::InvalidUrl)?;
+            target = validate_https_url(next.as_str())?;
+            continue;
+        }
+
+        if response.status() != StatusCode::OK {
+            return Err(NativeNetworkError::RequestFailed);
+        }
+        return bounded_image_body(response).await;
     }
     Err(NativeNetworkError::TooManyRedirects)
 }

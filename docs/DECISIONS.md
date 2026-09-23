@@ -106,6 +106,9 @@ stored in a bounded local artwork cache for shelf browsing; backdrops are cached
 only when a tape is inspected and have a smaller bound. Streaming-provider
 availability is not part of the tape presentation. Catalogue refresh remains an
 explicit future operation, while member and media-engine requests stay remote.
+Inspection artwork crosses a native, TMDB-image-only boundary and reaches the
+WebGL canvas as local blob data; it does not depend on browser CORS or a Worker
+origin allowlist.
 
 ## Non-negotiable boundaries
 

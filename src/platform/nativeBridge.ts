@@ -152,6 +152,11 @@ export async function fetchNativePublicTitle(request: {
   return invoke('fetch_public_title', { request });
 }
 
+export async function fetchNativePublicArtwork(url: string): Promise<string> {
+  if (!isNativeShell()) throw new Error('Native artwork transport is unavailable');
+  return invoke<string>('fetch_public_artwork', { request: { url } });
+}
+
 export async function startNativePlayer(): Promise<void> {
   if (!isNativeShell()) throw new Error('Native player is unavailable');
   return invoke('player_start');

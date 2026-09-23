@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { fetchNativePublicArtwork, isNativeShell } from '../platform/nativeBridge';
 
 export type ArtworkKind = 'poster' | 'backdrop';
 
@@ -31,14 +32,7 @@ function cacheStorage(): CacheStorage | null {
   return window.caches;
 }
 
-/**
- * Canvas/WebGL cannot safely read a direct TMDB image unless that CDN grants
- * CORS access. The public Locadora image route already validates and proxies
- * only allowed TMDB artwork, so inspection uses it while shelf <img> elements
- * can continue using the original URL directly.
- */
-export function artworkProxyUrl(url: string | null): string | null {
-  if (!url) return null;
+function browserArtworkProxyUrl(url: string): string {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -119,6 +113,32 @@ async function resolveArtwork(url: string, kind: ArtworkKind): Promise<ArtworkRe
   }
 }
 
+async function readCachedArtwork(url: string, kind: ArtworkKind): Promise<Blob | null> {
+  const cachesApi = cacheStorage();
+  if (!cachesApi) return null;
+  try {
+    const response = await (await cachesApi.open(CACHE_NAMES[kind])).match(url);
+    if (!response) return null;
+    touchIndex(kind, url);
+    return response.blob();
+  } catch {
+    return null;
+  }
+}
+
+async function persistArtwork(url: string, kind: ArtworkKind, blob: Blob): Promise<void> {
+  const cachesApi = cacheStorage();
+  if (!cachesApi) return;
+  try {
+    const headers = blob.type ? { 'content-type': blob.type } : undefined;
+    await (await cachesApi.open(CACHE_NAMES[kind])).put(url, new Response(blob, { headers }));
+    touchIndex(kind, url);
+  } catch {
+    // The image remains usable for the current inspection even if persistence
+    // is unavailable in this WebView profile.
+  }
+}
+
 export function useCachedArtwork(url: string | null, kind: ArtworkKind): string | null {
   // The known remote URL must be rendered immediately. Cache Storage is a
   // persistence layer, not a render gate; waiting here made posters lose to
@@ -140,6 +160,47 @@ export function useCachedArtwork(url: string | null, kind: ArtworkKind): string 
         return;
       }
       setSource(resolvedSource);
+    });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [kind, url]);
+
+  return source;
+}
+
+export function useInspectionArtwork(url: string | null, kind: ArtworkKind): string | null {
+  const [source, setSource] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setSource(null);
+    if (!url) return () => undefined;
+
+    void (async () => {
+      let blob = await readCachedArtwork(url, kind);
+      if (!blob && isNativeShell()) {
+        const dataUrl = await fetchNativePublicArtwork(url);
+        blob = await (await fetch(dataUrl)).blob();
+        void persistArtwork(url, kind, blob);
+      } else if (!blob) {
+        const safeUrl = browserArtworkProxyUrl(url);
+        const resolved = await resolveArtwork(safeUrl, kind);
+        blob = resolved?.blob ?? null;
+      }
+      if (!blob) return;
+      objectUrl = URL.createObjectURL(blob);
+      if (cancelled) {
+        URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
+        return;
+      }
+      setSource(objectUrl);
+    })().catch(() => {
+      // The tape label remains usable without artwork.
     });
 
     return () => {

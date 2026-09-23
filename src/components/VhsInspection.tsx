@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { DiscoveryTitle } from '../domain/content';
 import { externalId } from '../domain/content';
-import { artworkProxyUrl } from '../locadora/artworkCache';
 import { copy, type Locale } from '../locadora/catalog';
 
 /**
@@ -438,7 +437,7 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
           }
           draw(image);
         };
-        image.src = artworkProxyUrl(url) ?? url;
+        image.src = url;
       };
 
       let posterImage: HTMLImageElement | null = null;

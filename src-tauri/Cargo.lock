@@ -5294,6 +5294,7 @@ dependencies = [
 name = "wills-locadora-player"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "keyring",
  "leveldb-core",
  "locadora-native-core",
@@ -5301,6 +5302,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "url",
  "urlencoding",
 ]
 

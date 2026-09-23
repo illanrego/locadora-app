@@ -487,6 +487,19 @@ when they need user or real-environment confirmation.
   `git diff --check` passed. `npm run tauri -- build --no-bundle` refreshed
   `src-tauri/target/release/wills-locadora-player`. No manual visual or
   network-cache acceptance was performed.
+- 2026-09-23: corrected the preceding 3D-artwork fix after the Worker proxy
+  blocked the desktop WebView origin and caused both poster and backdrop to
+  disappear. Inspection no longer uses that proxy. A new native command accepts
+  only HTTPS `image.tmdb.org/t/p/` paths, downloads at most 8 MB with image
+  content-type validation, and returns canvas-safe local data; poster and
+  backdrop are then persisted in their existing bounded caches. `npm run
+  typecheck`, `npm test` (89 tests in 24 files), `cargo test --manifest-path
+  src-tauri/Cargo.toml` (20 passed, 2 ignored), `cargo test --manifest-path
+  crates/native-core/Cargo.toml -- --test-threads=1` outside the restricted
+  sandbox (16 passed), `npm run build`, and `git diff --check` passed. `npm run
+  tauri -- build --no-bundle` refreshed
+  `src-tauri/target/release/wills-locadora-player`. No manual visual or live
+  artwork acceptance was performed.
 
 ## Known blockers and risks
 

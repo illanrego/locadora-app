@@ -1,8 +1,9 @@
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use locadora_native_core::{
     JsonRequestMethod, Manifest, ManifestResource, MpvSession, NativeCapabilities, PlayerEvent,
-    ResourcePath, VideoOutput, fetch_bounded_https_json, fetch_bounded_https_json_request,
-    native_capabilities as read_native_capabilities, player_runtime_root, stremio_manifest,
-    stremio_resource, validate_manifest_url,
+    ResourcePath, VideoOutput, fetch_bounded_https_image, fetch_bounded_https_json,
+    fetch_bounded_https_json_request, native_capabilities as read_native_capabilities,
+    player_runtime_root, stremio_manifest, stremio_resource, validate_manifest_url,
 };
 use serde::Deserialize;
 use serde::Serialize;
@@ -13,6 +14,7 @@ use std::{
     sync::Mutex,
 };
 use tauri::{AppHandle, Manager, State};
+use url::Url;
 use urlencoding::encode;
 
 const PUBLIC_API_BASE: &str = "https://locadora-api.willstartpage.workers.dev/v1";
@@ -80,6 +82,11 @@ pub struct PublicTitleRequest {
     content_type: String,
     tmdb_id: u32,
     locale: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PublicArtworkRequest {
+    url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1391,6 +1398,34 @@ pub async fn fetch_public_title(request: PublicTitleRequest) -> Result<Value, St
         .map_err(|error| error.to_string())
 }
 
+fn public_artwork_url(request: &PublicArtworkRequest) -> Result<Url, String> {
+    let url = Url::parse(request.url.trim()).map_err(|_| "Invalid public artwork request")?;
+    if url.scheme() != "https"
+        || url.host_str() != Some("image.tmdb.org")
+        || !url.path().starts_with("/t/p/")
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err("Invalid public artwork request".into());
+    }
+    Ok(url)
+}
+
+#[tauri::command]
+pub async fn fetch_public_artwork(request: PublicArtworkRequest) -> Result<String, String> {
+    let url = public_artwork_url(&request)?;
+    let image = fetch_bounded_https_image(url.as_str())
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(format!(
+        "data:{};base64,{}",
+        image.content_type,
+        STANDARD.encode(image.body)
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1428,6 +1463,27 @@ mod tests {
             })
             .is_err()
         );
+    }
+
+    #[test]
+    fn public_artwork_is_bounded_to_tmdb_images() {
+        let request = PublicArtworkRequest {
+            url: "https://image.tmdb.org/t/p/w500/poster.jpg".into(),
+        };
+        assert_eq!(
+            public_artwork_url(&request)
+                .expect("valid TMDB artwork")
+                .as_str(),
+            request.url
+        );
+        for url in [
+            "http://image.tmdb.org/t/p/w500/poster.jpg",
+            "https://example.com/t/p/w500/poster.jpg",
+            "https://image.tmdb.org/not-artwork/poster.jpg",
+            "https://image.tmdb.org/t/p/w500/poster.jpg?token=secret",
+        ] {
+            assert!(public_artwork_url(&PublicArtworkRequest { url: url.into() }).is_err());
+        }
     }
 
     #[test]
