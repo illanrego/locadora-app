@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { DiscoveryTitle } from '../domain/content';
 import { externalId } from '../domain/content';
-import { useCachedArtwork } from '../locadora/artworkCache';
+import { artworkProxyUrl, useCachedArtwork } from '../locadora/artworkCache';
 import { copy, type Locale } from '../locadora/catalog';
 import { Modal } from './Modal';
 import { VhsInspection } from './VhsInspection';
@@ -37,8 +37,8 @@ export function TitleInspection({
   const pt = locale === 'pt-BR';
   const tmdbId = externalId(title.identity, 'tmdb');
   const imdbId = externalId(title.identity, 'imdb');
-  const posterUrl = useCachedArtwork(title.posterUrl, 'poster');
-  const backdropUrl = useCachedArtwork(title.backdropUrl, 'backdrop');
+  const posterUrl = useCachedArtwork(artworkProxyUrl(title.posterUrl), 'poster');
+  const backdropUrl = useCachedArtwork(artworkProxyUrl(title.backdropUrl), 'backdrop');
   const inspectionTitle = useMemo(() => ({ ...title, posterUrl, backdropUrl }), [backdropUrl, posterUrl, title]);
   return (
     <Modal label={title.name} onClose={onClose} className="title-modal tape-modal">

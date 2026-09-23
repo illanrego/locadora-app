@@ -5,6 +5,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { normalizeDiscoveryTitle } from '../src/domain/content';
 import { VhsTape } from '../src/components/VhsTape';
+import { artworkProxyUrl } from '../src/locadora/artworkCache';
 
 afterEach(() => {
   cleanup();
@@ -13,6 +14,11 @@ afterEach(() => {
 });
 
 describe('artwork loading', () => {
+  it('routes TMDB artwork through the Locadora proxy for canvas-safe loading', () => {
+    expect(artworkProxyUrl('https://image.tmdb.org/t/p/w500/poster.jpg'))
+      .toBe('https://locadora-api.willstartpage.workers.dev/v1/image?url=https%3A%2F%2Fimage.tmdb.org%2Ft%2Fp%2Fw500%2Fposter.jpg');
+  });
+
   it('starts the poster request immediately while the persistent cache is slow', () => {
     Object.defineProperty(window, 'caches', {
       configurable: true,

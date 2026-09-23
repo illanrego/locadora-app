@@ -14,6 +14,7 @@ const MAX_ENTRIES: Record<ArtworkKind, number> = {
   poster: 4_000,
   backdrop: 120,
 };
+const DEFAULT_PUBLIC_API = 'https://locadora-api.willstartpage.workers.dev/v1';
 
 interface ArtworkIndexEntry {
   url: string;
@@ -28,6 +29,26 @@ interface ArtworkResolution {
 function cacheStorage(): CacheStorage | null {
   if (typeof window === 'undefined' || !('caches' in window)) return null;
   return window.caches;
+}
+
+/**
+ * Canvas/WebGL cannot safely read a direct TMDB image unless that CDN grants
+ * CORS access. The public Locadora image route already validates and proxies
+ * only allowed TMDB artwork, so inspection uses it while shelf <img> elements
+ * can continue using the original URL directly.
+ */
+export function artworkProxyUrl(url: string | null): string | null {
+  if (!url) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  if (parsed.protocol !== 'https:' || parsed.hostname !== 'image.tmdb.org') return url;
+  const configured = String(import.meta.env.VITE_LOCADORA_PUBLIC_API_URL ?? '').trim().replace(/\/$/, '');
+  const base = configured || DEFAULT_PUBLIC_API;
+  return `${base}/image?url=${encodeURIComponent(url)}`;
 }
 
 function readIndex(kind: ArtworkKind): ArtworkIndexEntry[] {

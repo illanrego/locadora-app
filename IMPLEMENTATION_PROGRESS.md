@@ -479,6 +479,14 @@ when they need user or real-environment confirmation.
   files), and `git diff --check` passed. `npm run tauri -- build --no-bundle`
   refreshed `src-tauri/target/release/wills-locadora-player`. No manual visual
   or network-cache acceptance was performed.
+- 2026-09-23: fixed the separate 3D artwork path. The shelf may use direct
+  TMDB URLs in normal `<img>` elements, but the canvas/WebGL inspector now
+  routes TMDB artwork through the existing CORS-safe Locadora image proxy before
+  texture upload; cached blobs remain local and bypass the proxy on later
+  opens. `npm run typecheck`, `npm test` (89 tests in 24 files), and
+  `git diff --check` passed. `npm run tauri -- build --no-bundle` refreshed
+  `src-tauri/target/release/wills-locadora-player`. No manual visual or
+  network-cache acceptance was performed.
 
 ## Known blockers and risks
 
