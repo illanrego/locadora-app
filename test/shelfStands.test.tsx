@@ -52,7 +52,7 @@ afterEach(() => {
 });
 
 describe('physical shelf pagination', () => {
-  it('appends each catalogue page as a separate stand with eager cover images', async () => {
+  it('appends each catalogue page as a separate stand with cached cover loading', async () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
 
@@ -65,6 +65,6 @@ describe('physical shelf pagination', () => {
     expect(within(secondStand).getByRole('button', { name: /Second Stand Tape/i })).toBeInTheDocument();
     expect(container.querySelectorAll('.shelf')).toHaveLength(2);
     expect(secondStand.querySelector('img')).toHaveAttribute('src', 'https://images.example.invalid/2.jpg');
-    expect(secondStand.querySelector('img')).toHaveAttribute('loading', 'eager');
+    expect(secondStand.querySelector('img')).toHaveAttribute('decoding', 'async');
   });
 });

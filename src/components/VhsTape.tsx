@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { DiscoveryTitle } from '../domain/content';
 import type { Locale } from '../locadora/catalog';
+import { useCachedArtwork } from '../locadora/artworkCache';
 
 interface VhsTapeProps {
   title: DiscoveryTitle;
@@ -18,12 +19,13 @@ export function VhsTape({ title, accent, locale, onInspect }: VhsTapeProps) {
     ? `Inspecionar ${title.name}, ${title.year ?? 'ano desconhecido'}`
     : `Inspect ${title.name}, ${title.year ?? 'unknown year'}`;
   const style = { '--tape-accent': accent } as CSSProperties;
+  const posterUrl = useCachedArtwork(title.posterUrl, 'poster');
   return (
     <article className="vhs-item" style={style}>
       <button className="vhs-case" type="button" aria-label={label} onClick={() => onInspect(title)}>
         <span className="case-art" aria-hidden="true">
-          {title.posterUrl
-            ? <img src={title.posterUrl} alt="" loading="eager" decoding="async" />
+          {posterUrl
+            ? <img src={posterUrl} alt="" decoding="async" />
             : <span className="case-initials">{initials(title.name)}</span>}
         </span>
         <span className="case-spine"><span>{title.year ?? '—'}</span></span>

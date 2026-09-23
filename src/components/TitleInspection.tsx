@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import type { DiscoveryTitle } from '../domain/content';
 import { externalId } from '../domain/content';
+import { useCachedArtwork } from '../locadora/artworkCache';
 import { copy, type Locale } from '../locadora/catalog';
 import { Modal } from './Modal';
 import { VhsInspection } from './VhsInspection';
@@ -35,6 +37,9 @@ export function TitleInspection({
   const pt = locale === 'pt-BR';
   const tmdbId = externalId(title.identity, 'tmdb');
   const imdbId = externalId(title.identity, 'imdb');
+  const posterUrl = useCachedArtwork(title.posterUrl, 'poster');
+  const backdropUrl = useCachedArtwork(title.backdropUrl, 'backdrop');
+  const inspectionTitle = useMemo(() => ({ ...title, posterUrl, backdropUrl }), [backdropUrl, posterUrl, title]);
   return (
     <Modal label={title.name} onClose={onClose} className="title-modal tape-modal">
       <p className="sr-only">
@@ -48,7 +53,7 @@ export function TitleInspection({
         ].filter(Boolean).join(' · ')}
       </p>
       <button type="button" className="tape-close" onClick={onClose} aria-label={pt ? 'Fechar inspeção' : 'Close inspection'}>×</button>
-      <VhsInspection title={title} locale={locale} onInspectClose={onClose} />
+      <VhsInspection title={inspectionTitle} locale={locale} onInspectClose={onClose} />
       <div className="tape-member-actions" role="group" aria-label={pt ? 'Cesta' : 'Basket'}>
         <button type="button" className="tape-primary" onClick={onToggleBasket} disabled={!isInBasket && basketFull}>
           {isInBasket ? t.removeBasket : t.addBasket}

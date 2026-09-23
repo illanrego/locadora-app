@@ -1,6 +1,7 @@
 import { externalId, normalizeDiscoveryTitle, type ContentType, type DiscoveryTitle, type PublicTitlePayload } from '../domain/content';
 import { fetchNativePublicShelf, fetchNativePublicTitle, isNativeShell } from '../platform/nativeBridge';
 import { FIXTURE_TITLES } from './fixture';
+import { cacheShelf, cacheTitle, readLocalShelf, readLocalTitle } from './localCache';
 
 export interface ShelfQuery {
   genres: string[];
@@ -45,6 +46,9 @@ function publicTitlePayload(body: unknown): PublicTitlePayload | null {
 }
 
 export async function loadShelf(query: ShelfQuery, signal?: AbortSignal): Promise<ShelfPage> {
+  const cached = readLocalShelf(query);
+  if (cached) return cached;
+
   const base = endpoint();
   if (isNativeShell()) {
     const body = await fetchNativePublicShelf({
@@ -54,11 +58,13 @@ export async function loadShelf(query: ShelfQuery, signal?: AbortSignal): Promis
       stand: query.stand,
     }) as { titles?: PublicTitlePayload[]; hasNextStand?: boolean };
     if (!Array.isArray(body.titles)) throw new Error(query.locale === 'pt-BR' ? 'O acervo respondeu em um formato inválido.' : 'The catalogue returned an invalid response.');
-    return {
+    const page: ShelfPage = {
       titles: body.titles.map(normalizeDiscoveryTitle).filter((title): title is DiscoveryTitle => title !== null),
       hasNextStand: Boolean(body.hasNextStand),
       source: 'public-api',
     };
+    cacheShelf(query, page);
+    return page;
   }
   if (!base) return fixtureShelf(query);
   const url = new URL(`${base}/shelf`);
@@ -74,11 +80,13 @@ export async function loadShelf(query: ShelfQuery, signal?: AbortSignal): Promis
   if (!response.ok) throw new Error(query.locale === 'pt-BR' ? 'O acervo público está indisponível.' : 'The public catalogue is unavailable.');
   const body = await response.json() as { titles?: PublicTitlePayload[]; hasNextStand?: boolean };
   if (!Array.isArray(body.titles)) throw new Error(query.locale === 'pt-BR' ? 'O acervo respondeu em um formato inválido.' : 'The catalogue returned an invalid response.');
-  return {
+  const page: ShelfPage = {
     titles: body.titles.map(normalizeDiscoveryTitle).filter((title): title is DiscoveryTitle => title !== null),
     hasNextStand: Boolean(body.hasNextStand),
     source: 'public-api',
   };
+  cacheShelf(query, page);
+  return page;
 }
 
 /**
@@ -91,6 +99,9 @@ export async function loadTitleDetails(
   locale: ShelfQuery['locale'],
   signal?: AbortSignal,
 ): Promise<DiscoveryTitle> {
+  const cached = readLocalTitle(title);
+  if (cached) return cached;
+
   const tmdbId = Number(externalId(title.identity, 'tmdb'));
   if (!Number.isSafeInteger(tmdbId) || tmdbId <= 0) return title;
 
@@ -111,5 +122,6 @@ export async function loadTitleDetails(
   if (!payload) return title;
   const normalized = normalizeDiscoveryTitle(payload);
   if (!normalized || normalized.identity.canonicalKey !== title.identity.canonicalKey) return title;
+  cacheTitle(normalized);
   return normalized;
 }

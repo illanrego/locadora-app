@@ -462,6 +462,15 @@ when they need user or real-environment confirmation.
   files), `npm run build`, and `git diff --check` passed. `npm run tauri -- build
   --no-bundle` refreshed `src-tauri/target/release/wills-locadora-player`. No
   manual visual acceptance was performed.
+- 2026-09-23: added the first local-first catalogue layer. Shelf pages and
+  complete inspection records now persist locally and are reused before any
+  network request; newly fetched records retain their artwork URLs. Poster
+  artwork uses a bounded persistent Cache Storage cache, while backdrops use a
+  smaller inspection-only cache. Removed streaming-provider presentation from
+  the tape back. `npm run typecheck`, `npm test` (87 tests in 23 files),
+  `npm run build`, and `git diff --check` passed. `npm run tauri -- build
+  --no-bundle` refreshed `src-tauri/target/release/wills-locadora-player`. No
+  manual visual or network-cache acceptance was performed.
 
 ## Known blockers and risks
 

@@ -276,11 +276,11 @@ function drawBack(
 
   context.fillStyle = '#ffd447';
   context.font = '900 20px "Arial Narrow", Arial, sans-serif';
-  context.fillText(pt ? 'ONDE ASSISTIR NO BRASIL' : 'STREAMING IN BRAZIL', 72, 1005);
+  context.fillText(pt ? 'ACERVO LOCADORA' : 'LOCADORA CATALOGUE', 72, 1005);
   context.fillStyle = '#eadcae';
   context.font = '700 20px Arial, sans-serif';
   context.fillText(
-    ellipsize(context, title.providers.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED'), TEX_W - 412),
+    ellipsize(context, title.identity.type === 'series' ? (pt ? 'SÉRIE' : 'SERIES') : (pt ? 'FILME' : 'MOVIE'), TEX_W - 412),
     340,
     1005,
   );

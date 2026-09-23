@@ -97,6 +97,16 @@ and applies a narrow build-time transform (`tools/vttGlobalShim.ts`) that passes
 the real global to that footer for `node_modules/vtt.js` only. Development mode
 was unaffected, and no runtime behavior of the parser changes.
 
+### D-013 — Local-first catalogue and bounded artwork cache
+
+The desktop Locadora catalogue persists stable title metadata and artwork URLs
+locally after the first successful shelf/detail response. Cached shelf pages and
+complete inspection records are reused without a network request. Posters are
+stored in a bounded local artwork cache for shelf browsing; backdrops are cached
+only when a tape is inspected and have a smaller bound. Streaming-provider
+availability is not part of the tape presentation. Catalogue refresh remains an
+explicit future operation, while member and media-engine requests stay remote.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,
