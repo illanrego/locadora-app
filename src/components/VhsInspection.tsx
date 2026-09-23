@@ -356,7 +356,7 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
 
       const resize = () => {
         const width = Math.max(1, host.clientWidth);
-        const height = Math.max(280, Math.min(620, window.innerHeight * 0.6));
+        const height = Math.max(1, host.clientHeight);
         renderer.setSize(width, height, false);
         camera.aspect = width / height;
         camera.position.z = (width / height < 0.7 ? 13.5 : 11.5) / zoom;
@@ -378,14 +378,14 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
       const focusTarget = (target: 'front' | 'back' | 'whole') => {
         if (target === 'front') {
           targetY = 0;
-          zoom = 1;
+          zoom = 1.35;
         } else if (target === 'back') {
           targetY = Math.PI;
-          zoom = 1;
+          zoom = 1.35;
         } else {
           targetY = 0;
           targetX = 0;
-          zoom = 0.86;
+          zoom = 1;
         }
         resize();
         canvas.setAttribute(
