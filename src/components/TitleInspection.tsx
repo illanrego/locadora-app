@@ -39,39 +39,42 @@ export function TitleInspection({
   const tmdbId = externalId(title.identity, 'tmdb');
   const imdbId = externalId(title.identity, 'imdb');
   return (
-    <Modal label={title.name} onClose={onClose} className="title-modal">
+    <Modal label={title.name} onClose={onClose} className="title-modal tape-modal">
+      <p className="sr-only">
+        {[
+          title.name,
+          title.year ? String(title.year) : null,
+          title.genres.join(', '),
+          title.description,
+          `TMDB ${tmdbId ?? '—'}`,
+          imdbId,
+        ].filter(Boolean).join(' · ')}
+      </p>
+      <button type="button" className="tape-close" onClick={onClose} aria-label={pt ? 'Fechar inspeção' : 'Close inspection'}>×</button>
       <VhsInspection title={title} locale={locale} inBasket={isInBasket} onInspectClose={onClose} />
-      <section className="inspection-copy">
-        <p className="eyebrow">VHS · {title.year ?? '—'} · {title.identity.type === 'series' ? (pt ? 'Série' : 'Series') : (pt ? 'Filme' : 'Movie')}</p>
-        <h2>{title.name}</h2>
-        <p className="inspection-genres">{title.genres.join(' · ') || '—'}</p>
-        <p>{title.description || (pt ? 'Sinopse ainda não disponível.' : 'Synopsis not available yet.')}</p>
-        <dl className="identity-list">
-          <div><dt>{pt ? 'Ano' : 'Year'}</dt><dd>{title.year ?? '—'}</dd></div>
-          <div><dt>{pt ? 'Gêneros' : 'Genres'}</dt><dd>{title.genres.length || '—'}</dd></div>
-          <div><dt>TMDB</dt><dd>{tmdbId ?? '—'}</dd></div>
-          <div><dt>IMDb</dt><dd>{imdbId ?? '—'}</dd></div>
-        </dl>
-        <div className="inspection-actions">
-          <button type="button" className="primary-action" onClick={onToggleBasket} disabled={!isInBasket && basketFull}>
-            {isInBasket ? t.removeBasket : t.addBasket}
-          </button>
-          <button type="button" disabled={!canWatch} title={canWatch ? undefined : t.development} onClick={onWatch}>
-            {canWatch ? (pt ? 'Assistir' : 'Watch') : t.watchDevelopment}
-          </button>
-          <button type="button" aria-pressed={savedForLater} onClick={() => onToggleSaved('watch_later')}>
-            {savedForLater ? (pt ? 'Remover de Ver depois' : 'Remove from Watch later') : (pt ? 'Salvar para depois' : 'Save for later')}
-          </button>
-          <button type="button" aria-pressed={favorite} onClick={() => onToggleSaved('favorite')}>
-            {favorite ? (pt ? 'Remover das favoritas' : 'Remove from favorites') : (pt ? 'Marcar como favorita' : 'Add to favorites')}
-          </button>
-          <button type="button" aria-expanded={reviewsOpen} onClick={() => setReviewsOpen((open) => !open)}>
-            {reviewsOpen ? (pt ? 'Fechar avaliações' : 'Close reviews') : (pt ? 'Ver avaliações' : 'See reviews')}
-          </button>
-          {reviewsOpen && <TitleReviews title={title} locale={locale} />}
-          <button type="button" className="text-action" onClick={onClose}>{t.close}</button>
+      <div className="tape-actions" role="group" aria-label={pt ? 'Ações da fita' : 'Tape actions'}>
+        <button type="button" className="tape-primary" onClick={onToggleBasket} disabled={!isInBasket && basketFull}>
+          {isInBasket ? t.removeBasket : t.addBasket}
+        </button>
+        <button type="button" disabled={!canWatch} title={canWatch ? undefined : t.development} onClick={onWatch}>
+          {canWatch ? (pt ? 'Assistir' : 'Watch') : t.watchDevelopment}
+        </button>
+        <button type="button" aria-pressed={savedForLater} onClick={() => onToggleSaved('watch_later')}>
+          {savedForLater ? (pt ? 'Remover de Ver depois' : 'Remove from Watch later') : (pt ? 'Salvar para depois' : 'Save for later')}
+        </button>
+        <button type="button" aria-pressed={favorite} onClick={() => onToggleSaved('favorite')}>
+          {favorite ? (pt ? 'Remover das favoritas' : 'Remove from favorites') : (pt ? 'Marcar como favorita' : 'Add to favorites')}
+        </button>
+        <button type="button" aria-expanded={reviewsOpen} onClick={() => setReviewsOpen((open) => !open)}>
+          {reviewsOpen ? (pt ? 'Fechar avaliações' : 'Close reviews') : (pt ? 'Ver avaliações' : 'See reviews')}
+        </button>
+        <button type="button" className="text-action" onClick={onClose}>{t.close}</button>
+      </div>
+      {reviewsOpen && (
+        <div className="tape-reviews">
+          <TitleReviews title={title} locale={locale} />
         </div>
-      </section>
+      )}
     </Modal>
   );
 }

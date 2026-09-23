@@ -505,13 +505,6 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
 
   return (
     <div className="vhs-stage">
-      <div className="vhs-focus-controls" role="group" aria-label={pt ? 'Foco da fita' : 'Tape focus'}>
-        <button type="button" onClick={() => zoomRef.current(-ZOOM_STEP)} aria-label={pt ? 'Menos zoom' : 'Zoom out'}>−</button>
-        <button type="button" aria-pressed={focused === 'front'} onClick={() => setFocusedState('front')}>{pt ? 'Capa' : 'Front'}</button>
-        <button type="button" aria-pressed={focused === 'whole'} onClick={() => setFocusedState('whole')}>{pt ? 'Caixa' : 'Case'}</button>
-        <button type="button" aria-pressed={focused === 'back'} onClick={() => setFocusedState('back')}>{pt ? 'Contracapa' : 'Back'}</button>
-        <button type="button" onClick={() => zoomRef.current(ZOOM_STEP)} aria-label={pt ? 'Mais zoom' : 'Zoom in'}>+</button>
-      </div>
       <div ref={hostRef} className="vhs-stage-host">
         {flat && (
           <div className="vhs-stage-flat">
@@ -522,9 +515,13 @@ export function VhsInspection({ title, locale, inBasket, onInspectClose }: VhsIn
           </div>
         )}
       </div>
-      <p className="vhs-caption">
-        {pt ? 'Arraste para girar · clique para virar a fita · roda para o zoom' : 'Drag to rotate · click to flip the tape · wheel to zoom'}
-      </p>
+      <div className="vhs-focus-controls" role="group" aria-label={pt ? 'Foco da fita' : 'Tape focus'}>
+        <button type="button" onClick={() => zoomRef.current(-ZOOM_STEP)} aria-label={pt ? 'Menos zoom' : 'Zoom out'}>−</button>
+        <button type="button" aria-pressed={focused === 'front'} onClick={() => setFocusedState('front')}>{pt ? 'Capa' : 'Front'}</button>
+        <button type="button" aria-pressed={focused === 'whole'} onClick={() => setFocusedState('whole')}>{pt ? 'Caixa' : 'Case'}</button>
+        <button type="button" aria-pressed={focused === 'back'} onClick={() => setFocusedState('back')}>{pt ? 'Contracapa' : 'Back'}</button>
+        <button type="button" onClick={() => zoomRef.current(ZOOM_STEP)} aria-label={pt ? 'Mais zoom' : 'Zoom in'}>+</button>
+      </div>
     </div>
   );
 }

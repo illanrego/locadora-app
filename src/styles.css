@@ -102,6 +102,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   linear-gradient(90deg, #0003, transparent 10%, transparent 90%, #0004),
   repeating-linear-gradient(0deg, #2a1710 0 10px, #3d2216 10px 14px, #1a0d08 14px 18px); box-shadow: inset 0 -18px 0 #1e100b, 0 16px 30px #0008; }
 .shelf::after { content: ""; position: absolute; right: -11px; bottom: -20px; left: -11px; height: 18px; background: #6d3f27; border: 3px solid #2d170e; box-shadow: 0 8px 12px #000a; }
+/* A class-level `display` beats the user-agent rule for [hidden], so the 2D
+   shelf stayed visible underneath the 3D one. */
+.shelf[hidden] { display: none; }
 .vhs-item { min-width: 0; perspective: 700px; }
 .vhs-case { position: relative; display: block; width: 100%; aspect-ratio: 2 / 3; padding: 0; overflow: visible; border: 5px solid #181310; border-radius: 2px; color: var(--ink); background: #2b2622; box-shadow: 7px 8px 0 #080706, 12px 16px 20px #0009; transform-origin: bottom center; transition: transform .16s ease, filter .16s ease; }
 .vhs-case:hover, .vhs-case:focus-visible { z-index: 2; transform: translateY(-11px) rotateY(-6deg) scale(1.035); filter: brightness(1.08); }
@@ -136,8 +139,8 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .inspection-art::before { content: "FRONT COVER"; position: absolute; top: 1.1rem; left: 1.1rem; font: 700 .58rem "Courier New", monospace; letter-spacing: .12em; }
 .inspection-art span { font: 900 clamp(4rem, 10vw, 8rem)/.8 Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; transform: rotate(-7deg); text-shadow: 7px 7px #05080d; }
 .inspection-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.vhs-stage { position: relative; display: grid; align-content: start; gap: .7rem; padding: 1rem; border-right: 8px solid #080b10; background: repeating-linear-gradient(135deg, transparent 0 22px, #ffffff08 22px 26px), linear-gradient(145deg, var(--genre-accent, #e24730), #152943 58%, #090d13); }
-.vhs-stage-host { position: relative; min-height: 300px; }
+.vhs-stage { position: relative; display: grid; justify-items: center; gap: .8rem; padding: 1rem; }
+.vhs-stage-host { position: relative; width: min(560px, 86vw); min-height: 300px; }
 .vhs-canvas { display: block; width: 100%; outline: 0; cursor: grab; }
 .vhs-canvas.is-dragging { cursor: grabbing; }
 .vhs-canvas:focus-visible { box-shadow: inset 0 0 0 3px var(--yellow); }
@@ -149,6 +152,19 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .vhs-stage-flat img { max-width: 100%; border: 6px solid #080b10; }
 .vhs-stage-flat span { font: 900 4rem/1 Impact, "Arial Narrow Bold", sans-serif; }
 .vhs-stage-flat p { margin: 0; color: #d6ccb7; font-size: .78rem; line-height: 1.5; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Tape-centred inspection: the case is the information surface, the actions float. */
+.tape-modal { display: grid; grid-template-columns: 1fr; justify-items: center; align-content: center; gap: .9rem; width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh; margin: 0; padding: 1rem; border: 0; background: transparent; box-shadow: none; overflow: auto; }
+.tape-modal::backdrop { background: rgba(8, 6, 5, .78); backdrop-filter: blur(3px); }
+.tape-close { position: fixed; top: 1rem; right: 1rem; min-width: 44px; min-height: 44px; color: var(--cream); background: #243e61; border: 2px solid #050a12; box-shadow: 3px 3px #08101d; font-size: 1.4rem; cursor: pointer; }
+.tape-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; max-width: min(760px, 94vw); }
+.tape-actions button { min-height: 42px; padding: .6rem .8rem; color: var(--cream); background: #243e61; border: 2px solid #050a12; box-shadow: 3px 3px #08101d; font: 800 .64rem/1 "Courier New", monospace; letter-spacing: .035em; text-transform: uppercase; cursor: pointer; }
+.tape-actions button:hover:not(:disabled) { color: var(--ink); background: var(--yellow); }
+.tape-actions button[aria-pressed="true"] { color: var(--ink); background: var(--yellow); }
+.tape-actions button:disabled { opacity: .58; cursor: not-allowed; }
+.tape-actions .tape-primary { background: var(--red); }
+.tape-actions .text-action { background: transparent; border-color: #ffffff40; box-shadow: none; }
+.tape-reviews { width: min(760px, 94vw); max-height: 42vh; overflow: auto; padding: 1rem; background: #080d15; border: 2px solid #ffffff2c; }
 .inspection-copy { padding: clamp(1.4rem, 4vw, 3.5rem); }
 .eyebrow { margin: 0 0 .45rem; color: var(--yellow); font: 800 .64rem/1.4 "Courier New", monospace; letter-spacing: .12em; text-transform: uppercase; }
 .inspection-copy h2, .panel-header h2 { margin: 0 0 .6rem; font: 900 clamp(2.2rem, 6vw, 4.2rem)/.9 Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; letter-spacing: .03em; text-transform: uppercase; }
@@ -288,6 +304,7 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   .search-control { grid-column: 1 / -1; }
   .settings-drawer { align-items: stretch; flex-wrap: wrap; justify-content: flex-start; }
   .title-modal { grid-template-columns: minmax(190px, .7fr) 1fr; }
+  .tape-modal { grid-template-columns: 1fr; }
   .inspection-art { min-height: 480px; }
 }
 
@@ -318,6 +335,7 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   .case-label small { display: none; }
   .tape-skeleton { height: 168px; aspect-ratio: auto; }
   .title-modal { display: block; }
+  .tape-modal { display: grid; padding: .5rem; }
   .inspection-art { min-height: 260px; border: 0; border-bottom: 8px solid #080b10; }
   .inspection-copy { padding: 1.3rem; }
   .basket-list li { align-items: stretch; flex-direction: column; }
