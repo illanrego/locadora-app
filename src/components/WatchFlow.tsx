@@ -180,6 +180,39 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [changeSubtitleDelay, selectedSubtitleId, selectedSubtitleIsExtra, video.state.extraSubtitlesDelay, video.state.subtitlesDelay]);
+
+  useEffect(() => {
+    if (!candidateId) return;
+    const onPlaybackKey = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement
+        || target instanceof HTMLSelectElement
+        || target instanceof HTMLTextAreaElement
+        || (target instanceof HTMLElement && target.isContentEditable)) return;
+      if (event.key === 'Escape' && video.state.fullscreen) {
+        event.preventDefault();
+        video.setFullscreen(false);
+      } else if (event.key === 'f' || event.key === 'F11') {
+        event.preventDefault();
+        video.setFullscreen(!video.state.fullscreen);
+      } else if (event.key === ' ' && video.state.loaded) {
+        event.preventDefault();
+        video.setPaused(!video.state.paused);
+      } else if (event.key === 'ArrowLeft' && video.state.loaded) {
+        event.preventDefault();
+        video.seekRelative(-10);
+      } else if (event.key === 'ArrowRight' && video.state.loaded) {
+        event.preventDefault();
+        video.seekRelative(10);
+      }
+    };
+    window.addEventListener('keydown', onPlaybackKey);
+    return () => window.removeEventListener('keydown', onPlaybackKey);
+  }, [candidateId, video.setFullscreen, video.setPaused, video.seekRelative, video.state.fullscreen, video.state.loaded, video.state.paused]);
+
+  useEffect(() => {
+    if (video.state.ended && video.state.fullscreen) video.setFullscreen(false);
+  }, [video.setFullscreen, video.state.ended, video.state.fullscreen]);
   const playerError = video.state.error ?? lookupError;
   const phase = lookupState === 'loading'
     ? 'loading-streams'
@@ -204,7 +237,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
   const pt = locale === 'pt-BR';
   const bufferedAhead = Math.max(0, (video.state.buffered ?? 0) - (video.state.time ?? 0));
   return (
-    <Modal label={`Quick Watch · ${title.name}`} onClose={close} className="watch-modal">
+    <Modal label={`Quick Watch · ${title.name}`} onClose={close} className={`watch-modal${video.state.fullscreen ? ' player-is-fullscreen' : ''}`}>
       <header className="panel-header">
         <p className="eyebrow">Quick Watch · movie-v1</p>
         <h2>{title.name}</h2>
@@ -231,11 +264,19 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
         </button>
       )}
 
-      <div ref={video.containerRef} className="stremio-video-surface" aria-hidden="true" />
+      <div
+        ref={video.containerRef}
+        className="stremio-video-surface"
+        role="application"
+        aria-label={pt ? `Reprodutor de ${title.name}` : `${title.name} player`}
+        onDoubleClick={() => video.setFullscreen(true)}
+      >
+        <span>{phaseLabels[phase][pt ? 0 : 1]}</span>
+      </div>
 
       {candidateId && (
         <>
-          <p className="playback-window-note">{pt ? 'O vídeo abre na janela do player. Áudio, legendas e sincronia podem ser ajustados aqui.' : 'Video opens in the player window. Adjust audio, subtitles and sync here.'}</p>
+          <p className="playback-window-note">{pt ? 'O filme toca aqui. Duplo clique ou F abre a tela cheia; Esc volta aos controles.' : 'The movie plays here. Double-click or press F for fullscreen; Escape returns to controls.'}</p>
           <div className="playback-timeline">
             <label htmlFor="playback-seek">{pt ? 'Posição do vídeo' : 'Playback position'}</label>
             <input id="playback-seek" type="range" min="0" max={video.state.duration ?? 0} step="1000"
@@ -253,6 +294,9 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
             <button type="button" onClick={() => video.seekRelative(-10)}>−10s</button>
             <button type="button" onClick={() => video.setPaused(!video.state.paused)}>{video.state.paused ? (pt ? '▶ Continuar' : '▶ Resume') : (pt ? 'Ⅱ Pausar' : 'Ⅱ Pause')}</button>
             <button type="button" onClick={() => video.seekRelative(10)}>+10s</button>
+            <button type="button" onClick={() => video.setFullscreen(!video.state.fullscreen)}>
+              {video.state.fullscreen ? (pt ? 'Sair da tela cheia' : 'Exit fullscreen') : (pt ? 'Tela cheia' : 'Fullscreen')}
+            </button>
             <button type="button" onClick={() => { video.unload(); setStopped(true); }}>■ {locale === 'pt-BR' ? 'Parar' : 'Stop'}</button>
           </section>
 

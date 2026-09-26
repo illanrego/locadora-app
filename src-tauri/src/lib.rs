@@ -1,9 +1,17 @@
 mod commands;
+mod embedded_surface;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(commands::PlayerState::default())
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                embedded_surface::install(&window).map_err(std::io::Error::other)?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::native_capabilities,
             commands::fetch_public_shelf,
@@ -29,6 +37,8 @@ pub fn run() {
             commands::media_configuration_remove,
             commands::media_configuration_disconnect,
             commands::player_start,
+            commands::player_set_bounds,
+            commands::player_fullscreen,
             commands::player_load,
             commands::player_control,
             commands::player_set_property,

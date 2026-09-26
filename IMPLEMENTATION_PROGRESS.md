@@ -85,9 +85,26 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: obtain user acceptance of the rebuilt artwork, buffering controls
-and native subtitle selection/sync with their configured sources. Automatic
-sync remains assessment-only in `docs/AUTO_SUBTITLE_SYNC_FEASIBILITY.md`.
+Next task: obtain user acceptance of embedded same-window playback, video-only
+fullscreen, buffering and subtitle selection/sync with configured sources.
+Automatic sync remains assessment-only in
+`docs/AUTO_SUBTITLE_SYNC_FEASIBILITY.md`.
+
+2026-09-26 embedded-player checkpoint: the Linux shell now initializes libmpv
+directly and renders its OpenGL output in a GTK GLArea inside Tauri's existing
+main window. The React Watch flow reserves and continuously reports a 16:9
+surface, keeps Locadora controls around it, and requests video-only fullscreen;
+Escape is also handled natively so hidden controls cannot trap the user. The
+renderer and libmpv lifecycle are ordered across GTK's main thread. Official
+Stremio Video now receives `mpvSeparateWindow: false`; existing bounded IPC,
+buffering and native subtitles remain in use. Frontend tests pass (25 files,
+95 tests); Tauri tests pass (21, 2 ignored); native-core passes 18 tests outside
+the socket-restricted sandbox, including proof that embedded mode creates no
+child mpv window. Both Rust crates pass strict Clippy and formatting. `npm run
+tauri -- build --no-bundle` passed (2m46s) and refreshed the executable used by
+the `locadora` alias. `ldd` resolves system libmpv, GTK 3 and libepoxy with no
+missing library. User visual/GPU/configured-source playback acceptance remains
+pending.
 
 Release handoff: `npm run tauri -- build --no-bundle` passed (frontend build and
 optimized native build, 1m48s), refreshing
@@ -140,10 +157,9 @@ no visual acceptance claimed.
    natively and handed to mpv, so they render in the actual playback window.
    Synthetic mpv IPC verifies selection and delay; configured-source subtitle
    availability, appearance and perceived sync still need user acceptance.
-5. Pending: embed the player. Stremio Video asks the shell for `vo=libmpv` and
-   the shell currently ignores it and runs a separate mpv window. Implementing
-   the render API into a GL widget inside the Tauri window removes the extra
-   window and makes HTML subtitle rendering work.
+5. Implemented, awaiting user acceptance: libmpv renders through a GTK GLArea
+   in the existing Locadora window. Fullscreen is video-only and returns with
+   Escape. Linux OpenGL behavior and configured-source playback need a user run.
 
 Do not claim visual or playback acceptance until the user reports it.
 

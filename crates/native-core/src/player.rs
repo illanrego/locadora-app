@@ -1,5 +1,7 @@
+use crate::EmbeddedMpv;
 use serde::Serialize;
 use serde_json::{Value, json};
+use std::sync::Arc;
 use std::{
     fs,
     io::{BufRead, BufReader, BufWriter, Write},
@@ -56,6 +58,7 @@ pub fn player_runtime_root() -> PathBuf {
 pub enum VideoOutput {
     Window,
     Null,
+    Embedded,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -170,7 +173,8 @@ fn safe_observed_property(name: &str, data: &Value) -> Option<PlayerEvent> {
 }
 
 pub struct MpvSession {
-    child: Child,
+    child: Option<Child>,
+    embedded: Option<Arc<EmbeddedMpv>>,
     writer: BufWriter<UnixStream>,
     events: Receiver<PlayerEvent>,
     session_dir: PathBuf,
@@ -207,6 +211,7 @@ fn mpv_arguments(socket_path: &Path, video_output: VideoOutput) -> Vec<String> {
         format!("--input-ipc-server={}", socket_path.display()),
     ];
     match video_output {
+        VideoOutput::Embedded => unreachable!("embedded playback uses libmpv, not a child window"),
         VideoOutput::Window => args.push("--force-window=yes".into()),
         VideoOutput::Null => {
             args.push("--vo=null".into());
@@ -388,14 +393,24 @@ impl MpvSession {
         fs::create_dir_all(&session_dir).map_err(|_| PlayerError::ControlUnavailable)?;
         fs::set_permissions(&session_dir, fs::Permissions::from_mode(0o700))
             .map_err(|_| PlayerError::ControlUnavailable)?;
-        let args = mpv_arguments(&socket_path, video_output);
-        let mut child = Command::new("mpv")
-            .args(&args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|_| PlayerError::Unavailable)?;
+        let embedded = if video_output == VideoOutput::Embedded {
+            Some(EmbeddedMpv::new(&socket_path)?)
+        } else {
+            None
+        };
+        let mut child = if embedded.is_none() {
+            Some(
+                Command::new("mpv")
+                    .args(mpv_arguments(&socket_path, video_output))
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .map_err(|_| PlayerError::Unavailable)?,
+            )
+        } else {
+            None
+        };
 
         let deadline = Instant::now() + CONNECT_TIMEOUT;
         let stream = loop {
@@ -403,12 +418,17 @@ impl MpvSession {
                 break stream;
             }
             if child
-                .try_wait()
+                .as_mut()
+                .map(|child| child.try_wait())
+                .transpose()
                 .map_err(|_| PlayerError::ControlUnavailable)?
+                .flatten()
                 .is_some()
                 || Instant::now() >= deadline
             {
-                let _ = child.kill();
+                if let Some(child) = child.as_mut() {
+                    let _ = child.kill();
+                }
                 let _ = fs::remove_dir_all(&session_dir);
                 return Err(PlayerError::ControlUnavailable);
             }
@@ -423,6 +443,7 @@ impl MpvSession {
         let events = spawn_event_reader(reader);
         let mut session = Self {
             child,
+            embedded,
             writer: BufWriter::new(stream),
             events,
             session_dir,
@@ -464,6 +485,10 @@ impl MpvSession {
             .write_all(b"\n")
             .map_err(|_| PlayerError::CommandFailed)?;
         self.writer.flush().map_err(|_| PlayerError::CommandFailed)
+    }
+
+    pub fn embedded_handle(&self) -> Option<Arc<EmbeddedMpv>> {
+        self.embedded.clone()
     }
 
     fn load_internal(&mut self, descriptor: &str) -> Result<(), PlayerError> {
@@ -586,12 +611,22 @@ impl MpvSession {
     }
 
     pub fn is_alive(&mut self) -> bool {
-        matches!(self.child.try_wait(), Ok(None))
+        self.embedded.is_some()
+            || self
+                .child
+                .as_mut()
+                .is_some_and(|child| matches!(child.try_wait(), Ok(None)))
     }
 }
 
 impl Drop for MpvSession {
     fn drop(&mut self) {
+        if self.embedded.is_some() {
+            // The UI must free the GL render context before dropping this owner.
+            self.embedded.take();
+            let _ = fs::remove_dir_all(&self.session_dir);
+            return;
+        }
         let _ = self.send_command(vec![json!("quit")]);
         let deadline = Instant::now() + Duration::from_millis(600);
         while Instant::now() < deadline {
@@ -600,9 +635,11 @@ impl Drop for MpvSession {
             }
             thread::sleep(Duration::from_millis(20));
         }
-        if self.is_alive() {
-            let _ = self.child.kill();
-            let _ = self.child.wait();
+        if self.is_alive()
+            && let Some(child) = self.child.as_mut()
+        {
+            let _ = child.kill();
+            let _ = child.wait();
         }
         let _ = fs::remove_dir_all(&self.session_dir);
     }
@@ -866,5 +903,17 @@ mod tests {
         );
         session.stop_media().unwrap();
         assert!(session.attach_subtitle(revision, subtitle).is_err());
+    }
+
+    #[test]
+    fn embedded_session_uses_libmpv_without_a_child_window() {
+        if !crate::probe_mpv().available {
+            return;
+        }
+        let mut session = MpvSession::start(&player_runtime_root(), VideoOutput::Embedded)
+            .expect("start embedded libmpv");
+        assert!(session.embedded_handle().is_some());
+        assert!(session.child.is_none());
+        assert!(session.is_alive());
     }
 }

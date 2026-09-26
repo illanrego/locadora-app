@@ -1,10 +1,10 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use locadora_native_core::{
     JsonRequestMethod, Manifest, ManifestResource, MpvSession, NativeCapabilities, PlayerEvent,
-    ResourcePath, VideoOutput, fetch_bounded_https_image, fetch_bounded_https_json,
+    ResourcePath, fetch_bounded_https_image, fetch_bounded_https_json,
     fetch_bounded_https_json_request, fetch_bounded_https_subtitle,
-    native_capabilities as read_native_capabilities, player_runtime_root, stremio_manifest,
-    stremio_resource, validate_manifest_url,
+    native_capabilities as read_native_capabilities, stremio_manifest, stremio_resource,
+    validate_manifest_url,
 };
 use serde::Deserialize;
 use serde::Serialize;
@@ -14,7 +14,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Mutex,
 };
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 use url::Url;
 use urlencoding::encode;
 
@@ -1277,20 +1277,59 @@ pub fn media_configuration_disconnect() -> Result<(), String> {
     }
 }
 
+async fn on_main_thread<T, F>(window: &WebviewWindow, task: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    window
+        .run_on_main_thread(move || {
+            let _ = sender.send(task());
+        })
+        .map_err(|_| "Could not access the native video surface")?;
+    tauri::async_runtime::spawn_blocking(move || receiver.recv())
+        .await
+        .map_err(|_| "Native video surface task failed")?
+        .map_err(|_| "Native video surface task was cancelled".to_owned())
+}
+
 #[tauri::command]
-pub fn player_start(state: State<'_, PlayerState>) -> Result<(), String> {
-    let mut player = state.0.lock().map_err(|_| "Player state is unavailable")?;
-    if player.as_mut().is_some_and(MpvSession::is_alive) {
-        return Ok(());
+pub async fn player_start(
+    state: State<'_, PlayerState>,
+    window: WebviewWindow,
+) -> Result<(), String> {
+    {
+        let mut player = state.0.lock().map_err(|_| "Player state is unavailable")?;
+        if player.as_mut().is_some_and(MpvSession::is_alive) {
+            return Ok(());
+        }
     }
-    // Must stay short: the private control socket has to fit the Unix socket
-    // path limit, so the app cache directory is not used here.
-    let runtime_root = player_runtime_root();
-    std::fs::create_dir_all(&runtime_root).map_err(|_| "Player runtime path is unavailable")?;
-    *player = Some(
-        MpvSession::start(&runtime_root, VideoOutput::Window).map_err(|error| error.to_string())?,
-    );
+    let session = on_main_thread(&window, || {
+        crate::embedded_surface::release();
+        crate::embedded_surface::start()
+    })
+    .await??;
+    *state.0.lock().map_err(|_| "Player state is unavailable")? = Some(session);
     Ok(())
+}
+
+#[tauri::command]
+pub fn player_set_bounds(
+    request: crate::embedded_surface::VideoBounds,
+    window: WebviewWindow,
+) -> Result<(), String> {
+    request.validate()?;
+    window
+        .run_on_main_thread(move || crate::embedded_surface::set_bounds(request))
+        .map_err(|_| "Could not position the native video surface".to_owned())
+}
+
+#[tauri::command]
+pub fn player_fullscreen(fullscreen: bool, window: WebviewWindow) -> Result<(), String> {
+    window
+        .set_fullscreen(fullscreen)
+        .map_err(|_| "Could not change player fullscreen mode".to_owned())
 }
 
 #[tauri::command]
@@ -1373,9 +1412,12 @@ pub fn player_events(state: State<'_, PlayerState>) -> Result<Vec<PlayerEvent>, 
 }
 
 #[tauri::command]
-pub fn player_shutdown(state: State<'_, PlayerState>) -> Result<(), String> {
-    let mut player = state.0.lock().map_err(|_| "Player state is unavailable")?;
-    *player = None;
+pub async fn player_shutdown(
+    state: State<'_, PlayerState>,
+    window: WebviewWindow,
+) -> Result<(), String> {
+    on_main_thread(&window, crate::embedded_surface::release).await?;
+    *state.0.lock().map_err(|_| "Player state is unavailable")? = None;
     Ok(())
 }
 

@@ -128,6 +128,24 @@ demuxer caches, and targets 5 seconds before resuming from a cache pause. These
 are targets, not bandwidth guarantees or a cap on the whole process's memory.
 Automatic synchronization remains a feasibility proposal only.
 
+### D-015 — Embedded Linux video surface
+
+Linux playback uses the installed libmpv client and OpenGL render APIs inside a
+GTK GLArea layered into Tauri's existing main window. React reports the bounded
+video-frame geometry; the native widget draws only there and leaves Locadora's
+controls in the WebView. Fullscreen expands the native surface over the window,
+blocks pointer input from reaching hidden controls, and Escape restores the
+windowed Locadora layout. Source resolution remains owned by official Stremio
+Video, while existing IPC continues to own bounded controls, events, buffering
+and subtitle delivery. No second mpv process or top-level playback window is
+created in embedded mode.
+
+The GL render context is created and destroyed on GTK's main thread and is
+released before libmpv and before the application window. X11 resolves OpenGL
+through GLX and Wayland through EGL. Geometry and fullscreen events contain no
+playback descriptors. Windows will need its own native render adapter in Phase
+7; this decision applies to the current Linux build.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

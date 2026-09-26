@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   listeners: new Map<string, (...args: unknown[]) => void>(),
   dispatch: vi.fn(), select: vi.fn().mockResolvedValue(undefined), property: vi.fn().mockResolvedValue(undefined),
+  bounds: vi.fn().mockResolvedValue(undefined), fullscreen: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@stremio/stremio-video', () => ({ default: class {
   on(name: string, listener: (...args: unknown[]) => void) { mocks.listeners.set(name, listener); }
@@ -15,7 +16,14 @@ vi.mock('../src/platform/stremioShellTransport', () => ({ StremioShellTransport:
   async start() {} async destroy() {}
 } }));
 vi.mock('../src/platform/stremioService', () => ({ STREMIO_SERVICE_URL: 'http://127.0.0.1:11470/', stremioServiceAvailable: async () => false }));
-vi.mock('../src/platform/nativeBridge', () => ({ selectNativeSubtitle: mocks.select, setNativePlayerProperty: mocks.property }));
+vi.mock('../src/platform/nativeBridge', () => ({
+  selectNativeSubtitle: mocks.select,
+  setNativePlayerProperty: mocks.property,
+  setNativeVideoBounds: mocks.bounds,
+  setNativePlayerFullscreen: mocks.fullscreen,
+  onNativePlayerFullscreenChanged: async () => () => undefined,
+  onNativePlayerRenderError: async () => () => undefined,
+}));
 import { useStremioVideo } from '../src/media/useStremioVideo';
 
 const track = { id: 'ADDON_test', url: 'https://subtitles.example.invalid/test.srt', lang: 'pt-BR', label: 'Português', origin: 'Test', embedded: false as const };
@@ -23,6 +31,18 @@ beforeEach(() => { vi.clearAllMocks(); mocks.listeners.clear(); });
 afterEach(cleanup);
 
 describe('native subtitle coordination', () => {
+  it('loads the official shell into the embedded surface and controls native fullscreen', async () => {
+    const { result } = renderHook(() => useStremioVideo('0.35.1'));
+    Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });
+    await act(async () => { await result.current.load({ url: 'https://media.example.invalid/video' }); });
+    expect(mocks.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'command', commandName: 'load' }),
+      expect.objectContaining({ mpvSeparateWindow: false }),
+    );
+    act(() => { result.current.setFullscreen(true); });
+    await waitFor(() => expect(mocks.fullscreen).toHaveBeenCalledWith(true));
+  });
+
   it('loads external subtitles into mpv without requiring Stremio Service or an HTML overlay', async () => {
     const { result } = renderHook(() => useStremioVideo('0.35.1'));
     act(() => { result.current.addExtraSubtitlesTracks([track]); });

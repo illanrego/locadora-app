@@ -1,4 +1,8 @@
+#[cfg(unix)]
+mod embedded;
 mod network;
+#[cfg(unix)]
+pub use embedded::{EmbeddedMpv, MpvRenderContext};
 #[cfg(unix)]
 mod player;
 mod stremio;

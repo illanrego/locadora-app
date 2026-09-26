@@ -5,7 +5,14 @@ import { StremioShellTransport } from '../platform/stremioShellTransport';
 import { STREMIO_SERVICE_URL, stremioServiceAvailable } from '../platform/stremioService';
 import type { StremioPlayableStream } from './stremioStream';
 import type { StremioExtraSubtitleTrack } from './subtitleResolution';
-import { selectNativeSubtitle, setNativePlayerProperty } from '../platform/nativeBridge';
+import {
+  onNativePlayerFullscreenChanged,
+  onNativePlayerRenderError,
+  selectNativeSubtitle,
+  setNativePlayerFullscreen,
+  setNativePlayerProperty,
+  setNativeVideoBounds,
+} from '../platform/nativeBridge';
 
 export interface StremioVideoState {
   loaded: boolean;
@@ -27,6 +34,7 @@ export interface StremioVideoState {
   streamingServiceAvailable: boolean | null;
   error: string | null;
   ended: boolean;
+  fullscreen: boolean;
 }
 
 export interface StremioVideoTrack {
@@ -56,6 +64,7 @@ const INITIAL_STATE: StremioVideoState = {
   streamingServiceAvailable: null,
   error: null,
   ended: false,
+  fullscreen: false,
 };
 
 function stremioVideoError(value: unknown): string {
@@ -73,6 +82,7 @@ export interface StremioVideoController {
   setPaused: (paused: boolean) => void;
   seekRelative: (seconds: number) => void;
   seekTo: (milliseconds: number) => void;
+  setFullscreen: (fullscreen: boolean) => void;
   selectAudioTrack: (id: string) => void;
   selectSubtitleTrack: (id: string | null, extra: boolean) => void;
   setSubtitleDelay: (milliseconds: number, extra?: boolean) => void;
@@ -87,7 +97,63 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
   const subtitleGeneration = useRef(0);
   const extraTracks = useRef<StremioExtraSubtitleTrack[]>([]);
   const selectedExtra = useRef<string | null>(null);
+  const nativeSurfaceVisible = useRef(false);
   const [state, setState] = useState(INITIAL_STATE);
+
+  useEffect(() => {
+    const reportBounds = () => {
+      const element = containerRef.current;
+      if (!element) return;
+      const bounds = element.getBoundingClientRect();
+      void setNativeVideoBounds({
+        x: Math.max(0, bounds.left),
+        y: Math.max(0, bounds.top),
+        width: Math.max(0, Math.min(bounds.right, window.innerWidth) - Math.max(bounds.left, 0)),
+        height: Math.max(0, Math.min(bounds.bottom, window.innerHeight) - Math.max(bounds.top, 0)),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        visible: nativeSurfaceVisible.current
+          && bounds.left >= 0
+          && bounds.top >= 0
+          && bounds.right <= window.innerWidth
+          && bounds.bottom <= window.innerHeight,
+      });
+    };
+    let frame = 0;
+    const schedule = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(reportBounds);
+    };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
+    if (containerRef.current) observer?.observe(containerRef.current);
+    window.addEventListener('resize', schedule);
+    window.addEventListener('scroll', schedule, true);
+    let disposed = false;
+    const eventListeners: Array<() => void> = [];
+    void onNativePlayerFullscreenChanged((fullscreen) => {
+      setState((current) => ({ ...current, fullscreen }));
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else eventListeners.push(unlisten);
+    });
+    void onNativePlayerRenderError((message) => {
+      setState((current) => ({ ...current, error: message }));
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else eventListeners.push(unlisten);
+    });
+    schedule();
+    return () => {
+      observer?.disconnect();
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('scroll', schedule, true);
+      disposed = true;
+      eventListeners.forEach((unlisten) => unlisten());
+      nativeSurfaceVisible.current = false;
+      void setNativeVideoBounds({ x: 0, y: 0, width: 0, height: 0, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight, visible: false });
+    };
+  }, []);
 
   useEffect(() => {
     const video = new StremioVideo();
@@ -152,6 +218,8 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     }
     await transport.start();
     if (generation !== loadGeneration.current) return;
+    nativeSurfaceVisible.current = true;
+    window.dispatchEvent(new Event('resize'));
     setState((current) => ({ ...current, streamingServiceAvailable: serviceAvailable }));
     video.dispatch({
       type: 'command',
@@ -168,7 +236,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     }, {
       containerElement,
       shellTransport: transport,
-      mpvSeparateWindow: true,
+      mpvSeparateWindow: false,
     });
   }, []);
 
@@ -176,6 +244,9 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     loadGeneration.current += 1;
     subtitleGeneration.current += 1;
     selectedExtra.current = null;
+    nativeSurfaceVisible.current = false;
+    void setNativePlayerFullscreen(false);
+    window.dispatchEvent(new Event('resize'));
     videoRef.current?.dispatch({ type: 'command', commandName: 'unload' });
     setState({ ...INITIAL_STATE });
   }, []);
@@ -196,6 +267,12 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
   const seekTo = useCallback((milliseconds: number) => {
     if (!Number.isFinite(milliseconds)) return;
     videoRef.current?.dispatch({ type: 'setProp', propName: 'time', propValue: Math.max(0, milliseconds) });
+  }, []);
+
+  const setFullscreen = useCallback((fullscreen: boolean) => {
+    void setNativePlayerFullscreen(fullscreen).catch(() => {
+      setState((current) => ({ ...current, error: 'Could not change fullscreen mode' }));
+    });
   }, []);
 
   const selectAudioTrack = useCallback((id: string) => {
@@ -248,6 +325,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     setPaused,
     seekRelative,
     seekTo,
+    setFullscreen,
     selectAudioTrack,
     selectSubtitleTrack,
     setSubtitleDelay,

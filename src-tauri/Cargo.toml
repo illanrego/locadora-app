@@ -24,3 +24,4 @@ serde_json = "1.0"
 tauri = { version = "2.11.1", features = [] }
 urlencoding = "2.1"
 url = "2.5"
+gtk = "0.18.2"

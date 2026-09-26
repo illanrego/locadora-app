@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { ContentType } from '../domain/content';
 
 export interface NativeCapabilities {
@@ -160,6 +161,38 @@ export async function fetchNativePublicArtwork(url: string): Promise<string> {
 export async function startNativePlayer(): Promise<void> {
   if (!isNativeShell()) throw new Error('Native player is unavailable');
   return invoke('player_start');
+}
+
+export interface NativeVideoBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  visible: boolean;
+}
+
+export async function setNativeVideoBounds(request: NativeVideoBounds): Promise<void> {
+  if (!isNativeShell()) return;
+  return invoke('player_set_bounds', { request });
+}
+
+export async function setNativePlayerFullscreen(fullscreen: boolean): Promise<void> {
+  if (!isNativeShell()) return;
+  return invoke('player_fullscreen', { fullscreen });
+}
+
+export async function onNativePlayerFullscreenChanged(
+  callback: (fullscreen: boolean) => void,
+): Promise<UnlistenFn> {
+  if (!isNativeShell()) return () => undefined;
+  return listen<boolean>('player-fullscreen-changed', (event) => callback(event.payload));
+}
+
+export async function onNativePlayerRenderError(callback: (message: string) => void): Promise<UnlistenFn> {
+  if (!isNativeShell()) return () => undefined;
+  return listen<string>('player-render-error', (event) => callback(event.payload));
 }
 
 export async function loadNativePlayer(descriptor: string): Promise<void> {
