@@ -85,9 +85,15 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: rebuild the release executable for user acceptance of artwork,
-buffering and native subtitle selection/sync; automatic sync remains
-assessment-only in `docs/AUTO_SUBTITLE_SYNC_FEASIBILITY.md`.
+Next task: obtain user acceptance of the rebuilt artwork, buffering controls
+and native subtitle selection/sync with their configured sources. Automatic
+sync remains assessment-only in `docs/AUTO_SUBTITLE_SYNC_FEASIBILITY.md`.
+
+Release handoff: `npm run tauri -- build --no-bundle` passed (frontend build and
+optimized native build, 1m48s), refreshing
+`src-tauri/target/release/wills-locadora-player`, the target of the user's
+`locadora` alias. Restart any already-running instance to test this build.
+Dependency notices now include the test-only fake-indexeddb package.
 
 2026-09-26 playback checkpoint: external subtitle lookup no longer blocks
 playback. Subtitles now download through the bounded native HTTPS boundary and
@@ -112,8 +118,8 @@ downloads. Inspection textures update in place and mesh resources are disposed.
 Catalogue persistence uses bounded IndexedDB records and locale-specific detail
 keys, with safe legacy shelf migration and a bounded session fallback.
 `npm run typecheck` passed; `npm test` passed (24 files, 89 tests), including
-IndexedDB reopen and language isolation. Native rebuild follows the player
-milestone; no visual acceptance claimed.
+IndexedDB reopen and language isolation. Native rebuild is recorded above;
+no visual acceptance claimed.
 
 1. Done: the accessible 2D shelf is now the default surface and the immersive
    shelf is an explicit opt-in. Loading another stand appends a distinct
@@ -130,10 +136,10 @@ milestone; no visual acceptance claimed.
    successfully records an explicit watched outcome, that exact canonical tape's
    review form opens immediately below the return desk. Eligibility remains
    independently enforced by the existing watched-return Worker contract.
-4. Pending: subtitles. Add-on subtitle tracks are fetched and handed to Stremio
-   Video, but with the player in its own window its HTML subtitle renderer draws
-   into a hidden container, so those tracks never appear. Fix by handing the
-   track to mpv, or by embedding the player (next item).
+4. Implemented, awaiting user acceptance: external subtitles are downloaded
+   natively and handed to mpv, so they render in the actual playback window.
+   Synthetic mpv IPC verifies selection and delay; configured-source subtitle
+   availability, appearance and perceived sync still need user acceptance.
 5. Pending: embed the player. Stremio Video asks the shell for `vo=libmpv` and
    the shell currently ignores it and runs a separate mpv window. Implementing
    the render API into a GL widget inside the Tauri window removes the extra

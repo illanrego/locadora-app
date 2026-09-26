@@ -18,6 +18,7 @@ Packaging work must refresh this file from the final dependency graph.
 | Vitest | Automated tests | MIT | Development only. |
 | Testing Library / user-event | DOM interaction tests | MIT | Development only. |
 | jsdom | DOM test environment | MIT | Development only. |
+| fake-indexeddb | IndexedDB persistence regression tests | Apache-2.0 | Development only; not shipped in the application bundle. |
 | Tauri 2 | Native application boundary | MIT OR Apache-2.0 | Candidate shell; final Rust graph must be audited. |
 | reqwest + rustls | Bounded native HTTPS transport | MIT OR Apache-2.0 | Redirects are manually revalidated; TLS uses platform-verifier-backed rustls. |
 | keyring-rs | OS-protected local secrets | MIT OR Apache-2.0 | Stores secret-bearing manifest configuration and the independent Locadora member session in separate platform-credential namespaces. |
