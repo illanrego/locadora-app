@@ -66,5 +66,6 @@ describe('artwork loading', () => {
 
     expect(await screen.findByText('blob:inspection-poster')).toBeInTheDocument();
     expect(native.fetchNativePublicArtwork).toHaveBeenCalledWith(url);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

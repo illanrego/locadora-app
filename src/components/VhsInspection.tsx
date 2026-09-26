@@ -320,6 +320,9 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
   const [focused, setFocused] = useState<'front' | 'back' | 'whole'>('whole');
   const focusRef = useRef<(target: 'front' | 'back' | 'whole') => void>(() => undefined);
   const zoomRef = useRef<(delta: number) => void>(() => undefined);
+  const updateTitleRef = useRef<(next: DiscoveryTitle) => void>(() => undefined);
+  const closeRef = useRef(onInspectClose);
+  closeRef.current = onInspectClose;
 
   const setFocusedState = useCallback((target: 'front' | 'back' | 'whole') => {
     setFocused(target);
@@ -418,12 +421,14 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
       // The poster is only painted onto the cover when the canvas stays clean;
       // a cross-origin image without CORS headers would taint it and fail the
       // WebGL upload.
+      let artworkRevision = 0;
       const paintImage = (url: string | null, draw: (image: HTMLImageElement | null) => void) => {
         if (!url) return;
+        const revision = artworkRevision;
         const image = new Image();
         image.crossOrigin = 'anonymous';
         image.onload = () => {
-          if (disposed) return;
+          if (disposed || revision !== artworkRevision) return;
           try {
             const probe = document.createElement('canvas');
             probe.width = 1;
@@ -442,20 +447,31 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
 
       let posterImage: HTMLImageElement | null = null;
       let backdropImage: HTMLImageElement | null = null;
+      let currentTitle = title;
       const redrawBack = () => {
-        drawBack(backContext, title, locale, ACCENT, posterImage, backdropImage);
+        drawBack(backContext, currentTitle, locale, ACCENT, posterImage, backdropImage);
         backTexture.needsUpdate = true;
       };
-      paintImage(title.posterUrl, (image) => {
-        posterImage = image;
-        drawFront(frontContext, title, locale, image);
+      updateTitleRef.current = (next) => {
+        artworkRevision += 1;
+        if (next.posterUrl !== currentTitle.posterUrl) posterImage = null;
+        if (next.backdropUrl !== currentTitle.backdropUrl) backdropImage = null;
+        currentTitle = next;
+        drawFront(frontContext, currentTitle, locale, posterImage);
         frontTexture.needsUpdate = true;
         redrawBack();
-      });
-      paintImage(title.backdropUrl, (image) => {
-        backdropImage = image;
-        redrawBack();
-      });
+        paintImage(next.posterUrl, (image) => {
+          posterImage = image;
+          drawFront(frontContext, currentTitle, locale, image);
+          frontTexture.needsUpdate = true;
+          redrawBack();
+        });
+        paintImage(next.backdropUrl, (image) => {
+          backdropImage = image;
+          redrawBack();
+        });
+      };
+      updateTitleRef.current(title);
 
       const resize = () => {
         const width = Math.max(1, host.clientWidth);
@@ -550,7 +566,7 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
         }
         // The surrounding stage is an exit target; only the physical case flips.
         if (!hitCase(event)) {
-          onInspectClose();
+          closeRef.current();
           return;
         }
         flipCase();
@@ -593,6 +609,7 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
 
       return () => {
         disposed = true;
+        updateTitleRef.current = () => undefined;
         window.cancelAnimationFrame(frame);
         observer.disconnect();
         canvas.removeEventListener('pointerdown', onPointerDown);
@@ -604,6 +621,13 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
         canvas.removeEventListener('touchend', onTouchEnd);
         frontTexture.dispose();
         backTexture.dispose();
+        group.traverse((object) => {
+          if (object instanceof THREE.Mesh) {
+            object.geometry.dispose();
+            const materials = Array.isArray(object.material) ? object.material : [object.material];
+            materials.forEach((material) => material.dispose());
+          }
+        });
         renderer.dispose();
         canvas.remove();
       };
@@ -614,7 +638,9 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
         window.cancelAnimationFrame(frame);
       };
     }
-  }, [locale, onInspectClose, title]);
+  }, [locale, title.identity.canonicalKey]);
+
+  useEffect(() => { updateTitleRef.current(title); }, [title]);
 
   const pt = locale === 'pt-BR';
   const t = copy[locale];

@@ -1,6 +1,6 @@
 # Implementation progress
 
-Last updated: 2026-09-23
+Last updated: 2026-09-26
 Current milestone: MVP user acceptance
 Status: in progress
 
@@ -85,9 +85,18 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: obtain the user's visual acceptance for the current 2D shelf and
-inspection flow, then continue the immersive shelf as an opt-in experiment
-instead of promoting it as the primary browsing surface.
+Next task: finish playback buffering/subtitle delivery and controls from
+`docs/PLAYBACK_AND_CACHE_PLAN.md`, assess constant-offset automatic sync without
+implementing it, then rebuild the executable for user acceptance.
+
+2026-09-26 checkpoint: artwork now decodes native data without a CSP-blocked
+fetch; production policy admits blob images. Shelf and inspection share native
+downloads. Inspection textures update in place and mesh resources are disposed.
+Catalogue persistence uses bounded IndexedDB records and locale-specific detail
+keys, with safe legacy shelf migration and a bounded session fallback.
+`npm run typecheck` passed; `npm test` passed (24 files, 89 tests), including
+IndexedDB reopen and language isolation. Native rebuild follows the player
+milestone; no visual acceptance claimed.
 
 1. Done: the accessible 2D shelf is now the default surface and the immersive
    shelf is an explicit opt-in. Loading another stand appends a distinct

@@ -81,26 +81,33 @@ function touchIndex(kind: ArtworkKind, url: string): void {
 
 const pending = new Map<string, Promise<ArtworkResolution | null>>();
 
+function decodeNativeImage(dataUrl: string): Blob {
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(dataUrl);
+  if (!match) throw new Error('Invalid artwork response');
+  const bytes = Uint8Array.from(atob(match[2]), (character) => character.charCodeAt(0));
+  return new Blob([bytes], { type: match[1] });
+}
+
 async function resolveArtwork(url: string, kind: ArtworkKind): Promise<ArtworkResolution | null> {
   const cachesApi = cacheStorage();
-  if (!cachesApi) return null;
-
   const key = `${kind}:${url}`;
   const existing = pending.get(key);
   if (existing) return existing;
 
   const request = (async () => {
     try {
-      const store = await cachesApi.open(CACHE_NAMES[kind]);
-      let response = await store.match(url);
-      const fromCache = Boolean(response);
-      if (!response) {
-        response = await fetch(url, { cache: 'force-cache', headers: { accept: 'image/avif,image/webp,image/*' } });
+      const cached = await readCachedArtwork(url, kind);
+      if (cached) return { blob: cached, fromCache: true };
+      let blob: Blob;
+      if (isNativeShell()) {
+        blob = decodeNativeImage(await fetchNativePublicArtwork(url));
+      } else {
+        const response = await fetch(browserArtworkProxyUrl(url), { cache: 'force-cache', headers: { accept: 'image/avif,image/webp,image/*' } });
         if (!response.ok) return null;
-        await store.put(url, response.clone());
+        blob = await response.blob();
       }
-      touchIndex(kind, url);
-      return { blob: await response.blob(), fromCache };
+      if (cachesApi) void persistArtwork(url, kind, blob);
+      return { blob, fromCache: false };
     } catch {
       return null;
     }
@@ -181,16 +188,7 @@ export function useInspectionArtwork(url: string | null, kind: ArtworkKind): str
     if (!url) return () => undefined;
 
     void (async () => {
-      let blob = await readCachedArtwork(url, kind);
-      if (!blob && isNativeShell()) {
-        const dataUrl = await fetchNativePublicArtwork(url);
-        blob = await (await fetch(dataUrl)).blob();
-        void persistArtwork(url, kind, blob);
-      } else if (!blob) {
-        const safeUrl = browserArtworkProxyUrl(url);
-        const resolved = await resolveArtwork(safeUrl, kind);
-        blob = resolved?.blob ?? null;
-      }
+      const blob = (await resolveArtwork(url, kind))?.blob;
       if (!blob) return;
       objectUrl = URL.createObjectURL(blob);
       if (cancelled) {

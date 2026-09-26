@@ -46,7 +46,7 @@ function publicTitlePayload(body: unknown): PublicTitlePayload | null {
 }
 
 export async function loadShelf(query: ShelfQuery, signal?: AbortSignal): Promise<ShelfPage> {
-  const cached = readLocalShelf(query);
+  const cached = await readLocalShelf(query);
   if (cached) return cached;
 
   const base = endpoint();
@@ -63,7 +63,7 @@ export async function loadShelf(query: ShelfQuery, signal?: AbortSignal): Promis
       hasNextStand: Boolean(body.hasNextStand),
       source: 'public-api',
     };
-    cacheShelf(query, page);
+    void cacheShelf(query, page);
     return page;
   }
   if (!base) return fixtureShelf(query);
@@ -85,7 +85,7 @@ export async function loadShelf(query: ShelfQuery, signal?: AbortSignal): Promis
     hasNextStand: Boolean(body.hasNextStand),
     source: 'public-api',
   };
-  cacheShelf(query, page);
+  void cacheShelf(query, page);
   return page;
 }
 
@@ -99,7 +99,7 @@ export async function loadTitleDetails(
   locale: ShelfQuery['locale'],
   signal?: AbortSignal,
 ): Promise<DiscoveryTitle> {
-  const cached = readLocalTitle(title);
+  const cached = await readLocalTitle(title, locale);
   if (cached) return cached;
 
   const tmdbId = Number(externalId(title.identity, 'tmdb'));
@@ -122,6 +122,6 @@ export async function loadTitleDetails(
   if (!payload) return title;
   const normalized = normalizeDiscoveryTitle(payload);
   if (!normalized || normalized.identity.canonicalKey !== title.identity.canonicalKey) return title;
-  cacheTitle(normalized);
+  void cacheTitle(normalized, locale);
   return normalized;
 }
