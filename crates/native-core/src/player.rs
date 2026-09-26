@@ -175,6 +175,8 @@ pub struct MpvSession {
     events: Receiver<PlayerEvent>,
     session_dir: PathBuf,
     next_request_id: u64,
+    subtitle_revision: u64,
+    subtitle_files: Vec<PathBuf>,
 }
 
 fn session_directory(root: &Path) -> PathBuf {
@@ -195,6 +197,13 @@ fn mpv_arguments(socket_path: &Path, video_output: VideoOutput) -> Vec<String> {
         "--no-terminal".into(),
         "--really-quiet".into(),
         "--msg-level=all=no".into(),
+        "--cache=yes".into(),
+        "--cache-pause=yes".into(),
+        "--cache-pause-initial=yes".into(),
+        "--cache-pause-wait=5".into(),
+        "--demuxer-readahead-secs=60".into(),
+        "--demuxer-max-bytes=134217728".into(),
+        "--demuxer-max-back-bytes=33554432".into(),
         format!("--input-ipc-server={}", socket_path.display()),
     ];
     match video_output {
@@ -418,6 +427,8 @@ impl MpvSession {
             events,
             session_dir,
             next_request_id: 1,
+            subtitle_revision: 0,
+            subtitle_files: Vec::new(),
         };
         for (id, name) in [
             (1, "pause"),
@@ -456,6 +467,7 @@ impl MpvSession {
     }
 
     fn load_internal(&mut self, descriptor: &str) -> Result<(), PlayerError> {
+        self.invalidate_subtitle();
         self.send_command(vec![json!("loadfile"), json!(descriptor), json!("replace")])
     }
 
@@ -532,7 +544,41 @@ impl MpvSession {
     }
 
     pub fn stop_media(&mut self) -> Result<(), PlayerError> {
+        self.invalidate_subtitle();
         self.send_command(vec![json!("stop")])
+    }
+
+    fn invalidate_subtitle(&mut self) -> u64 {
+        self.subtitle_revision = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
+        self.subtitle_revision
+    }
+
+    pub fn begin_subtitle(&mut self) -> Result<u64, PlayerError> {
+        let revision = self.invalidate_subtitle();
+        self.set_property("sid", json!("no"))?;
+        self.set_property("sub-delay", json!(0))?;
+        Ok(revision)
+    }
+
+    pub fn attach_subtitle(&mut self, revision: u64, bytes: &[u8]) -> Result<(), PlayerError> {
+        if revision != self.subtitle_revision || bytes.len() > 2 * 1024 * 1024 {
+            return Err(PlayerError::CommandFailed);
+        }
+        // Only downloaded bounded bytes enter this private directory. No caller
+        // controls a local path or passes a subtitle URL to mpv.
+        let path = self.session_dir.join(format!("subtitle-{revision}.sub"));
+        fs::write(&path, bytes).map_err(|_| PlayerError::CommandFailed)?;
+        self.subtitle_files.push(path.clone());
+        if self.subtitle_files.len() > 16 {
+            let expired = self.subtitle_files.remove(0);
+            let _ = fs::remove_file(expired);
+        }
+        self.send_command(vec![
+            json!("sub-add"),
+            json!(path),
+            json!("select"),
+            json!("Locadora external"),
+        ])
     }
 
     pub fn drain_events(&mut self) -> Vec<PlayerEvent> {
@@ -769,5 +815,56 @@ mod tests {
         }
         assert!(loaded, "mpv did not report file-loaded");
         assert!(ended, "mpv did not report end-file");
+    }
+
+    #[test]
+    fn native_subtitle_selection_and_delay_reach_mpv() {
+        if !crate::probe_mpv().available {
+            return;
+        }
+        let mut session =
+            MpvSession::start(&player_runtime_root(), VideoOutput::Null).expect("start mpv");
+        session
+            .load_internal("av://lavfi:testsrc=duration=20:size=64x64:rate=10")
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut loaded = false;
+        while Instant::now() < deadline && !loaded {
+            loaded = session.drain_events().contains(&PlayerEvent::FileLoaded);
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(loaded);
+        session.set_paused(true).unwrap();
+        let old = session.begin_subtitle().unwrap();
+        let revision = session.begin_subtitle().unwrap();
+        let subtitle = b"1\n00:00:00,000 --> 00:00:10,000\nSynthetic subtitle fixture\n";
+        assert!(session.attach_subtitle(old, subtitle).is_err());
+        session.attach_subtitle(revision, subtitle).unwrap();
+        session.set_property("sub-delay", json!(-1.5)).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut selected = false;
+        let mut delay = false;
+        let mut track = false;
+        while Instant::now() < deadline && !(selected && delay && track) {
+            for event in session.drain_events() {
+                if let PlayerEvent::Property { name, data } = event {
+                    selected |= name == "sid" && data.as_u64().is_some_and(|id| id > 0);
+                    delay |= name == "sub-delay" && data.as_f64() == Some(-1.5);
+                    track |= name == "track-list"
+                        && data.as_array().is_some_and(|tracks| {
+                            tracks
+                                .iter()
+                                .any(|track| track["title"] == "Locadora external")
+                        });
+                }
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            selected && delay && track,
+            "subtitle selection/delay did not reach mpv"
+        );
+        session.stop_media().unwrap();
+        assert!(session.attach_subtitle(revision, subtitle).is_err());
     }
 }

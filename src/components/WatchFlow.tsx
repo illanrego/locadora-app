@@ -6,7 +6,7 @@ import type { StreamCandidate } from '../media/types';
 import { toStremioPlayableStream } from '../media/stremioStream';
 import { resolveTitleSubtitles, type StremioExtraSubtitleTrack } from '../media/subtitleResolution';
 import { normalizeSubtitleLanguage } from '../media/subtitles';
-import { readSubtitleDelay, writeSubtitleDelay } from '../media/subtitleDelayStore';
+import { readSubtitleDelay, writeSubtitleDelay, videoDelayIdentity } from '../media/subtitleDelayStore';
 import { useStremioVideo } from '../media/useStremioVideo';
 import { readMediaConfiguration } from '../platform/nativeBridge';
 import { Modal } from './Modal';
@@ -29,6 +29,11 @@ function formatBytes(bytes: number | null, locale: Locale): string {
 
 function playable(candidate: StreamCandidate): boolean {
   return toStremioPlayableStream(candidate) !== null;
+}
+
+function clockTime(milliseconds: number | null): string {
+  const seconds = Math.max(0, Math.floor((milliseconds ?? 0) / 1000));
+  return `${Math.floor(seconds / 3600) ? `${Math.floor(seconds / 3600)}:` : ''}${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 function explanation(resolution: MediaResolution | null, locale: Locale): string {
@@ -54,6 +59,8 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
   const [candidateId, setCandidateId] = useState<string | null>(null);
   const [stopped, setStopped] = useState(false);
   const [showOtherSubtitles, setShowOtherSubtitles] = useState(false);
+  const [subtitlesLoading, setSubtitlesLoading] = useState(true);
+  const [seekDraft, setSeekDraft] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const externalSubtitlesRef = useRef<StremioExtraSubtitleTrack[]>([]);
 
@@ -82,12 +89,15 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
       try {
         const addons = await readMediaConfiguration();
         if (controller.signal.aborted) return;
-        const [result, subtitles] = await Promise.all([
-          resolveTitleMedia(title, addons, { signal: controller.signal }),
-          resolveTitleSubtitles(title, addons, { signal: controller.signal }),
-        ]);
+        setSubtitlesLoading(true);
+        void resolveTitleSubtitles(title, addons, { signal: controller.signal }).then((subtitles) => {
+          if (controller.signal.aborted) return;
+          externalSubtitlesRef.current = subtitles;
+          video.addExtraSubtitlesTracks(subtitles);
+          setSubtitlesLoading(false);
+        }).catch(() => { if (!controller.signal.aborted) setSubtitlesLoading(false); });
+        const result = await resolveTitleMedia(title, addons, { signal: controller.signal });
         if (controller.signal.aborted) return;
-        externalSubtitlesRef.current = subtitles;
         setResolution(result);
         setLookupState('ready');
         const winner = result.quickWatch?.winner;
@@ -110,7 +120,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
       controller.abort();
       if (abortRef.current === controller) abortRef.current = null;
     };
-  }, [locale, play, quickWatchEnabled, title]);
+  }, [locale, play, quickWatchEnabled, title, video.addExtraSubtitlesTracks]);
 
   const close = useCallback(() => {
     abortRef.current?.abort();
@@ -120,31 +130,33 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
 
   const candidates = resolution?.manualCandidates ?? [];
   const current = resolution?.candidates.find((candidate) => candidate.stableId === candidateId) ?? null;
+  const delayIdentity = videoDelayIdentity(current);
   const subtitleOptions = [
     ...video.state.subtitlesTracks.map((track) => ({ ...track, extra: false })),
     ...video.state.extraSubtitlesTracks.map((track) => ({ ...track, extra: true })),
   ];
-  const preferredSubtitleOptions = subtitleOptions.filter((track) => normalizeSubtitleLanguage(track.lang) !== 'other');
+  const preferredSubtitleOptions = subtitleOptions.filter((track) => normalizeSubtitleLanguage(track.lang) !== 'other')
+    .sort((a, b) => Number(normalizeSubtitleLanguage(a.lang) === 'en') - Number(normalizeSubtitleLanguage(b.lang) === 'en'));
   const otherSubtitleOptions = subtitleOptions.filter((track) => normalizeSubtitleLanguage(track.lang) === 'other');
   const visibleSubtitleOptions = showOtherSubtitles
     ? [...preferredSubtitleOptions, ...otherSubtitleOptions]
-    : preferredSubtitleOptions;
+    : [...preferredSubtitleOptions, ...otherSubtitleOptions.filter((track) => track.id === video.state.selectedSubtitlesTrackId)];
   const selectedSubtitleId = video.state.selectedExtraSubtitlesTrackId ?? video.state.selectedSubtitlesTrackId;
   const selectedSubtitleIsExtra = Boolean(video.state.selectedExtraSubtitlesTrackId);
 
   useEffect(() => {
-    if (!candidateId || !selectedSubtitleId) return;
+    if (!selectedSubtitleId) return;
     video.setSubtitleDelay(
-      readSubtitleDelay(candidateId, selectedSubtitleId),
+      delayIdentity ? readSubtitleDelay(delayIdentity, selectedSubtitleId) : 0,
       selectedSubtitleIsExtra,
     );
-  }, [candidateId, selectedSubtitleId, selectedSubtitleIsExtra, video.setSubtitleDelay]);
+  }, [delayIdentity, selectedSubtitleId, selectedSubtitleIsExtra, video.setSubtitleDelay]);
 
   const changeSubtitleDelay = useCallback((milliseconds: number) => {
     if (!candidateId || !selectedSubtitleId) return;
     video.setSubtitleDelay(milliseconds, selectedSubtitleIsExtra);
-    writeSubtitleDelay(candidateId, selectedSubtitleId, milliseconds);
-  }, [candidateId, selectedSubtitleId, selectedSubtitleIsExtra, video.setSubtitleDelay]);
+    if (delayIdentity) writeSubtitleDelay(delayIdentity, selectedSubtitleId, milliseconds);
+  }, [candidateId, delayIdentity, selectedSubtitleId, selectedSubtitleIsExtra, video.setSubtitleDelay]);
 
   useEffect(() => {
     if (!selectedSubtitleId) return;
@@ -175,13 +187,22 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
       ? 'failed'
       : stopped || video.state.ended
         ? 'ended'
-        : candidateId && !video.state.loaded
+        : candidateId && (!video.state.loaded || (video.state.buffering && !video.state.paused))
           ? 'buffering'
           : video.state.loaded && video.state.paused
             ? 'paused'
             : video.state.loaded
               ? 'playing'
               : 'applying-quick-watch';
+  const phaseLabels: Record<string, [string, string]> = {
+    'loading-streams': ['Buscando fontes…', 'Finding sources…'],
+    buffering: ['Preparando vídeo…', 'Buffering…'],
+    playing: ['Reproduzindo', 'Playing'], paused: ['Pausado', 'Paused'],
+    ended: ['Reprodução encerrada', 'Playback stopped'], failed: ['Não foi possível reproduzir', 'Playback failed'],
+    'applying-quick-watch': ['Escolha uma fonte', 'Choose a source'],
+  };
+  const pt = locale === 'pt-BR';
+  const bufferedAhead = Math.max(0, (video.state.buffered ?? 0) - (video.state.time ?? 0));
   return (
     <Modal label={`Quick Watch · ${title.name}`} onClose={close} className="watch-modal">
       <header className="panel-header">
@@ -191,7 +212,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
       </header>
 
       <section className="watch-status" aria-live="polite">
-        <span className={`player-phase phase-${phase}`}>{phase}</span>
+        <span className={`player-phase phase-${phase}`}>{phaseLabels[phase][pt ? 0 : 1]}</span>
         <p>{playerError ?? explanation(resolution, locale)}</p>
         {current && <p className="current-source">{current.resolution}p · {formatBytes(current.sizeBytes, locale)} · {current.seeders ?? '—'} seeders · {current.sourceName}</p>}
       </section>
@@ -210,27 +231,32 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
         </button>
       )}
 
-      {candidateId && externalSubtitlesRef.current.length > 0 && video.state.streamingServiceAvailable === false && (
-        <p className="transport-warning">
-          {locale === 'pt-BR'
-            ? 'As legendas externas precisam do Stremio Service oficial em execução.'
-            : 'External subtitles require the official Stremio Service to be running.'}
-        </p>
-      )}
-
       <div ref={video.containerRef} className="stremio-video-surface" aria-hidden="true" />
 
       {candidateId && (
         <>
+          <p className="playback-window-note">{pt ? 'O vídeo abre na janela do player. Áudio, legendas e sincronia podem ser ajustados aqui.' : 'Video opens in the player window. Adjust audio, subtitles and sync here.'}</p>
+          <div className="playback-timeline">
+            <label htmlFor="playback-seek">{pt ? 'Posição do vídeo' : 'Playback position'}</label>
+            <input id="playback-seek" type="range" min="0" max={video.state.duration ?? 0} step="1000"
+              disabled={!video.state.loaded || !video.state.duration}
+              value={seekDraft ?? video.state.time ?? 0}
+              aria-valuetext={clockTime(seekDraft ?? video.state.time)}
+              onChange={(event) => setSeekDraft(event.currentTarget.valueAsNumber)}
+              onPointerUp={(event) => { video.seekTo(event.currentTarget.valueAsNumber); setSeekDraft(null); }}
+              onKeyUp={(event) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) { video.seekTo(event.currentTarget.valueAsNumber); setSeekDraft(null); } }} />
+            <div><span>{clockTime(seekDraft ?? video.state.time)} / {clockTime(video.state.duration)}</span>
+              <span>{pt ? 'Em buffer' : 'Buffered'}: {Math.floor(bufferedAhead / 1000)}s</span></div>
+            {phase === 'buffering' && <p role="status">{pt ? 'Aguardando dados da fonte. Você pode trocar a fonte abaixo ou cancelar.' : 'Waiting for source data. You can switch sources below or cancel.'}</p>}
+          </div>
           <section className="player-controls" aria-label={locale === 'pt-BR' ? 'Controles do player' : 'Player controls'}>
             <button type="button" onClick={() => video.seekRelative(-10)}>−10s</button>
-            <button type="button" onClick={() => video.setPaused(!video.state.paused)}>{video.state.paused ? '▶' : 'Ⅱ'}</button>
+            <button type="button" onClick={() => video.setPaused(!video.state.paused)}>{video.state.paused ? (pt ? '▶ Continuar' : '▶ Resume') : (pt ? 'Ⅱ Pausar' : 'Ⅱ Pause')}</button>
             <button type="button" onClick={() => video.seekRelative(10)}>+10s</button>
             <button type="button" onClick={() => { video.unload(); setStopped(true); }}>■ {locale === 'pt-BR' ? 'Parar' : 'Stop'}</button>
-            <span>{Math.floor((video.state.time ?? 0) / 1000)}s / {video.state.duration ? `${Math.floor(video.state.duration / 1000)}s` : '—'}</span>
           </section>
 
-          {(video.state.audioTracks.length > 1 || subtitleOptions.length > 0) && (
+          {(video.state.audioTracks.length > 1 || subtitleOptions.length > 0 || subtitlesLoading) && (
             <section className="track-controls" aria-label={locale === 'pt-BR' ? 'Áudio e legendas' : 'Audio and subtitles'}>
               {video.state.audioTracks.length > 1 && (
                 <label>
@@ -249,10 +275,11 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
                 <label>
                   <span>{locale === 'pt-BR' ? 'Legenda' : 'Subtitles'}</span>
                   <select
-                    value={video.state.selectedSubtitlesTrackId
-                      ? `embedded:${video.state.selectedSubtitlesTrackId}`
-                      : video.state.selectedExtraSubtitlesTrackId
-                        ? `extra:${video.state.selectedExtraSubtitlesTrackId}`
+                    disabled={!video.state.loaded || video.state.subtitleLoading}
+                    value={video.state.selectedExtraSubtitlesTrackId
+                      ? `extra:${video.state.selectedExtraSubtitlesTrackId}`
+                      : video.state.selectedSubtitlesTrackId
+                        ? `embedded:${video.state.selectedSubtitlesTrackId}`
                         : ''}
                     onChange={(event) => {
                       const [kind, ...id] = event.currentTarget.value.split(':');
@@ -262,7 +289,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
                     <option value="">{locale === 'pt-BR' ? 'Desligada' : 'Off'}</option>
                     {visibleSubtitleOptions.map((track) => (
                       <option key={`${track.extra}:${track.id}`} value={`${track.extra ? 'extra' : 'embedded'}:${track.id}`}>
-                        {track.label || track.lang}
+                        {track.lang} · {track.label || track.lang}{track.extra ? ` · ${track.origin ?? (pt ? 'Externa' : 'External')}` : ''}
                       </option>
                     ))}
                   </select>
@@ -275,8 +302,8 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
               )}
               {(video.state.selectedSubtitlesTrackId || video.state.selectedExtraSubtitlesTrackId) && (
                 <div className="subtitle-delay" aria-label={locale === 'pt-BR' ? 'Atraso da legenda' : 'Subtitle delay'}>
-                  <span>{locale === 'pt-BR' ? 'Sincronia' : 'Sync'}</span>
-                  <button type="button" onClick={() => changeSubtitleDelay((video.state.selectedExtraSubtitlesTrackId ? video.state.extraSubtitlesDelay : video.state.subtitlesDelay) - 500)}>−0.5s</button>
+                  <span>{locale === 'pt-BR' ? 'Sincronia da legenda' : 'Subtitle sync'}</span>
+                  <button type="button" onClick={() => changeSubtitleDelay((video.state.selectedExtraSubtitlesTrackId ? video.state.extraSubtitlesDelay : video.state.subtitlesDelay) - 500)}>{pt ? 'Aparecer antes' : 'Show earlier'} −0.5s</button>
                   <input
                     type="number"
                     min="-600"
@@ -287,12 +314,16 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
                     onChange={(event) => changeSubtitleDelay(event.currentTarget.valueAsNumber * 1_000)}
                   />
                   <button type="button" onClick={() => changeSubtitleDelay(0)}>{locale === 'pt-BR' ? 'Zerar' : 'Reset'}</button>
-                  <button type="button" onClick={() => changeSubtitleDelay((video.state.selectedExtraSubtitlesTrackId ? video.state.extraSubtitlesDelay : video.state.subtitlesDelay) + 500)}>+0.5s</button>
-                  <small>{locale === 'pt-BR' ? 'Atalhos: [ e ]' : 'Shortcuts: [ and ]'}</small>
+                  <button type="button" onClick={() => changeSubtitleDelay((video.state.selectedExtraSubtitlesTrackId ? video.state.extraSubtitlesDelay : video.state.subtitlesDelay) + 500)}>{pt ? 'Aparecer depois' : 'Show later'} +0.5s</button>
+                  <small>{pt ? 'Legenda atrasada? Use “Aparecer antes”. Adiantada? Use “Aparecer depois”. Atalhos: [ e ]' : 'Subtitles late? Use “Show earlier”. Too early? Use “Show later”. Shortcuts: [ and ]'}</small>
                 </div>
               )}
             </section>
           )}
+          {subtitlesLoading && <p role="status">{pt ? 'Buscando legendas…' : 'Finding subtitles…'}</p>}
+          {video.state.subtitleLoading && <p role="status">{pt ? 'Carregando legenda no player…' : 'Loading subtitle into player…'}</p>}
+          {!subtitlesLoading && subtitleOptions.length === 0 && video.state.loaded && <p>{pt ? 'Nenhuma legenda encontrada nas fontes configuradas.' : 'No subtitles found in configured sources.'}</p>}
+          {video.state.subtitleError && <p role="alert">{pt ? 'Não foi possível aplicar a legenda ou sincronia. Tente selecionar novamente; legendas externas precisam de HTTPS e formato SRT, VTT ou ASS.' : 'Could not apply subtitle or sync. Try selecting again; external subtitles require HTTPS and SRT, VTT or ASS format.'}</p>}
         </>
       )}
 
@@ -316,7 +347,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
                 <button
                   type="button"
                   aria-current={candidate.stableId === candidateId ? 'true' : undefined}
-                  disabled={!playable(candidate) || candidate.stableId === candidateId}
+                  disabled={!playable(candidate) || (candidate.stableId === candidateId && !stopped && !video.state.ended && !playerError)}
                   onClick={() => void play(candidate)}
                 >
                   <strong>{candidate.resolution ? `${candidate.resolution}p` : '—'} · {candidate.sourceName}</strong>

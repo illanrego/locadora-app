@@ -1,7 +1,21 @@
 import { subtitleDelayFingerprint } from './subtitles';
+import { stableHash } from './hash';
+import type { StreamCandidate } from './types';
 
 const PREFIX = 'locadora:subtitle-delay:v1:';
 const MAXIMUM_DELAY_MS = 600_000;
+
+export function videoDelayIdentity(candidate: StreamCandidate | null): string | null {
+  if (!candidate) return null;
+  const descriptor = candidate.playbackDescriptor;
+  if (descriptor.kind === 'torrent') {
+    // An automatically selected file is not a confirmed file identity yet.
+    if (descriptor.fileIndex === null) return null;
+    return `file:${stableHash(`${descriptor.infoHash.toLowerCase()}:${descriptor.fileIndex}`)}`;
+  }
+  if (descriptor.kind === 'url') return `url:${stableHash(descriptor.url)}`;
+  return null;
+}
 
 function key(videoFingerprint: string, trackId: string): string {
   return `${PREFIX}${subtitleDelayFingerprint(videoFingerprint, { id: trackId })}`;

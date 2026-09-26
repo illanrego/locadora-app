@@ -325,13 +325,31 @@ pub async fn fetch_bounded_https_json(input: &str) -> Result<Value, NativeNetwor
 pub async fn fetch_bounded_https_image(
     input: &str,
 ) -> Result<BoundedImageResponse, NativeNetworkError> {
+    fetch_bounded_artifact(input, true).await
+}
+
+pub async fn fetch_bounded_https_subtitle(input: &str) -> Result<Vec<u8>, NativeNetworkError> {
+    Ok(fetch_bounded_artifact(input, false).await?.body)
+}
+
+async fn fetch_bounded_artifact(
+    input: &str,
+    image: bool,
+) -> Result<BoundedImageResponse, NativeNetworkError> {
     let mut target = validate_https_url(input)?;
     for redirect_count in 0..=MAX_REDIRECTS {
         let (host, addresses) = resolve_public_addresses(&target)?;
         let client = pinned_client(&host, &addresses)?;
         let response = client
             .get(target.clone())
-            .header(header::ACCEPT, "image/avif,image/webp,image/*")
+            .header(
+                header::ACCEPT,
+                if image {
+                    "image/avif,image/webp,image/*"
+                } else {
+                    "text/plain,text/vtt,application/x-subrip,*/*"
+                },
+            )
             .header(header::USER_AGENT, "WillsLocadoraPlayer/0.1")
             .send()
             .await
@@ -362,7 +380,35 @@ pub async fn fetch_bounded_https_image(
         if response.status() != StatusCode::OK {
             return Err(NativeNetworkError::RequestFailed);
         }
-        return bounded_image_body(response).await;
+        if image {
+            return bounded_image_body(response).await;
+        }
+        const LIMIT: usize = 2 * 1024 * 1024;
+        if response
+            .content_length()
+            .is_some_and(|size| size > LIMIT as u64)
+        {
+            return Err(NativeNetworkError::ResponseTooLarge);
+        }
+        let mut body = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|_| NativeNetworkError::RequestFailed)?;
+            if body.len() + chunk.len() > LIMIT {
+                return Err(NativeNetworkError::ResponseTooLarge);
+            }
+            body.extend_from_slice(&chunk);
+        }
+        let text = String::from_utf8_lossy(&body);
+        if !(text.contains("-->") || text.contains("[Events]"))
+            || text.to_ascii_lowercase().contains("<html")
+        {
+            return Err(NativeNetworkError::RequestFailed);
+        }
+        return Ok(BoundedImageResponse {
+            content_type: "text/plain".into(),
+            body,
+        });
     }
     Err(NativeNetworkError::TooManyRedirects)
 }

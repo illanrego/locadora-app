@@ -21,4 +21,11 @@ Requested 2026-09-26. Scope: desktop app only.
    subtitle control. Run frontend/native checks, rebuild the executable used by
    `locadora`, and record results. User visual/playback acceptance remains open.
 
-Implementation status: in progress.
+Implementation status: implementation and automated checks complete; native
+release rebuild and user visual/playback acceptance pending.
+
+Milestone 1 committed: artwork/policy, texture lifecycle and locale-aware
+IndexedDB catalogue. Automatic sync is assessment-only; see
+`AUTO_SUBTITLE_SYNC_FEASIBILITY.md`. Buffering/subtitle playback repairs pass
+frontend and native tests, including real mpv IPC using a synthetic null-output
+video. The current separate-window limitation remains explicit.

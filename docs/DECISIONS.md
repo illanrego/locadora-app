@@ -110,6 +110,24 @@ Inspection artwork crosses a native, TMDB-image-only boundary and reaches the
 WebGL canvas as local blob data; it does not depend on browser CORS or a Worker
 origin allowlist.
 
+### D-014 — Separate-window subtitle rendering and buffer policy
+
+Until playback is embedded, downloaded subtitles render in native mpv. The
+HTML subtitle overlay cannot display over a separate native window. A bounded
+HTTPS subtitle fetch validates public destinations/redirects, accepts at most
+2 MiB of SRT/VTT/ASS-like text, and writes only into the private player session.
+Selection tokens reject stale downloads after another selection/load/stop.
+Only the latest 16 temporary files are retained; session shutdown removes them.
+Stremio Video continues to own stream resolution and embedded-track controls.
+Both external and embedded delay controls use milliseconds in React and seconds
+at mpv's boundary. Delay persistence uses video/file identity, never source rank
+or changing seeder descriptions; unknown torrent file identity is session-only.
+
+mpv reads ahead toward 60 seconds, bounded by 128 MiB forward/32 MiB backward
+demuxer caches, and targets 5 seconds before resuming from a cache pause. These
+are targets, not bandwidth guarantees or a cap on the whole process's memory.
+Automatic synchronization remains a feasibility proposal only.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

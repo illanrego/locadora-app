@@ -5,6 +5,7 @@ import { StremioShellTransport } from '../platform/stremioShellTransport';
 import { STREMIO_SERVICE_URL, stremioServiceAvailable } from '../platform/stremioService';
 import type { StremioPlayableStream } from './stremioStream';
 import type { StremioExtraSubtitleTrack } from './subtitleResolution';
+import { selectNativeSubtitle, setNativePlayerProperty } from '../platform/nativeBridge';
 
 export interface StremioVideoState {
   loaded: boolean;
@@ -12,6 +13,9 @@ export interface StremioVideoState {
   buffering: boolean;
   time: number | null;
   duration: number | null;
+  buffered: number | null;
+  subtitleLoading: boolean;
+  subtitleError: string | null;
   audioTracks: StremioVideoTrack[];
   selectedAudioTrackId: string | null;
   subtitlesTracks: StremioVideoTrack[];
@@ -38,6 +42,9 @@ const INITIAL_STATE: StremioVideoState = {
   buffering: false,
   time: null,
   duration: null,
+  buffered: null,
+  subtitleLoading: false,
+  subtitleError: null,
   audioTracks: [],
   selectedAudioTrackId: null,
   subtitlesTracks: [],
@@ -65,6 +72,7 @@ export interface StremioVideoController {
   unload: () => void;
   setPaused: (paused: boolean) => void;
   seekRelative: (seconds: number) => void;
+  seekTo: (milliseconds: number) => void;
   selectAudioTrack: (id: string) => void;
   selectSubtitleTrack: (id: string | null, extra: boolean) => void;
   setSubtitleDelay: (milliseconds: number, extra?: boolean) => void;
@@ -75,7 +83,10 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<StremioVideo | null>(null);
   const transportRef = useRef<StremioShellTransport | null>(null);
-  const streamingServiceRef = useRef(false);
+  const loadGeneration = useRef(0);
+  const subtitleGeneration = useRef(0);
+  const extraTracks = useRef<StremioExtraSubtitleTrack[]>([]);
+  const selectedExtra = useRef<string | null>(null);
   const [state, setState] = useState(INITIAL_STATE);
 
   useEffect(() => {
@@ -91,22 +102,32 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
         if (typeof propName === 'string') video.dispatch({ type: 'observeProp', propName });
       });
     });
-    video.on('propChanged', (...args: unknown[]) => {
+    const receiveProperty = (...args: unknown[]) => {
       const [name, value] = args;
       if (typeof name !== 'string') return;
+      // External tracks are rendered by native mpv, not the HTML overlay.
+      if (['extraSubtitlesTracks', 'selectedExtraSubtitlesTrackId', 'extraSubtitlesDelay'].includes(name)) return;
+      if (name === 'selectedSubtitlesTrackId' && selectedExtra.current) return;
+      if (name === 'subtitlesDelay' && selectedExtra.current) {
+        setState((current) => ({ ...current, extraSubtitlesDelay: value as number }));
+        return;
+      }
+      if (name === 'subtitlesTracks' && Array.isArray(value)) {
+        setState((current) => ({ ...current, subtitlesTracks: value.filter((track) => track.label !== 'Locadora external') }));
+        return;
+      }
       setState((current) => ({ ...current, [name]: value }));
-    });
-    video.on('propValue', (...args: unknown[]) => {
-      const [name, value] = args;
-      if (typeof name !== 'string') return;
-      setState((current) => ({ ...current, [name]: value }));
-    });
+    };
+    video.on('propChanged', receiveProperty);
+    video.on('propValue', receiveProperty);
     video.on('ended', () => setState((current) => ({ ...current, ended: true })));
     video.on('error', (...args: unknown[]) => {
       setState((current) => ({ ...current, error: stremioVideoError(args[0]) }));
     });
 
     return () => {
+      loadGeneration.current += 1;
+      subtitleGeneration.current += 1;
       video.destroy();
       void transport.destroy();
       videoRef.current = null;
@@ -115,18 +136,23 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
   }, [reportedMpvVersion]);
 
   const load = useCallback(async (stream: StremioPlayableStream) => {
+    const generation = ++loadGeneration.current;
+    subtitleGeneration.current += 1;
+    selectedExtra.current = null;
+    setState({ ...INITIAL_STATE, buffering: true, extraSubtitlesTracks: extraTracks.current });
     const video = videoRef.current;
     const transport = transportRef.current;
     const containerElement = containerRef.current;
     if (!video || !transport || !containerElement) throw new Error('Stremio video is not ready');
     const usesTorrent = 'infoHash' in stream;
     const serviceAvailable = await stremioServiceAvailable();
-    streamingServiceRef.current = serviceAvailable;
+    if (generation !== loadGeneration.current) return;
     if (usesTorrent && !serviceAvailable) {
       throw new Error('The official Stremio streaming service is not available');
     }
     await transport.start();
-    setState({ ...INITIAL_STATE, streamingServiceAvailable: serviceAvailable });
+    if (generation !== loadGeneration.current) return;
+    setState((current) => ({ ...current, streamingServiceAvailable: serviceAvailable }));
     video.dispatch({
       type: 'command',
       commandName: 'load',
@@ -147,7 +173,11 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
   }, []);
 
   const unload = useCallback(() => {
+    loadGeneration.current += 1;
+    subtitleGeneration.current += 1;
+    selectedExtra.current = null;
     videoRef.current?.dispatch({ type: 'command', commandName: 'unload' });
+    setState({ ...INITIAL_STATE });
   }, []);
 
   const setPaused = useCallback((paused: boolean) => {
@@ -163,44 +193,50 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     });
   }, [state.time]);
 
+  const seekTo = useCallback((milliseconds: number) => {
+    if (!Number.isFinite(milliseconds)) return;
+    videoRef.current?.dispatch({ type: 'setProp', propName: 'time', propValue: Math.max(0, milliseconds) });
+  }, []);
+
   const selectAudioTrack = useCallback((id: string) => {
     videoRef.current?.dispatch({ type: 'setProp', propName: 'selectedAudioTrackId', propValue: id });
   }, []);
 
   const selectSubtitleTrack = useCallback((id: string | null, extra: boolean) => {
-    videoRef.current?.dispatch({
-      type: 'setProp',
-      propName: 'selectedSubtitlesTrackId',
-      propValue: extra ? null : id,
-    });
-    videoRef.current?.dispatch({
-      type: 'setProp',
-      propName: 'selectedExtraSubtitlesTrackId',
-      propValue: extra ? id : null,
+    const generation = ++subtitleGeneration.current;
+    const track = extra ? extraTracks.current.find((track) => track.id === id) : null;
+    if (extra && !track) return;
+    selectedExtra.current = extra ? id : null;
+    setState((current) => ({ ...current, subtitleLoading: true, subtitleError: null,
+      selectedExtraSubtitlesTrackId: null, selectedSubtitlesTrackId: null }));
+    void selectNativeSubtitle(track?.url ?? null).then(() => {
+      if (generation !== subtitleGeneration.current) return;
+      if (!extra) videoRef.current?.dispatch({ type: 'setProp', propName: 'selectedSubtitlesTrackId', propValue: id });
+      setState((current) => ({ ...current, subtitleLoading: false,
+        selectedExtraSubtitlesTrackId: extra ? id : null, selectedSubtitlesTrackId: extra ? null : id,
+        subtitlesDelay: 0, extraSubtitlesDelay: 0 }));
+    }).catch(() => {
+      if (generation !== subtitleGeneration.current) return;
+      selectedExtra.current = null;
+      setState((current) => ({ ...current, subtitleLoading: false, subtitleError: 'subtitle-unavailable' }));
     });
   }, []);
 
   const setSubtitleDelay = useCallback((milliseconds: number, extra = Boolean(state.selectedExtraSubtitlesTrackId)) => {
     if (!Number.isFinite(milliseconds)) return;
+    const generation = subtitleGeneration.current;
     const bounded = Math.max(-600_000, Math.min(600_000, Math.round(milliseconds)));
-    videoRef.current?.dispatch(extra ? {
-      type: 'setProp',
-      propName: 'extraSubtitlesDelay',
-      propValue: bounded,
-    } : {
-      type: 'setProp',
-      propName: 'subtitlesDelay',
-      propValue: bounded / 1_000,
+    void setNativePlayerProperty('sub-delay', bounded / 1_000).then(() => {
+      if (generation !== subtitleGeneration.current) return;
+      setState((current) => ({ ...current, [extra ? 'extraSubtitlesDelay' : 'subtitlesDelay']: bounded }));
+    }).catch(() => {
+      if (generation === subtitleGeneration.current) setState((current) => ({ ...current, subtitleError: 'subtitle-delay-failed' }));
     });
   }, [state.selectedExtraSubtitlesTrackId]);
 
   const addExtraSubtitlesTracks = useCallback((tracks: StremioExtraSubtitleTrack[]) => {
-    if (!streamingServiceRef.current || !tracks.length) return false;
-    videoRef.current?.dispatch({
-      type: 'command',
-      commandName: 'addExtraSubtitlesTracks',
-      commandArgs: { tracks },
-    });
+    extraTracks.current = tracks;
+    setState((current) => ({ ...current, extraSubtitlesTracks: tracks }));
     return true;
   }, []);
 
@@ -211,6 +247,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     unload,
     setPaused,
     seekRelative,
+    seekTo,
     selectAudioTrack,
     selectSubtitleTrack,
     setSubtitleDelay,

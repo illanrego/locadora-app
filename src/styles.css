@@ -290,6 +290,13 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .phase-playing { background: #60d399; }
 .current-source { font-family: "Courier New", monospace; font-size: .72rem; }
 .player-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; margin: 1rem 0; }
+.playback-window-note { color: var(--muted); font-size: .85rem; line-height: 1.5; }
+.playback-timeline { padding: .8rem; background: rgba(20, 14, 12, .72); border: 1px solid var(--line); }
+.playback-timeline label { font-size: .8rem; color: var(--muted); }
+.playback-timeline input { display: block; width: 100%; margin: .8rem 0; accent-color: var(--paper); }
+.playback-timeline > div { display: flex; justify-content: space-between; gap: .8rem; font-variant-numeric: tabular-nums; font-size: .85rem; }
+.playback-timeline p { margin-bottom: 0; font-size: .85rem; }
+.subtitle-delay small { flex-basis: 100%; line-height: 1.5; }
 .player-controls span { margin-left: auto; color: var(--muted); font: 700 .72rem "Courier New", monospace; }
 .transport-warning { padding: .8rem; border: 1px solid #d9a63b; color: #ffdf94; background: #4b3413; font-size: .76rem; line-height: 1.5; }
 .manual-picker { margin-top: 1.4rem; }

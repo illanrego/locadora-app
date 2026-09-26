@@ -2,8 +2,9 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use locadora_native_core::{
     JsonRequestMethod, Manifest, ManifestResource, MpvSession, NativeCapabilities, PlayerEvent,
     ResourcePath, VideoOutput, fetch_bounded_https_image, fetch_bounded_https_json,
-    fetch_bounded_https_json_request, native_capabilities as read_native_capabilities,
-    player_runtime_root, stremio_manifest, stremio_resource, validate_manifest_url,
+    fetch_bounded_https_json_request, fetch_bounded_https_subtitle,
+    native_capabilities as read_native_capabilities, player_runtime_root, stremio_manifest,
+    stremio_resource, validate_manifest_url,
 };
 use serde::Deserialize;
 use serde::Serialize;
@@ -1330,6 +1331,36 @@ pub fn player_set_property(
         .ok_or("Player is not running")?
         .set_property(&request.name, request.value)
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn player_select_subtitle(
+    url: Option<String>,
+    state: State<'_, PlayerState>,
+) -> Result<(), String> {
+    let revision = {
+        let mut player = state.0.lock().map_err(|_| "Player state is unavailable")?;
+        player
+            .as_mut()
+            .ok_or("Player is not running")?
+            .begin_subtitle()
+            .map_err(|_| "Could not select subtitle")?
+    };
+    let Some(url) = url else {
+        return Ok(());
+    };
+    if url.len() > 8192 {
+        return Err("Invalid subtitle address".into());
+    }
+    let bytes = fetch_bounded_https_subtitle(&url)
+        .await
+        .map_err(|_| "Could not download this subtitle (HTTPS SRT, VTT or ASS required)")?;
+    let mut player = state.0.lock().map_err(|_| "Player state is unavailable")?;
+    player
+        .as_mut()
+        .ok_or("Player is not running")?
+        .attach_subtitle(revision, &bytes)
+        .map_err(|_| "Subtitle selection was superseded".into())
 }
 
 #[tauri::command]

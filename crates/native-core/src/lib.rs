@@ -6,7 +6,7 @@ mod stremio;
 pub use network::{
     BoundedImageResponse, BoundedJsonResponse, JsonRequestMethod, MAX_IMAGE_BYTES, MAX_JSON_BYTES,
     NativeNetworkError, fetch_bounded_https_image, fetch_bounded_https_json,
-    fetch_bounded_https_json_request, validate_manifest_url,
+    fetch_bounded_https_json_request, fetch_bounded_https_subtitle, validate_manifest_url,
 };
 #[cfg(unix)]
 pub use player::{MpvSession, PlayerError, PlayerEvent, VideoOutput, player_runtime_root};

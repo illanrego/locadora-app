@@ -85,9 +85,26 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: finish playback buffering/subtitle delivery and controls from
-`docs/PLAYBACK_AND_CACHE_PLAN.md`, assess constant-offset automatic sync without
-implementing it, then rebuild the executable for user acceptance.
+Next task: rebuild the release executable for user acceptance of artwork,
+buffering and native subtitle selection/sync; automatic sync remains
+assessment-only in `docs/AUTO_SUBTITLE_SYNC_FEASIBILITY.md`.
+
+2026-09-26 playback checkpoint: external subtitle lookup no longer blocks
+playback. Subtitles now download through the bounded native HTTPS boundary and
+render in mpv's actual video window, with selection/off, explicit earlier/later
+sync controls, loading/error feedback, and release/file-specific delay storage.
+The transport preserves buffering across pause/seek events and avoids overlapping
+event polls. mpv has bounded forward/back caches and a 60-second read-ahead
+target; the UI now has localized playback phases, seeking and buffered seconds.
+The player still uses a separate window. Auto-sync feasibility was researched
+and documented, not implemented.
+Checks: `npm run typecheck` passed; `npm test` passed (25 files, 94 tests);
+`cargo test --manifest-path src-tauri/Cargo.toml` passed (20, 2 ignored);
+`cargo test --manifest-path crates/native-core/Cargo.toml -- --test-threads=1`
+passed outside the restricted socket sandbox (17 tests). Its synthetic null-
+output mpv test verifies actual subtitle selection, -1.5-second delay and stale
+selection rejection. The sandbox-only run could not open mpv sockets.
+`git diff --check` passed. No manual visual or user-source streaming test ran.
 
 2026-09-26 checkpoint: artwork now decodes native data without a CSP-blocked
 fetch; production policy admits blob images. Shelf and inspection share native

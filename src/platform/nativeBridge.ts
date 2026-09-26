@@ -182,6 +182,11 @@ export async function readNativePlayerEvents(): Promise<NativePlayerEvent[]> {
   return invoke<NativePlayerEvent[]>('player_events');
 }
 
+export async function selectNativeSubtitle(url: string | null): Promise<void> {
+  if (!isNativeShell()) throw new Error('Native subtitles require the desktop app');
+  return invoke('player_select_subtitle', { url });
+}
+
 export async function shutdownNativePlayer(): Promise<void> {
   if (!isNativeShell()) return;
   return invoke('player_shutdown');

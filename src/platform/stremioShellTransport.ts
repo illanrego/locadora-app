@@ -40,6 +40,9 @@ export class StremioShellTransport {
   private loadId = 0;
   private activeLoadId = 0;
   private destroyed = false;
+  private polling = false;
+  private pausedForCache = false;
+  private seeking = false;
 
   constructor(private readonly reportedMpvVersion: string | null) {}
 
@@ -97,6 +100,8 @@ export class StremioShellTransport {
         return;
       }
       if (command === 'loadfile' && typeof value === 'string') {
+        this.pausedForCache = false;
+        this.seeking = false;
         this.activeLoadId = ++this.loadId;
         this.emit('mpv-event-video-ready', { loadId: this.activeLoadId, ready: false });
         await loadNativePlayer(value);
@@ -127,12 +132,16 @@ export class StremioShellTransport {
   }
 
   private async poll(): Promise<void> {
-    if (this.destroyed) return;
+    if (this.destroyed || this.polling) return;
+    this.polling = true;
     try {
       const events = await readNativePlayerEvents();
+      if (this.destroyed) return;
       events.forEach((event) => this.forwardPlayerEvent(event));
     } catch {
       this.emit('mpv-event-ended', { error: 'The native player event channel failed' });
+    } finally {
+      this.polling = false;
     }
   }
 
@@ -143,7 +152,6 @@ export class StremioShellTransport {
         break;
       case 'playing':
         this.emit('mpv-prop-change', { name: 'pause', data: false });
-        this.emit('mpv-prop-change', { name: 'paused-for-cache', data: false });
         break;
       case 'paused':
         this.emit('mpv-prop-change', { name: 'pause', data: true });
@@ -155,6 +163,12 @@ export class StremioShellTransport {
         this.emit('mpv-prop-change', { name: 'duration', data: event.value });
         break;
       case 'property':
+        if (event.value.name === 'paused-for-cache' || event.value.name === 'seeking') {
+          if (event.value.name === 'paused-for-cache') this.pausedForCache = event.value.data === true;
+          else this.seeking = event.value.data === true;
+          this.emit('mpv-prop-change', { name: 'paused-for-cache', data: this.pausedForCache || this.seeking });
+          break;
+        }
         this.emit('mpv-prop-change', event.value);
         break;
       case 'ended':

@@ -82,6 +82,21 @@ describe('official Stremio video shell adapter', () => {
     await transport.destroy();
   });
 
+  it('does not clear a cache stall when pause or seek state changes', async () => {
+    native.events.mockResolvedValueOnce([
+      { kind: 'property', value: { name: 'paused-for-cache', data: true } },
+      { kind: 'playing' },
+      { kind: 'property', value: { name: 'seeking', data: false } },
+    ]);
+    const transport = new StremioShellTransport('0.35.1');
+    const property = vi.fn();
+    transport.on('mpv-prop-change', property);
+    await transport.start();
+    await waitFor(() => expect(property).toHaveBeenCalledTimes(3));
+    expect(property).not.toHaveBeenCalledWith({ name: 'paused-for-cache', data: false });
+    await transport.destroy();
+  });
+
   it('reports the native reason for a rejected load and ignores rejected properties', async () => {
     const transport = new StremioShellTransport('0.35.1');
     const ended = vi.fn();
