@@ -19,7 +19,7 @@ Packaging work must refresh this file from the final dependency graph.
 | Testing Library / user-event | DOM interaction tests | MIT | Development only. |
 | jsdom | DOM test environment | MIT | Development only. |
 | fake-indexeddb | IndexedDB persistence regression tests | Apache-2.0 | Development only; not shipped in the application bundle. |
-| Tauri 2 | Native application boundary | MIT OR Apache-2.0 | Candidate shell; final Rust graph must be audited. |
+| Tauri 2 | Native application boundary | MIT OR Apache-2.0 | Candidate shell; final Rust graph must be audited. The pinned `tauri-runtime-wry` 2.11.4 source is vendored with a two-site Linux safety patch that replaces panicking GTK window downcasts with normal event propagation after WebView reparenting; its upstream MIT and Apache-2.0 license files are retained. |
 | gtk-rs / system GTK 3 | Main-window embedded video surface | MIT for Rust bindings; LGPL-2.1-or-later for system GTK | The Linux shell layers a GTK GLArea into Tauri's existing window; no GTK binary is bundled by the no-bundle build. |
 | reqwest + rustls | Bounded native HTTPS transport | MIT OR Apache-2.0 | Redirects are manually revalidated; TLS uses platform-verifier-backed rustls. |
 | keyring-rs | OS-protected local secrets | MIT OR Apache-2.0 | Stores secret-bearing manifest configuration and the independent Locadora member session in separate platform-credential namespaces. |

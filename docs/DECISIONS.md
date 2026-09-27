@@ -150,12 +150,12 @@ Tauri 2.11's Linux WebView installs an undecorated-resize click handler that
 assumes the original `WebView -> GtkBox -> GtkWindow` ancestry even for a
 decorated window. The embedded overlay necessarily changes that ancestry, and
 the upstream handler panics before checking whether decorations make it a
-no-op. Installation removes that specific `button-press-event` handler before
-reparenting the WebView. Native GTK decorations continue to own window resize;
-WebKit's normal event dispatch remains intact. The Debian runtime uses GLib
-2.74, where bulk disconnection by signal ID is not supported despite the match
-flag existing; the handler is located first and then disconnected by its exact
-handler ID, with both operations checked before the hierarchy is changed.
+no-op. Locadora patches the pinned `tauri-runtime-wry` 2.11.4 dependency so
+both its mouse and touch handlers return normally when the expected GtkWindow
+downcast is unavailable. This keeps Wry's separate synthetic back/forward mouse
+handler installed and follows the fallible-downcast behavior in Tauri's current
+development source. Native GTK decorations continue to own window resize and
+WebKit's normal event dispatch remains intact.
 
 ## Non-negotiable boundaries
 

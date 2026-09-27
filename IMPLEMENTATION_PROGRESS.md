@@ -107,7 +107,26 @@ added only in GLib 2.78 while this machine has GLib 2.74. The replacement finds
 the connected callback, disconnects its exact handler ID, verifies that it is
 gone, and aborts setup safely instead of reparenting if either step fails. A
 new `npm run tauri -- build --no-bundle` release build passed (1m50s) and
-refreshed the executable used by the `locadora` alias. User retest is required.
+refreshed the executable used by the `locadora` alias. User retesting proved
+this second approach was also incomplete: Wry owns an earlier callback for
+synthetic back/forward mouse buttons, so the lookup removed Wry's callback and
+left Tauri's crashing callback connected.
+
+2026-09-27 verified GTK fix: callback removal has been discarded. The pinned
+`tauri-runtime-wry` 2.11.4 source is patched locally at the two unsafe ancestry
+downcasts in its mouse and touch resize handlers, matching the fallible behavior
+in upstream development code. A source diff confirmed those are the only
+changes to the vendored crate; Cargo tree confirmed the application resolves
+that local path. A real X11 debug-window smoke test sent a left click into the
+WebView and verified both process and window remained alive; the prior build
+aborted on that event. The `appmenu-gtk-module` warning still appears but did
+not affect the click test. `npm run typecheck` passed; `npm test` passed (25
+files, 95 tests); strict Clippy and formatting passed for both Rust crates;
+Tauri tests passed (22, 2 ignored), including a source guard for both fallible
+handlers; native-core passed all 18 tests outside the socket-restricted
+sandbox. `npm run tauri -- build --no-bundle` passed (2m00s). The rebuilt
+release process and exact X11 window both remained alive after the same
+synthetic left click. Opening an actual tape still needs the user's recheck.
 
 2026-09-26 embedded-player checkpoint: the Linux shell now initializes libmpv
 directly and renders its OpenGL output in a GTK GLArea inside Tauri's existing

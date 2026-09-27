@@ -1,5 +1,4 @@
 //! GTK objects and libmpv GL rendering live exclusively on the main thread.
-use glib::translate::{IntoGlib, ToGlibPtr};
 use gtk::{gdk, glib, prelude::*};
 use locadora_native_core::{MpvRenderContext, MpvSession, VideoOutput, player_runtime_root};
 use serde::Deserialize;
@@ -80,43 +79,6 @@ struct Surface {
 
 thread_local! { static SURFACE: RefCell<Option<Surface>> = const { RefCell::new(None) }; }
 
-fn detach_tauri_resize_handler(widget: &gtk::Widget) -> Result<(), String> {
-    // Tauri attaches this handler to every Linux WebView and assumes the
-    // WebView's grandparent is the GtkWindow. Embedding the GLArea introduces
-    // a GtkOverlay at that position, so the upstream handler panics while
-    // downcasting it on any click. This window uses GTK decorations, therefore
-    // the handler never provides resizing behavior and is safe to remove.
-    let signal_name = c"button-press-event";
-    let signal_id = unsafe {
-        glib::gobject_ffi::g_signal_lookup(signal_name.as_ptr(), widget.type_().into_glib())
-    };
-    if signal_id == 0 {
-        return Err("WebView click signal is unavailable".into());
-    }
-    let widget_ptr: *mut gtk::ffi::GtkWidget = widget.to_glib_none().0;
-    let handler_id = unsafe {
-        glib::gobject_ffi::g_signal_handler_find(
-            widget_ptr.cast(),
-            glib::gobject_ffi::G_SIGNAL_MATCH_ID,
-            signal_id,
-            0,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-        )
-    };
-    if handler_id == 0 {
-        return Err("Tauri WebView resize handler was not found".into());
-    }
-    unsafe { glib::gobject_ffi::g_signal_handler_disconnect(widget_ptr.cast(), handler_id) };
-    let still_connected =
-        unsafe { glib::gobject_ffi::g_signal_handler_is_connected(widget_ptr.cast(), handler_id) };
-    if still_connected != 0 {
-        return Err("Tauri WebView resize handler could not be detached".into());
-    }
-    Ok(())
-}
-
 impl Surface {
     fn layout(&self) {
         let margins = if self.fullscreen {
@@ -153,7 +115,6 @@ pub fn install(window: &WebviewWindow) -> Result<(), String> {
         .map_err(|_| "Native layout is unavailable")?;
     let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
     for child in vbox.children() {
-        detach_tauri_resize_handler(&child)?;
         vbox.remove(&child);
         content.pack_start(&child, true, true, 0);
     }
@@ -328,6 +289,7 @@ pub fn release() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn bounds_scale_with_the_webview_and_reject_nonfinite_input() {
         let mut bounds = VideoBounds {
@@ -343,5 +305,18 @@ mod tests {
         assert!(bounds.validate().is_ok());
         bounds.x = f64::NAN;
         assert!(bounds.validate().is_err());
+    }
+
+    #[test]
+    fn vendored_tauri_resize_handlers_do_not_panic_after_reparenting() {
+        let source = include_str!("../vendor/tauri-runtime-wry-2.11.4/src/undecorated_resizing.rs");
+        assert_eq!(
+            source
+                .matches("let Ok(window) = window.downcast::<gtk::Window>()")
+                .count(),
+            2,
+            "both pointer and touch handlers must use fallible GTK downcasts"
+        );
+        assert!(!source.contains("let window: gtk::Window = window.downcast().unwrap()"));
     }
 }
