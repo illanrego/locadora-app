@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   listeners: new Map<string, (...args: unknown[]) => void>(),
+  ensure: vi.fn().mockResolvedValue(undefined),
   dispatch: vi.fn(), select: vi.fn().mockResolvedValue(undefined), property: vi.fn().mockResolvedValue(undefined),
   bounds: vi.fn().mockResolvedValue(undefined), fullscreen: vi.fn().mockResolvedValue(undefined),
 }));
@@ -15,7 +16,7 @@ vi.mock('@stremio/stremio-video', () => ({ default: class {
 vi.mock('../src/platform/stremioShellTransport', () => ({ StremioShellTransport: class {
   async start() {} async destroy() {}
 } }));
-vi.mock('../src/platform/stremioService', () => ({ STREMIO_SERVICE_URL: 'http://127.0.0.1:11470/', stremioServiceAvailable: async () => false }));
+vi.mock('../src/platform/stremioService', () => ({ STREMIO_SERVICE_URL: 'http://127.0.0.1:11471/', ensureStreamingService: mocks.ensure }));
 vi.mock('../src/platform/nativeBridge', () => ({
   selectNativeSubtitle: mocks.select,
   setNativePlayerProperty: mocks.property,
@@ -31,6 +32,34 @@ beforeEach(() => { vi.clearAllMocks(); mocks.listeners.clear(); });
 afterEach(cleanup);
 
 describe('native subtitle coordination', () => {
+  it('starts the bundled engine before loading torrents and surfaces startup failure', async () => {
+    const { result } = renderHook(() => useStremioVideo('0.35.1'));
+    Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });
+    const stream = { infoHash: 'a'.repeat(40), fileIdx: 0, announce: [] };
+    mocks.ensure.mockRejectedValueOnce(new Error('Streaming port is busy'));
+    await act(async () => { await expect(result.current.load(stream)).rejects.toThrow('busy'); });
+    expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ commandName: 'load' }), expect.anything());
+    await act(async () => { await result.current.load(stream); });
+    expect(mocks.ensure).toHaveBeenCalledTimes(2);
+    expect(mocks.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      commandName: 'load', commandArgs: expect.objectContaining({ streamingServerURL: 'http://127.0.0.1:11471/' }),
+    }), expect.anything());
+  });
+
+  it('does not start playback when closed during engine startup', async () => {
+    let finish!: () => void;
+    mocks.ensure.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const { result } = renderHook(() => useStremioVideo('0.35.1'));
+    Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });
+    await act(async () => {
+      const loading = result.current.load({ infoHash: 'b'.repeat(40), fileIdx: 0, announce: [] });
+      result.current.unload();
+      finish();
+      await loading;
+    });
+    expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ commandName: 'load' }), expect.anything());
+  });
+
   it('uses official volume/mute properties and clamps invalid volume input', () => {
     const { result } = renderHook(() => useStremioVideo('0.35.1'));
     act(() => { result.current.setVolume(500); result.current.setMuted(true); result.current.setVolume(NaN); });
@@ -46,6 +75,7 @@ describe('native subtitle coordination', () => {
     const { result } = renderHook(() => useStremioVideo('0.35.1'));
     Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });
     await act(async () => { await result.current.load({ url: 'https://media.example.invalid/video' }); });
+    expect(mocks.ensure).not.toHaveBeenCalled();
     expect(mocks.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'command', commandName: 'load' }),
       expect.objectContaining({ mpvSeparateWindow: false }),

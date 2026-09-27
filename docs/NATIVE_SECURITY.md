@@ -1,6 +1,29 @@
 # Native boundary and security model
 
-Last reviewed: 2026-09-22
+Last reviewed: 2026-09-27
+
+## Standalone engine boundary (current)
+
+`streaming_engine_ensure` launches only the checksum-pinned executable embedded
+at build time. `streaming_engine_status` reports owned-child liveness.
+`streaming_engine_request` bridges GET metadata and POST torrent-create requests
+only at `http://127.0.0.1:11471`; no generic URL, settings-write, proxy or filesystem
+API is granted. Requests are bounded, redirects/proxies disabled, responses capped
+at 2 MiB and time-limited. Nested media probe URLs must reference a torrent file
+on that same owned engine. Errors never include descriptors. This bridge avoids
+relaxing upstream CORS for Linux's non-HTTP `tauri://localhost` origin.
+
+Port conflicts fail closed. Readiness verifies the unique session appPath and
+server API version. The app never adopts/kills an external Stremio process.
+The engine binds loopback, uses a private session, stores pieces in bounded RAM,
+and disables local-library/indexer/DLNA features. Exit reaps the owned process
+group and removes its session; Linux parent-death signalling handles abnormal exit.
+Upstream's built-in HTTP loopback and Stremio-web origin permissions still exist;
+the control port is not authenticated against other processes of the local user.
+
+The following original foundation notes describe the earlier IPC spike; current
+playback is embedded libmpv and manifest configuration uses the OS keyring.
+The additional loopback exception above supersedes the earlier blanket exclusion.
 
 The React application does not receive generic shell, filesystem, or native
 HTTP permissions. Its Tauri capability grants `core:default` only. Custom Rust

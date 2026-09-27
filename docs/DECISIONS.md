@@ -172,7 +172,7 @@ Use an app-owned engine process with bounded readiness/recovery, isolated storag
 and ownership-aware shutdown. Endpoint selection, CSP and native playback URL
 validation must agree. Reuse official Core/Video behavior and preserve the narrow
 platform adapter. An existing Stremio installation may support optional add-on
-import but cannot be required for playback. Implementation remains pending; see
+import but cannot be required for playback. D-018 refines the engine choice; see
 `STANDALONE_PLAYER_PLAN.md` for milestones and acceptance criteria.
 
 ### D-017 — Modern Locadora playback presentation
@@ -186,7 +186,7 @@ GTK/WebView stacking when designing overlays. This is approved work, not a claim
 that the current Watch UI has been redesigned. Automatic subtitle sync remains
 assessment-only under `AUTO_SUBTITLE_SYNC_FEASIBILITY.md`.
 
-## Non-negotiable boundaries
+### D-018 — Bundled compatible engine
 
 D-018 (2026-09-27): the user's renewed instruction to implement the whole
 standalone app authorizes the compatible-engine route. Pin MIT-licensed
@@ -197,6 +197,8 @@ at build time, embed the engine in the executable, supervise an owned loopback
 process at port 11471, and never adopt/terminate a separately running Stremio.
 Development and packaged builds must use the same startup path. Distribution
 includes engine license/provenance/SBOM; no Node or Stremio install is required.
+
+## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,
   torrent, subtitle, debrid, or Stremio-account implementation.

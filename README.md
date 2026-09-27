@@ -10,13 +10,17 @@ and the exact continuation point live in `IMPLEMENTATION_PROGRESS.md`.
 For the current standalone-engine and modern-player work, continue with
 [`docs/STANDALONE_PLAYER_PLAN.md`](docs/STANDALONE_PLAYER_PLAN.md). It records the
 approved single-install requirement, implementation gaps, code map and milestones.
-The current development build still depends on installed native libraries and an
-external streaming service; standalone packaging is pending.
+Linux x86_64 builds embed and supervise their own compatible streaming engine.
+Stremio Desktop, Stremio Service and Node are not runtime requirements. The Debian
+installer declares mpv/libmpv/FFmpeg and GTK/WebKit dependencies for installation
+by the system package manager. Optional Stremio add-on import remains available;
+you can also configure add-ons directly without installing Stremio.
 
 ## Local checks
 
 ```bash
 npm install
+npm run prepare:engine
 npm run check
 npm run check:native-core
 npm run check:native
@@ -27,6 +31,8 @@ The browser build uses sanitized catalogue fixtures unless
 Media manifests and playback descriptors must never be committed or logged.
 
 ## Debian native prerequisites
+
+These are **developer build prerequisites**, not separate end-user setup steps.
 
 Rust is installed through `rustup`. Tauri and the system-player spike require:
 
@@ -41,6 +47,13 @@ Build an optimized unpackaged executable with:
 source "$HOME/.cargo/env"
 npm run tauri -- build --no-bundle
 ```
+
+Build the Debian installer with `npm run tauri -- build`. Install its generated
+`src-tauri/target/release/bundle/deb/*.deb` through the package manager (for
+example `sudo apt install ./path-to-package.deb`) so dependencies resolve
+automatically. The engine is downloaded/checksummed only at build time; the
+installed app never downloads an executable. This delivery targets Debian-style
+x86_64 Linux; Flatpak and other platforms remain pending.
 
 See `docs/NATIVE_SECURITY.md` for the privileged command allowlist and network
 boundary.

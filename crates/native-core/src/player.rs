@@ -305,7 +305,7 @@ fn public_remote_url(value: &str) -> Result<(), PlayerError> {
     }
 }
 
-/// The official Stremio streaming service is the only loopback endpoint the
+/// Locadora's bundled compatible streaming engine is the only loopback endpoint the
 /// player may load from.
 ///
 /// Stremio Video owns the shape of the URLs it hands the shell (torrent info
@@ -319,7 +319,7 @@ fn stremio_service_stream_url(value: &str) -> Result<(), PlayerError> {
     let url = Url::parse(value).map_err(|_| PlayerError::InvalidDescriptor)?;
     if url.scheme() != "http"
         || url.host_str() != Some("127.0.0.1")
-        || url.port() != Some(11470)
+        || url.port() != Some(11471)
         || !url.username().is_empty()
         || url.password().is_some()
         || url.fragment().is_some()
@@ -709,12 +709,12 @@ mod tests {
         // hashes, proxied direct streams, and whatever it adds next. Only the
         // official origin is checked, so a new shape cannot break playback.
         for value in [
-            format!("http://127.0.0.1:11470/{hash}/7?tr=udp%3A%2F%2Ftracker.example"),
-            "http://127.0.0.1:11470/proxy/d=https%3A%2F%2Fmedia.example.com&h=User-Agent%3Aok/movie.mkv"
+            format!("http://127.0.0.1:11471/{hash}/7?tr=udp%3A%2F%2Ftracker.example"),
+            "http://127.0.0.1:11471/proxy/d=https%3A%2F%2Fmedia.example.com&h=User-Agent%3Aok/movie.mkv"
                 .to_string(),
-            "http://127.0.0.1:11470/subtitles.vtt?from=https%3A%2F%2Fmedia.example.com%2Fa.srt"
+            "http://127.0.0.1:11471/subtitles.vtt?from=https%3A%2F%2Fmedia.example.com%2Fa.srt"
                 .to_string(),
-            format!("http://127.0.0.1:11470/{hash}/7/stats.json"),
+            format!("http://127.0.0.1:11471/{hash}/7/stats.json"),
         ] {
             assert!(
                 stremio_service_stream_url(&value).is_ok(),
@@ -724,16 +724,17 @@ mod tests {
         // The URL parser normalizes `..` away before this runs, so a traversal
         // attempt lands on a plain path of the same allowed origin.
         assert!(
-            stremio_service_stream_url(&format!("http://127.0.0.1:11470/{hash}/../settings"))
+            stremio_service_stream_url(&format!("http://127.0.0.1:11471/{hash}/../settings"))
                 .is_ok()
         );
         for value in [
-            format!("http://localhost:11470/{hash}/7"),
-            format!("http://127.0.0.1:11471/{hash}/7"),
-            "https://127.0.0.1:11470/stream".to_string(),
-            "http://127.0.0.1:11470/".to_string(),
-            format!("http://user:password@127.0.0.1:11470/{hash}/7"),
-            "http://[::1]:11470/stream".to_string(),
+            format!("http://localhost:11471/{hash}/7"),
+            format!("http://127.0.0.1:11470/{hash}/7"),
+            format!("http://127.0.0.1:11472/{hash}/7"),
+            "https://127.0.0.1:11471/stream".to_string(),
+            "http://127.0.0.1:11471/".to_string(),
+            format!("http://user:password@127.0.0.1:11471/{hash}/7"),
+            "http://[::1]:11471/stream".to_string(),
         ] {
             assert!(
                 stremio_service_stream_url(&value).is_err(),

@@ -2,7 +2,7 @@ import StremioVideo from '@stremio/stremio-video';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { safeDiagnostic } from './redaction';
 import { StremioShellTransport } from '../platform/stremioShellTransport';
-import { STREMIO_SERVICE_URL, stremioServiceAvailable } from '../platform/stremioService';
+import { STREMIO_SERVICE_URL, ensureStreamingService } from '../platform/stremioService';
 import type { StremioPlayableStream } from './stremioStream';
 import type { StremioExtraSubtitleTrack } from './subtitleResolution';
 import {
@@ -227,11 +227,12 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     const containerElement = containerRef.current;
     if (!video || !transport || !containerElement) throw new Error('Stremio video is not ready');
     const usesTorrent = 'infoHash' in stream;
-    const serviceAvailable = await stremioServiceAvailable();
+    video.dispatch({ type: 'command', commandName: 'unload' });
+    nativeSurfaceVisible.current = false;
+    window.dispatchEvent(new Event('resize'));
+    if (usesTorrent) await ensureStreamingService();
+    const serviceAvailable = usesTorrent;
     if (generation !== loadGeneration.current) return;
-    if (usesTorrent && !serviceAvailable) {
-      throw new Error('The official Stremio streaming service is not available');
-    }
     await transport.start();
     if (generation !== loadGeneration.current) return;
     nativeSurfaceVisible.current = true;

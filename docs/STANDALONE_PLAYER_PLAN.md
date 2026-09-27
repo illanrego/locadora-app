@@ -1,15 +1,15 @@
 # Standalone Locadora and player redesign
 
-Updated: 2026-09-27. Status: engine artifact investigation blocked; player UI
-implemented, automated checks and native build passed, user acceptance pending.
+Updated: 2026-09-27. Status: bundled compatible engine implemented (D-018),
+native lifecycle checks passing; installer delivery in progress, user acceptance pending.
 
 ## Start here
 
 The user has authorized planning and implementation of a self-contained desktop
 Locadora with a modern player. The initial documentation handoff is complete;
-implementation is underway. Engine packaging is blocked on the contract recorded
-in `STREAMING_ENGINE_FINDINGS.md`. Player implementation/check/build results are
-recorded in the root progress ledger; do not infer standalone delivery from them.
+implementation is underway. The official closed-source server is excluded; the
+MIT-licensed compatible engine is pinned and embedded in Locadora's binary.
+Implementation/check/build results are recorded in the root progress ledger.
 
 Read the repository's `AGENTS.md` and its four required documents first.
 `WILLS_LOCADORA_PLAYER_PLAN.md` remains the product authority;
@@ -17,12 +17,27 @@ Read the repository's `AGENTS.md` and its four required documents first.
 plan for the current priority. `IMPLEMENTATION_PROGRESS.md` owns the single next
 task and verification record. Earlier playback plans are historical milestones.
 
-Current continuation: resolve the engine direction after milestone 1's finding.
-See `STREAMING_ENGINE_FINDINGS.md` for primary-source evidence and a compatible
-candidate, and `../IMPLEMENTATION_PROGRESS.md` for the precise build checkpoint.
-Milestone 3 implementation is ready for user acceptance. Routine implementation
-does not need renewed product approval; adopting an unofficial replacement engine
-is the outstanding architecture choice.
+Current continuation: finish installer delivery and record acceptance limits.
+See `STREAMING_ENGINE_FINDINGS.md` for the historical official-server finding,
+and `../IMPLEMENTATION_PROGRESS.md` for the precise build checkpoint. D-018
+records the approved compatible-engine choice; do not reopen that decision.
+
+### Implemented runtime contract
+
+- `tools/prepare-streaming-engine.mjs` verifies pinned release/SBOM SHA-256 values
+  at build time. Rust embeds the executable and notices; no runtime downloads.
+- `src-tauri/src/streaming_engine.rs` extracts to private app-cache storage, starts
+  an owned process on `127.0.0.1:11471`, validates its unique session path/version,
+  serializes startup, fails closed on port conflicts and reaps it on app exit.
+- Torrent loads call native ensure before official Stremio Video conversion;
+  direct HTTPS streams do not wait for an engine probe. Retry restarts a dead engine.
+- Linux's `tauri://` origin is rejected by upstream even when allowlisted. A
+  fixed-origin native metadata bridge keeps official Video working without
+  enabling wildcard CORS; it cannot write settings or access arbitrary targets.
+- Piece storage is a 256 MiB RAM cache, with a 512 MiB Go soft memory ceiling
+  (not a hard process RSS cap). Idle torrents expire after 30 seconds.
+- Debian x86_64 packaging declares distro-provided mpv/libmpv/FFmpeg dependencies.
+  Flatpak and other architectures are not delivered by this implementation.
 
 ## What the user wants
 

@@ -1333,7 +1333,18 @@ pub fn player_fullscreen(fullscreen: bool, window: WebviewWindow) -> Result<(), 
 }
 
 #[tauri::command]
-pub fn player_load(descriptor: String, state: State<'_, PlayerState>) -> Result<(), String> {
+pub fn player_load(
+    descriptor: String,
+    state: State<'_, PlayerState>,
+    engine: State<'_, crate::streaming_engine::EngineState>,
+) -> Result<(), String> {
+    if Url::parse(&descriptor)
+        .ok()
+        .is_some_and(|url| url.host_str() == Some("127.0.0.1"))
+        && !engine.is_ready()
+    {
+        return Err("The bundled streaming engine stopped. Retry playback.".into());
+    }
     let mut player = state.0.lock().map_err(|_| "Player state is unavailable")?;
     player
         .as_mut()

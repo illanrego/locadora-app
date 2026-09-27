@@ -1,7 +1,11 @@
 # Streaming engine artifact investigation — 2026-09-27
 
-Milestone 1 status: blocked on the official engine's redistribution contract.
-No engine binary/server bundle has been copied, installed or redistributed.
+Current disposition: D-018 supersedes the historical blocker below. Locadora
+bundles MIT-licensed `M0Rf30/stremio-server-go` v0.16.1, not official `server.js`.
+Build-time SHA-256 pins and SBOM acquisition live in
+`tools/prepare-streaming-engine.mjs`; lifecycle integration is in
+`src-tauri/src/streaming_engine.rs`. The engine starts without Stremio installed
+or running. Historical research below explains why the official server was excluded.
 
 ## Evidence
 
@@ -41,7 +45,7 @@ in milestone 3 can proceed independently.
 ## Concrete alternative for evaluation
 
 [`M0Rf30/stremio-server-go`](https://github.com/M0Rf30/stremio-server-go) is an
-unofficial candidate, not adopted or installed. Its
+unofficial engine, now adopted under D-018. Its
 [LICENSE](https://github.com/M0Rf30/stremio-server-go/blob/main/LICENSE), fetched
 directly during this check, grants MIT rights (Gianluca Boiano, 2026). The
 [README](https://github.com/M0Rf30/stremio-server-go/blob/main/README.md) claims

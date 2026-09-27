@@ -7,7 +7,7 @@ Status: in progress
 ## Resume checkpoint
 
 Current priority: ship Locadora as a single-install standalone app with its own
-managed official streaming engine, and redesign its embedded player with modern
+managed compatible streaming engine (D-018), and redesign its embedded player with modern
 streaming-style controls and Locadora borders. Read
 `docs/STANDALONE_PLAYER_PLAN.md` for the approved scope, code map, ordered
 milestones and acceptance criteria. D-016 supersedes the external-service-only
@@ -125,12 +125,37 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: implement the native supervisor and wire official Stremio Video to
-the bundled v0.16.1 engine, then run the full frontend/native suites after that
-major change and produce the release/installer. The user's renewed standalone
-instruction authorizes the compatible-engine route (D-018). The pinned Linux
-archive SHA-256 is verified; `npm run prepare:engine` stages the binary, MIT
-license, provenance and upstream SBOM. No runtime test has run at this checkpoint.
+Next task: finish the standalone release/installer build, inspect Debian package
+dependencies and embedded binary identity, then record the delivery checkpoint.
+
+2026-09-27 standalone integration: `streaming_engine.rs` now owns an embedded
+v0.16.1 process on port 11471, with private sessions, serialized/bounded readiness,
+port conflict refusal, crash-retry restart, parent-death signal and exit cleanup.
+Official Stremio Video calls native ensure for torrents; direct HTTPS bypasses
+startup. CSP and native loopback validation agree. No external service fallback.
+Engine pieces use a 256 MiB RAM cache; no persistent movie library is downloaded.
+The synthetic engine test exposed upstream rejection of Tauri's non-HTTP origin.
+`stremioService.ts` now bridges only the fixed owned-engine origin through
+`streaming_engine_request`: allowlisted metadata/create endpoints, bounded
+requests/responses, validated nested torrent URLs, no redirects or generic proxy.
+No wildcard CORS was enabled. A dedicated spawn thread stays alive for the child:
+Linux parent-death signals follow the spawning thread, which must not be an
+idle-retiring async worker. The runtime uses official Core/Video unchanged.
+
+Final integration verification (2026-09-27):
+- `npm run check`: 27 files, 106 tests passed; typecheck and production build passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml`: 24 passed, 2 opt-in ignored.
+  Includes actual embedded engine startup, synthetic empty-torrent metadata,
+  official Video create shape/file selection, hostile-origin rejection, occupied
+  port preservation, start reuse, crash restart, shutdown and session cleanup.
+  Local-socket tests required approved execution outside the sandbox.
+- `cargo test --manifest-path crates/native-core/Cargo.toml -- --test-threads=1`:
+  18 passed, including mpv IPC and subtitles. One intermediate compile failure
+  from a misplaced test fixture was corrected before this successful run.
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`:
+  passed; both Cargo manifests formatted; `git diff --check` passed.
+- GUI, real peer transfer, audible playback and clean-machine install have NOT
+  been exercised. Synthetic metadata tests are not real movie-playback proof.
 
 2026-09-26 GTK crash fix: opening tape inspection exposed an incompatibility
 between Tauri 2.11's unconditional Linux undecorated-resize click handler and

@@ -1,13 +1,15 @@
 # Third-party dependency and license inventory
 
-Reviewed: 2026-09-22
+Reviewed: 2026-09-27
 
-Direction updated 2026-09-27: D-016 authorizes standalone engine packaging.
-The inventory below describes current implementation, not a completed bundle.
-Before redistribution, milestone 1 of `docs/STANDALONE_PLAYER_PLAN.md` must verify
-the exact engine artifact, companion runtimes and their source/notice obligations.
-The historical service wrapper license entry alone does not establish the terms
-of every server/runtime asset. No dependency was added by this documentation update.
+D-018 adopts MIT-licensed `M0Rf30/stremio-server-go` v0.16.1 (copyright 2026
+Gianluca Boiano), an unofficial compatible engine. Its Linux x86_64 release,
+MIT license, provenance and upstream SBOM are checksum-verified at build time,
+embedded in the application and extracted into private app-cache storage.
+Source: https://github.com/M0Rf30/stremio-server-go/tree/v0.16.1.
+No official proprietary `server.js` is bundled. The Debian installer declares
+system media libraries as dependencies rather than copying their binaries.
+Public distribution still requires the final transitive license/source audit below.
 
 This inventory is an engineering aid, not legal advice. The build also emits
 `dist/third-party-licenses.md` from installed JavaScript package metadata.
@@ -39,7 +41,7 @@ Packaging work must refresh this file from the final dependency graph.
 | Stremio libass-wasm 4.2.6 | HTML subtitle rendering used by Stremio Video | LGPL-2.1-or-later AND (FTL OR GPL-2.0-or-later) AND MIT AND MIT-Modern-Variant AND ISC AND NTP AND Zlib AND BSL-1.0 | Shipped as a transitive browser asset; preserve the generated license inventory and source/notice obligations. |
 | Stremio hls.js fork 1.5.5 canary | HLS playback support used by Stremio Video | Apache-2.0 | Transitive browser dependency. |
 | vtt.js 0.13.0 | WebVTT parsing used by Stremio Video | Apache-2.0 | Transitive browser dependency. |
-| Stremio Service | Optional local torrent/stream conversion runtime | GPL-2.0 | Interoperated with over its fixed loopback HTTP API. It is currently separately installed and is not linked or bundled. |
+| stremio-server-go v0.16.1 | Bundled compatible torrent/stream runtime | MIT | Embedded Linux x86_64 executable with upstream LICENSE, provenance and SBOM. Owned loopback process; no Stremio installation required. |
 | mpv / libmpv | Embedded native playback and OpenGL rendering | GPL-2.0-or-later by default; an LGPL-2.1-or-later build mode exists with caveats | The Linux app dynamically links the installed system libmpv and does not bundle mpv in the no-bundle build. Packaging remains blocked on a final license/build review. |
 
 ## Explicit exclusions

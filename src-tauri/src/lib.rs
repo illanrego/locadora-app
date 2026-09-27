@@ -1,11 +1,13 @@
 mod commands;
 mod embedded_surface;
+mod streaming_engine;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(commands::PlayerState::default())
+        .manage(streaming_engine::EngineState::default())
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 embedded_surface::install(&window).map_err(std::io::Error::other)?;
@@ -14,6 +16,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::native_capabilities,
+            streaming_engine::streaming_engine_ensure,
+            streaming_engine::streaming_engine_status,
+            streaming_engine::streaming_engine_request,
             commands::fetch_public_shelf,
             commands::fetch_public_title,
             commands::fetch_public_artwork,
@@ -46,6 +51,11 @@ pub fn run() {
             commands::player_events,
             commands::player_shutdown,
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run Will's Locadora Player");
+        .build(tauri::generate_context!())
+        .expect("failed to build Will's Locadora Player")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<streaming_engine::EngineState>().shutdown();
+            }
+        });
 }

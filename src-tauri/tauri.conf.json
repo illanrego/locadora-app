@@ -23,10 +23,14 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: https: data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:11470"
+      "csp": "default-src 'self'; img-src 'self' asset: https: data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:11471"
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": ["deb"],
+    "icon": ["icons/icon.png"],
+    "category": "Video",
+    "linux": { "deb": { "depends": ["libmpv2", "mpv", "ffmpeg", "libepoxy0"] } }
   }
 }
