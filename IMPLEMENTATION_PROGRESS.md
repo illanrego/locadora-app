@@ -1,7 +1,7 @@
 # Implementation progress
 
 Last updated: 2026-09-27
-Current milestone: standalone engine and modern player planning handoff
+Current milestone: engine artifact investigation and modern player implementation
 Status: in progress
 
 ## Resume checkpoint
@@ -97,11 +97,12 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: complete milestone 1 of `docs/STANDALONE_PLAYER_PLAN.md`: select and
-pin a redistributable official streaming-engine artifact, verify its startup,
-endpoint and runtime contract, and record reproducible packaging inputs before
-implementing the native supervisor. User acceptance of embedded playback and
-subtitles remains pending; automatic sync remains assessment-only.
+Next task: implement milestone 3's modern player UI while the engine direction
+is resolved. Milestone 1 found that the official server is closed source and
+its redistribution contract is unestablished; evidence and remaining options
+are in `docs/STREAMING_ENGINE_FINDINGS.md`. Milestones 2/4 depend on that contract.
+User acceptance of embedded playback/subtitles remains pending; automatic sync
+remains assessment-only.
 
 2026-09-26 GTK crash fix: opening tape inspection exposed an incompatibility
 between Tauri 2.11's unconditional Linux undecorated-resize click handler and

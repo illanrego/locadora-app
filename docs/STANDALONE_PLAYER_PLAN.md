@@ -1,6 +1,7 @@
 # Standalone Locadora and player redesign
 
-Updated: 2026-09-27. Status: approved direction; implementation pending.
+Updated: 2026-09-27. Status: approved direction; engine artifact investigation
+blocked, player UI implementation proceeding independently.
 
 ## Start here
 
@@ -15,10 +16,10 @@ Read the repository's `AGENTS.md` and its four required documents first.
 plan for the current priority. `IMPLEMENTATION_PROGRESS.md` owns the single next
 task and verification record. Earlier playback plans are historical milestones.
 
-Next task: complete milestone 1 below, selecting and pinning a redistributable
-official streaming-engine artifact and proving its startup contract before
-implementing the supervisor. Continue through the later milestones as each is
-verified; routine implementation does not need renewed product approval.
+Current continuation: implement milestone 3 while resolving the engine contract
+found during milestone 1. See `STREAMING_ENGINE_FINDINGS.md` for primary-source
+evidence and `../IMPLEMENTATION_PROGRESS.md` for the exact checkpoint. Routine
+implementation does not need renewed product approval.
 
 ## What the user wants
 
