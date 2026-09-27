@@ -80,7 +80,7 @@ struct Surface {
 
 thread_local! { static SURFACE: RefCell<Option<Surface>> = const { RefCell::new(None) }; }
 
-fn detach_tauri_resize_handler(widget: &gtk::Widget) {
+fn detach_tauri_resize_handler(widget: &gtk::Widget) -> Result<(), String> {
     // Tauri attaches this handler to every Linux WebView and assumes the
     // WebView's grandparent is the GtkWindow. Embedding the GLArea introduces
     // a GtkOverlay at that position, so the upstream handler panics while
@@ -91,11 +91,11 @@ fn detach_tauri_resize_handler(widget: &gtk::Widget) {
         glib::gobject_ffi::g_signal_lookup(signal_name.as_ptr(), widget.type_().into_glib())
     };
     if signal_id == 0 {
-        return;
+        return Err("WebView click signal is unavailable".into());
     }
     let widget_ptr: *mut gtk::ffi::GtkWidget = widget.to_glib_none().0;
-    unsafe {
-        glib::gobject_ffi::g_signal_handlers_disconnect_matched(
+    let handler_id = unsafe {
+        glib::gobject_ffi::g_signal_handler_find(
             widget_ptr.cast(),
             glib::gobject_ffi::G_SIGNAL_MATCH_ID,
             signal_id,
@@ -103,8 +103,18 @@ fn detach_tauri_resize_handler(widget: &gtk::Widget) {
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-        );
+        )
+    };
+    if handler_id == 0 {
+        return Err("Tauri WebView resize handler was not found".into());
     }
+    unsafe { glib::gobject_ffi::g_signal_handler_disconnect(widget_ptr.cast(), handler_id) };
+    let still_connected =
+        unsafe { glib::gobject_ffi::g_signal_handler_is_connected(widget_ptr.cast(), handler_id) };
+    if still_connected != 0 {
+        return Err("Tauri WebView resize handler could not be detached".into());
+    }
+    Ok(())
 }
 
 impl Surface {
@@ -143,7 +153,7 @@ pub fn install(window: &WebviewWindow) -> Result<(), String> {
         .map_err(|_| "Native layout is unavailable")?;
     let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
     for child in vbox.children() {
-        detach_tauri_resize_handler(&child);
+        detach_tauri_resize_handler(&child)?;
         vbox.remove(&child);
         content.pack_start(&child, true, true, 0);
     }

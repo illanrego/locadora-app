@@ -152,7 +152,10 @@ decorated window. The embedded overlay necessarily changes that ancestry, and
 the upstream handler panics before checking whether decorations make it a
 no-op. Installation removes that specific `button-press-event` handler before
 reparenting the WebView. Native GTK decorations continue to own window resize;
-WebKit's normal event dispatch remains intact.
+WebKit's normal event dispatch remains intact. The Debian runtime uses GLib
+2.74, where bulk disconnection by signal ID is not supported despite the match
+flag existing; the handler is located first and then disconnected by its exact
+handler ID, with both operations checked before the hierarchy is changed.
 
 ## Non-negotiable boundaries
 

@@ -101,6 +101,14 @@ src-tauri/Cargo.toml`, strict Clippy, and Tauri tests passed (21, 2 ignored).
 `npm run tauri -- build --no-bundle` passed and refreshed the release executable
 used by the `locadora` alias. Tape inspection still needs the user's recheck.
 
+2026-09-27 correction: user retesting showed the same callback still firing.
+The first fix used bulk signal-ID disconnection, but that matching mode was
+added only in GLib 2.78 while this machine has GLib 2.74. The replacement finds
+the connected callback, disconnects its exact handler ID, verifies that it is
+gone, and aborts setup safely instead of reparenting if either step fails. A
+new `npm run tauri -- build --no-bundle` release build passed (1m50s) and
+refreshed the executable used by the `locadora` alias. User retest is required.
+
 2026-09-26 embedded-player checkpoint: the Linux shell now initializes libmpv
 directly and renders its OpenGL output in a GTK GLArea inside Tauri's existing
 main window. The React Watch flow reserves and continuously reports a 16:9
