@@ -1,5 +1,10 @@
 # Playback and cache repair plan
 
+Historical milestone. Same-window embedding was subsequently implemented under
+`EMBEDDED_PLAYBACK_PLAN.md`; the separate-window statements below describe the
+earlier repair scope. Current work is in `STANDALONE_PLAYER_PLAN.md` and the
+root progress ledger.
+
 Requested 2026-09-26. Scope: desktop app only.
 
 1. Restore artwork under the production security policy. Decode native image

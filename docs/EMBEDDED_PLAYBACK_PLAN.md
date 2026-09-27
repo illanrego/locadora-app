@@ -1,5 +1,9 @@
 # Embedded playback — 2026-09-26
 
+Historical implementation milestone. Continue with `STANDALONE_PLAYER_PLAN.md`
+for engine packaging and the modern player redesign. The installed-libmpv setup
+below describes the development build, not the approved end-user dependency model.
+
 User priority: play within the existing Locadora window, with the app's UI
 around the movie; fullscreen hides that chrome.
 

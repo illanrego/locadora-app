@@ -1,10 +1,22 @@
 # Implementation progress
 
-Last updated: 2026-09-26
-Current milestone: MVP user acceptance
+Last updated: 2026-09-27
+Current milestone: standalone engine and modern player planning handoff
 Status: in progress
 
 ## Resume checkpoint
+
+Current priority: ship Locadora as a single-install standalone app with its own
+managed official streaming engine, and redesign its embedded player with modern
+streaming-style controls and Locadora borders. Read
+`docs/STANDALONE_PLAYER_PLAN.md` for the approved scope, code map, ordered
+milestones and acceptance criteria. D-016 supersedes the external-service-only
+delivery boundary; D-017 defines the player redesign.
+
+2026-09-27 documentation checkpoint: consolidated the new direction and corrected
+stale authorization, separate-window and service-dependency guidance. No runtime
+code, engine packaging or player redesign was implemented in this checkpoint;
+no executable was rebuilt. Earlier verification entries below remain historical.
 
 The architecture has been corrected to reuse Stremio rather than reproduce it.
 Official `stremio-core` is pinned at revision
@@ -85,10 +97,11 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: obtain user acceptance of embedded same-window playback, video-only
-fullscreen, buffering and subtitle selection/sync with configured sources.
-Automatic sync remains assessment-only in
-`docs/AUTO_SUBTITLE_SYNC_FEASIBILITY.md`.
+Next task: complete milestone 1 of `docs/STANDALONE_PLAYER_PLAN.md`: select and
+pin a redistributable official streaming-engine artifact, verify its startup,
+endpoint and runtime contract, and record reproducible packaging inputs before
+implementing the native supervisor. User acceptance of embedded playback and
+subtitles remains pending; automatic sync remains assessment-only.
 
 2026-09-26 GTK crash fix: opening tape inspection exposed an incompatibility
 between Tauri 2.11's unconditional Linux undecorated-resize click handler and
@@ -269,6 +282,11 @@ when they need user or real-environment confirmation.
 
 ## Verification log
 
+- 2026-09-27 documentation handoff: `git diff --check` passed after removing
+  trailing whitespace. A `node --input-type=module` filesystem/ledger check
+  verified all 17 referenced handoff/code targets exist and exactly one
+  `Next task:` remains. No runtime tests, GUI launch or build were needed for
+  this documentation-only checkpoint.
 - 2026-09-22: confirmed the destination initially contained only the plan and
   was not a Git repository.
 - 2026-09-22: inspected the reference project's agent boundaries, package
@@ -589,20 +607,16 @@ when they need user or real-environment confirmation.
 
 ## Known blockers and risks
 
-- The Linux shell still plays through a separate mpv window. Stremio's own
-  ShellVideo asks the shell for embedded `vo=libmpv`, and the current transport
-  discards that command, so in-window playback still needs a native shell that
-  renders mpv inside the app window.
+- Linux playback is embedded through libmpv/GTK GLArea. User visual/GPU/playback
+  acceptance is pending. Preserve the patched Tauri GTK resize handlers and
+  respect native/WebView stacking during the player redesign.
 - The sanitized fixture from the user's configured stream add-on is still needed
   to confirm Torrentio-style field reliability. Synthetic fixtures may be used
   for implementation but cannot close that Phase 0 criterion.
-- The synthetic add-on fixture proves deterministic code behavior but does not
-  count as the user-configured sanitized response required by Phase 0.
-- A real user-configured sanitized response is still required before parser
-  field reliability and Phase 0 can be closed.
-- Torrent playback requires a separately installed/running official Stremio
-  Service. Its eventual installer/bundling model and GPL-2.0 obligations remain
-  part of the public distribution review.
+- Current torrent playback still relies on an external service at port 11470.
+  This is an implementation gap, not the approved product behavior. Engine
+  packaging/supervision and complete dependency notices remain to be implemented
+  under D-016 and `docs/STANDALONE_PLAYER_PLAN.md`.
 - Series Quick Watch rules are deliberately undefined.
 - Public release licensing must be re-reviewed after the final native/player
   dependency graph is locked.

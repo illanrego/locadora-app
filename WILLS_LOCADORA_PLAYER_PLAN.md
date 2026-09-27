@@ -1,10 +1,17 @@
 # Will's Locadora Player — implementation plan
 
-**Status:** proposed; no implementation authorized in this repository  
-**Date:** 2026-09-22  
-**Intended destination:** a new, separate repository  
+**Status:** implementation authorized and in progress
 
-This document is designed to be moved into the new project. The existing `locadora` repository remains the public discovery website and must not receive torrent, playback, subtitle, debrid, or Stremio-account functionality.
+**Updated:** 2026-09-27
+
+**Repository:** `/home/illan/Documents/coding/locadora-app`
+
+This document now lives in the separate desktop repository. The existing `locadora` repository remains the public discovery website and must not receive torrent, playback, subtitle, debrid, or Stremio-account functionality.
+
+Accepted refinements are recorded in `docs/DECISIONS.md`. The current execution
+plan is `docs/STANDALONE_PLAYER_PLAN.md`; the exact continuation point and check
+results are in `IMPLEMENTATION_PROGRESS.md`. Historical milestones below describe
+delivery order, not a prohibition on already authorized implementation.
 
 ## 1. Product definition
 
@@ -52,6 +59,9 @@ Locadora/TMDB discovery
 
 ### Media behavior
 
+- Users install only Locadora. Its distribution must supply and manage the
+  necessary official streaming engine, runtimes and player dependencies without
+  requiring a separate Stremio installation or running Stremio Desktop.
 - The initial preferred resolution is 1080p.
 - Fall back to 720p according to the Quick Watch rules below.
 - Torrentio is expected to be the user's principal stream-result add-on, but the engine must consume the standard Stremio add-on protocol rather than hard-code Torrentio internals.
@@ -299,6 +309,8 @@ idle
 
 Required behavior:
 
+- modern streaming-style player presentation, retaining subtle Locadora borders
+  and dark blue identity; embedded same-window video and video-only fullscreen;
 - visible cancellation while loading streams;
 - bounded add-on timeouts;
 - manual source switch without losing the Locadora title context;
@@ -566,14 +578,13 @@ Exit criteria:
 
 The user will perform manual visual/playback testing when explicitly requested. Automated and static checks should not be reported as evidence of public playback availability.
 
-## 14. Decisions still required before implementation
+## 14. Decision status and remaining release work
 
-1. Confirm that `ytfs` means **YTS/YIFY**.
-2. Define 720p behavior when no 720p candidate has at least 10 seeders: manual picker or select the highest-seeded candidate anyway.
-3. Define episode size/seeder rules and season-pack handling.
-4. Choose Stremio account sync, local manifest configuration, or both for the first release.
-5. Decide whether non-PT/EN subtitles are hidden completely or exposed through an “other languages” action.
-6. Decide whether local resume history is wanted and how long it is retained.
-7. Approve the final native shell/dependency license inventory.
+D-001 through D-006 resolve the original source alias, weak-720p fallback,
+initial local add-on configuration, other subtitle languages and disabled resume
+defaults. Do not ask for those decisions again. Series Quick Watch rules remain
+undefined; series use manual selection until approved.
 
-No implementation should begin until these decisions and the Phase 0 licensing boundary are approved in the new repository.
+The final packaged dependency/license inventory remains a distribution gate.
+Standalone engine packaging and the modern player redesign are authorized;
+follow `docs/STANDALONE_PLAYER_PLAN.md` for their implementation sequence.

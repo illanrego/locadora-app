@@ -60,6 +60,9 @@ overly narrow interpretation used in the initial spike.
 
 ### D-009 — Official local streaming service boundary
 
+Historical milestone boundary, superseded by D-016 for delivery requirements.
+The fixed endpoint below still describes current code until D-016 is implemented.
+
 Torrent descriptors are converted by official Stremio Video through the
 official Stremio Service loopback API at `127.0.0.1:11470`. The WebView CSP may
 connect only to that fixed endpoint. The native player accepts only the
@@ -156,6 +159,32 @@ downcast is unavailable. This keeps Wry's separate synthetic back/forward mouse
 handler installed and follows the fallible-downcast behavior in Tauri's current
 development source. Native GTK decorations continue to own window resize and
 WebKit's normal event dispatch remains intact.
+
+### D-016 — One-install standalone application
+
+Accepted 2026-09-27. Locadora must supply and supervise the official streaming
+engine and its runtime dependencies. End users must not install or run Stremio
+Desktop, Stremio Service, Node or mpv separately. This supersedes D-009's external
+service detection as a delivery solution. Bundling/startup is now authorized,
+subject to establishing the exact artifact's redistribution/build requirements.
+
+Use an app-owned engine process with bounded readiness/recovery, isolated storage
+and ownership-aware shutdown. Endpoint selection, CSP and native playback URL
+validation must agree. Reuse official Core/Video behavior and preserve the narrow
+platform adapter. An existing Stremio installation may support optional add-on
+import but cannot be required for playback. Implementation remains pending; see
+`STANDALONE_PLAYER_PLAN.md` for milestones and acceptance criteria.
+
+### D-017 — Modern Locadora playback presentation
+
+Accepted 2026-09-27. Redesign the player around the video, compact transport
+controls and secondary audio/subtitle/source panels. Use restrained dark blue
+chrome and Locadora border details with readable contemporary typography. Keep
+same-window native rendering, video-only fullscreen, accessible keyboard controls,
+buffering/retry feedback and immediate subtitle delay adjustment. Respect native
+GTK/WebView stacking when designing overlays. This is approved work, not a claim
+that the current Watch UI has been redesigned. Automatic subtitle sync remains
+assessment-only under `AUTO_SUBTITLE_SYNC_FEASIBILITY.md`.
 
 ## Non-negotiable boundaries
 

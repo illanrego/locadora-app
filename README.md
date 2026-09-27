@@ -2,10 +2,16 @@
 
 Desktop Will's Locadora application with Locadora-owned discovery and member
 state, a Stremio-compatible add-on boundary, deterministic Quick Watch rules,
-and native playback planned through a narrowly scoped shell.
+and embedded native playback through a narrowly scoped shell.
 
 The implementation authority is `WILLS_LOCADORA_PLAYER_PLAN.md`. Current work
 and the exact continuation point live in `IMPLEMENTATION_PROGRESS.md`.
+
+For the current standalone-engine and modern-player work, continue with
+[`docs/STANDALONE_PLAYER_PLAN.md`](docs/STANDALONE_PLAYER_PLAN.md). It records the
+approved single-install requirement, implementation gaps, code map and milestones.
+The current development build still depends on installed native libraries and an
+external streaming service; standalone packaging is pending.
 
 ## Local checks
 

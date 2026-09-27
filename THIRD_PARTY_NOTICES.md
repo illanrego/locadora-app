@@ -2,6 +2,13 @@
 
 Reviewed: 2026-09-22
 
+Direction updated 2026-09-27: D-016 authorizes standalone engine packaging.
+The inventory below describes current implementation, not a completed bundle.
+Before redistribution, milestone 1 of `docs/STANDALONE_PLAYER_PLAN.md` must verify
+the exact engine artifact, companion runtimes and their source/notice obligations.
+The historical service wrapper license entry alone does not establish the terms
+of every server/runtime asset. No dependency was added by this documentation update.
+
 This inventory is an engineering aid, not legal advice. The build also emits
 `dist/third-party-licenses.md` from installed JavaScript package metadata.
 Packaging work must refresh this file from the final dependency graph.
