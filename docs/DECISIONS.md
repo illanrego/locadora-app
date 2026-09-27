@@ -146,6 +146,14 @@ through GLX and Wayland through EGL. Geometry and fullscreen events contain no
 playback descriptors. Windows will need its own native render adapter in Phase
 7; this decision applies to the current Linux build.
 
+Tauri 2.11's Linux WebView installs an undecorated-resize click handler that
+assumes the original `WebView -> GtkBox -> GtkWindow` ancestry even for a
+decorated window. The embedded overlay necessarily changes that ancestry, and
+the upstream handler panics before checking whether decorations make it a
+no-op. Installation removes that specific `button-press-event` handler before
+reparenting the WebView. Native GTK decorations continue to own window resize;
+WebKit's normal event dispatch remains intact.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

@@ -90,6 +90,17 @@ fullscreen, buffering and subtitle selection/sync with configured sources.
 Automatic sync remains assessment-only in
 `docs/AUTO_SUBTITLE_SYNC_FEASIBILITY.md`.
 
+2026-09-26 GTK crash fix: opening tape inspection exposed an incompatibility
+between Tauri 2.11's unconditional Linux undecorated-resize click handler and
+the GtkOverlay required by embedded playback. The handler downcast the
+WebView's new grandparent to GtkWindow before checking that this app is
+decorated, causing a non-unwinding panic on clicks. Embedded-surface setup now
+removes that no-op handler before reparenting; native decorated-window resizing
+and WebKit event handling remain in place. `cargo check --manifest-path
+src-tauri/Cargo.toml`, strict Clippy, and Tauri tests passed (21, 2 ignored).
+`npm run tauri -- build --no-bundle` passed and refreshed the release executable
+used by the `locadora` alias. Tape inspection still needs the user's recheck.
+
 2026-09-26 embedded-player checkpoint: the Linux shell now initializes libmpv
 directly and renders its OpenGL output in a GTK GLArea inside Tauri's existing
 main window. The React Watch flow reserves and continuously reports a 16:9
