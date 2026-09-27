@@ -5,9 +5,10 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  onCancel?: () => void;
 }
 
-export function Modal({ label, onClose, children, className = '' }: ModalProps) {
+export function Modal({ label, onClose, children, className = '', onCancel }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -24,7 +25,7 @@ export function Modal({ label, onClose, children, className = '' }: ModalProps) 
       ref={dialogRef}
       className={`modal ${className}`.trim()}
       aria-label={label}
-      onCancel={(event) => { event.preventDefault(); onClose(); }}
+      onCancel={(event) => { event.preventDefault(); (onCancel ?? onClose)(); }}
       onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
       {children}

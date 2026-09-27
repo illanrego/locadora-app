@@ -1,7 +1,7 @@
 # Implementation progress
 
 Last updated: 2026-09-27
-Current milestone: engine artifact investigation and modern player implementation
+Current milestone: modern player built; standalone engine decision pending
 Status: in progress
 
 ## Resume checkpoint
@@ -12,6 +12,34 @@ streaming-style controls and Locadora borders. Read
 `docs/STANDALONE_PLAYER_PLAN.md` for the approved scope, code map, ordered
 milestones and acceptance criteria. D-016 supersedes the external-service-only
 delivery boundary; D-017 defines the player redesign.
+
+2026-09-27 player implementation checkpoint: milestone 3 now has a window-fitted
+cinema layout, restrained dark blue borders, compact title/back header, consistent
+SVG transport controls, played/buffered seek bar, official Stremio volume/mute,
+and separate source/audio/subtitle panels. Panels resize the native video area
+rather than overlaying it; smaller windows stack the options below the picture.
+Subtitle delay stays in the selected-track panel. Escape first leaves fullscreen
+or closes options (restoring focus) before dismissing playback. Replay, retry,
+cancellation and source switching remain available; playback still does not touch
+Locadora member state. Main files: `src/components/WatchFlow.tsx`, `PlayerIcon.tsx`,
+`src/media/useStremioVideo.ts`, `src/styles.css`; shared Modal gained an optional
+cancel handler without changing other modal defaults.
+
+`npm run check` passed (26 files, 102 tests, production build). After the final
+focus/volume-input refinement, `npm run typecheck` and `npm test --
+test/watchFlow.test.tsx test/useStremioVideo.test.tsx` passed (11 tests).
+`npm run tauri -- build --no-bundle` passed (native release build 1m17s), refreshing
+`src-tauri/target/release/wills-locadora-player` at 2026-09-27 08:47:06 -0300
+(28,013,760 bytes). The existing `locadora` alias targets this executable.
+`git diff --check` passed. The build still reports the existing large JS chunk
+warning. No GUI/browser/manual playback testing was performed or claimed.
+
+Standalone engine milestones 1/2/4 remain incomplete. The official server's
+redistribution terms were not established; no engine has been added. A concrete
+unofficial MIT candidate is recorded in `docs/STREAMING_ENGINE_FINDINGS.md` for
+evaluation, not as an adopted dependency. The user has been asked to choose the
+official-permission route or compatible-engine evaluation; no explicit choice
+has been received at this checkpoint.
 
 2026-09-27 documentation checkpoint: consolidated the new direction and corrected
 stale authorization, separate-window and service-dependency guidance. No runtime
@@ -97,12 +125,11 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: implement milestone 3's modern player UI while the engine direction
-is resolved. Milestone 1 found that the official server is closed source and
-its redistribution contract is unestablished; evidence and remaining options
-are in `docs/STREAMING_ENGINE_FINDINGS.md`. Milestones 2/4 depend on that contract.
-User acceptance of embedded playback/subtitles remains pending; automatic sync
-remains assessment-only.
+Next task: resolve the engine direction recorded in `docs/STREAMING_ENGINE_FINDINGS.md`:
+confirm the user's choice of official-server redistribution permission or
+evaluation of the MIT compatible engine, then verify/pin that artifact before
+implementing supervision and packaging. Player UI code/build is ready for the
+user's acceptance; automatic subtitle sync remains assessment-only.
 
 2026-09-26 GTK crash fix: opening tape inspection exposed an incompatibility
 between Tauri 2.11's unconditional Linux undecorated-resize click handler and

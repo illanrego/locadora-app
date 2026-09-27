@@ -37,3 +37,22 @@ Video. A switch of engine needs the user's direction and compatibility review.
 No maintainer has been contacted. No external Stremio fallback satisfies the
 single-install goal. Milestones 2 and 4 depend on this decision; player UI work
 in milestone 3 can proceed independently.
+
+## Concrete alternative for evaluation
+
+[`M0Rf30/stremio-server-go`](https://github.com/M0Rf30/stremio-server-go) is an
+unofficial candidate, not adopted or installed. Its
+[LICENSE](https://github.com/M0Rf30/stremio-server-go/blob/main/LICENSE), fetched
+directly during this check, grants MIT rights (Gianluca Boiano, 2026). The
+[README](https://github.com/M0Rf30/stremio-server-go/blob/main/README.md) claims
+enginefs compatibility, including create, stats, Range streaming and settings.
+It documents configurable HTTP/HTTPS ports and `APP_PATH`; the source module
+requires Go 1.26. These are upstream claims, not Locadora integration results.
+
+If approved for evaluation, pin its source and dependencies, audit the actual
+loopback/origin configuration and disable unnecessary local-file, casting and
+indexer features. Verify against our installed Stremio Video conversion requests
+with synthetic media, including file selection, seeks, cancellation and shutdown.
+Confirm dependency licenses and the FFmpeg packaging requirements independently.
+This route keeps official Core/Video and replaces only the byte-serving engine;
+do not describe it as official Stremio Service or as proven equivalent.

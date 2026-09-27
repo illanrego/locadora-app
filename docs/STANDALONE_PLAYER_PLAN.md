@@ -1,14 +1,15 @@
 # Standalone Locadora and player redesign
 
-Updated: 2026-09-27. Status: approved direction; engine artifact investigation
-blocked, player UI implementation proceeding independently.
+Updated: 2026-09-27. Status: engine artifact investigation blocked; player UI
+implemented, automated checks and native build passed, user acceptance pending.
 
 ## Start here
 
 The user has authorized planning and implementation of a self-contained desktop
-Locadora with a modern player. The latest request is to record a reliable handoff.
-This checkpoint changes documentation only; it does not implement or build the
-engine packaging or redesigned player.
+Locadora with a modern player. The initial documentation handoff is complete;
+implementation is underway. Engine packaging is blocked on the contract recorded
+in `STREAMING_ENGINE_FINDINGS.md`. Player implementation/check/build results are
+recorded in the root progress ledger; do not infer standalone delivery from them.
 
 Read the repository's `AGENTS.md` and its four required documents first.
 `WILLS_LOCADORA_PLAYER_PLAN.md` remains the product authority;
@@ -16,10 +17,12 @@ Read the repository's `AGENTS.md` and its four required documents first.
 plan for the current priority. `IMPLEMENTATION_PROGRESS.md` owns the single next
 task and verification record. Earlier playback plans are historical milestones.
 
-Current continuation: implement milestone 3 while resolving the engine contract
-found during milestone 1. See `STREAMING_ENGINE_FINDINGS.md` for primary-source
-evidence and `../IMPLEMENTATION_PROGRESS.md` for the exact checkpoint. Routine
-implementation does not need renewed product approval.
+Current continuation: resolve the engine direction after milestone 1's finding.
+See `STREAMING_ENGINE_FINDINGS.md` for primary-source evidence and a compatible
+candidate, and `../IMPLEMENTATION_PROGRESS.md` for the precise build checkpoint.
+Milestone 3 implementation is ready for user acceptance. Routine implementation
+does not need renewed product approval; adopting an unofficial replacement engine
+is the outstanding architecture choice.
 
 ## What the user wants
 

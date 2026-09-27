@@ -31,6 +31,17 @@ beforeEach(() => { vi.clearAllMocks(); mocks.listeners.clear(); });
 afterEach(cleanup);
 
 describe('native subtitle coordination', () => {
+  it('uses official volume/mute properties and clamps invalid volume input', () => {
+    const { result } = renderHook(() => useStremioVideo('0.35.1'));
+    act(() => { result.current.setVolume(500); result.current.setMuted(true); result.current.setVolume(NaN); });
+    expect(mocks.dispatch).toHaveBeenCalledTimes(2);
+    expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'setProp', propName: 'volume', propValue: 100 });
+    expect(mocks.dispatch).toHaveBeenCalledWith({ type: 'setProp', propName: 'muted', propValue: true });
+    act(() => { mocks.listeners.get('propChanged')?.('volume', 45); mocks.listeners.get('propChanged')?.('muted', true); });
+    expect(result.current.state.volume).toBe(45);
+    expect(result.current.state.muted).toBe(true);
+  });
+
   it('loads the official shell into the embedded surface and controls native fullscreen', async () => {
     const { result } = renderHook(() => useStremioVideo('0.35.1'));
     Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });

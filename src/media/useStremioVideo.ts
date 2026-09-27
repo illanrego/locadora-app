@@ -35,6 +35,8 @@ export interface StremioVideoState {
   error: string | null;
   ended: boolean;
   fullscreen: boolean;
+  volume: number;
+  muted: boolean;
 }
 
 export interface StremioVideoTrack {
@@ -65,6 +67,8 @@ const INITIAL_STATE: StremioVideoState = {
   error: null,
   ended: false,
   fullscreen: false,
+  volume: 100,
+  muted: false,
 };
 
 function stremioVideoError(value: unknown): string {
@@ -83,6 +87,8 @@ export interface StremioVideoController {
   seekRelative: (seconds: number) => void;
   seekTo: (milliseconds: number) => void;
   setFullscreen: (fullscreen: boolean) => void;
+  setVolume: (volume: number) => void;
+  setMuted: (muted: boolean) => void;
   selectAudioTrack: (id: string) => void;
   selectSubtitleTrack: (id: string | null, extra: boolean) => void;
   setSubtitleDelay: (milliseconds: number, extra?: boolean) => void;
@@ -171,6 +177,16 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     const receiveProperty = (...args: unknown[]) => {
       const [name, value] = args;
       if (typeof name !== 'string') return;
+      if (name === 'volume') {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          setState((current) => ({ ...current, volume: Math.max(0, Math.min(100, value)) }));
+        }
+        return;
+      }
+      if (name === 'muted') {
+        if (typeof value === 'boolean') setState((current) => ({ ...current, muted: value }));
+        return;
+      }
       // External tracks are rendered by native mpv, not the HTML overlay.
       if (['extraSubtitlesTracks', 'selectedExtraSubtitlesTrackId', 'extraSubtitlesDelay'].includes(name)) return;
       if (name === 'selectedSubtitlesTrackId' && selectedExtra.current) return;
@@ -275,6 +291,15 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     });
   }, []);
 
+  const setVolume = useCallback((volume: number) => {
+    if (!Number.isFinite(volume)) return;
+    videoRef.current?.dispatch({ type: 'setProp', propName: 'volume', propValue: Math.max(0, Math.min(100, volume)) });
+  }, []);
+
+  const setMuted = useCallback((muted: boolean) => {
+    videoRef.current?.dispatch({ type: 'setProp', propName: 'muted', propValue: muted });
+  }, []);
+
   const selectAudioTrack = useCallback((id: string) => {
     videoRef.current?.dispatch({ type: 'setProp', propName: 'selectedAudioTrackId', propValue: id });
   }, []);
@@ -326,6 +351,8 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     seekRelative,
     seekTo,
     setFullscreen,
+    setVolume,
+    setMuted,
     selectAudioTrack,
     selectSubtitleTrack,
     setSubtitleDelay,
