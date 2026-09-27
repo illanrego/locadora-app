@@ -1,7 +1,7 @@
 # Implementation progress
 
 Last updated: 2026-09-27
-Current milestone: modern player built; standalone engine decision pending
+Current milestone: standalone engine integration in progress
 Status: in progress
 
 ## Resume checkpoint
@@ -125,11 +125,12 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: resolve the engine direction recorded in `docs/STREAMING_ENGINE_FINDINGS.md`:
-confirm the user's choice of official-server redistribution permission or
-evaluation of the MIT compatible engine, then verify/pin that artifact before
-implementing supervision and packaging. Player UI code/build is ready for the
-user's acceptance; automatic subtitle sync remains assessment-only.
+Next task: implement the native supervisor and wire official Stremio Video to
+the bundled v0.16.1 engine, then run the full frontend/native suites after that
+major change and produce the release/installer. The user's renewed standalone
+instruction authorizes the compatible-engine route (D-018). The pinned Linux
+archive SHA-256 is verified; `npm run prepare:engine` stages the binary, MIT
+license, provenance and upstream SBOM. No runtime test has run at this checkpoint.
 
 2026-09-26 GTK crash fix: opening tape inspection exposed an incompatibility
 between Tauri 2.11's unconditional Linux undecorated-resize click handler and

@@ -188,6 +188,16 @@ assessment-only under `AUTO_SUBTITLE_SYNC_FEASIBILITY.md`.
 
 ## Non-negotiable boundaries
 
+D-018 (2026-09-27): the user's renewed instruction to implement the whole
+standalone app authorizes the compatible-engine route. Pin MIT-licensed
+`M0Rf30/stremio-server-go` v0.16.1 for Linux x86_64; retain official Stremio
+Core/Video. This refines D-016's byte-serving component: it is an unofficial
+compatible engine, not the closed-source official server. Download/verify only
+at build time, embed the engine in the executable, supervise an owned loopback
+process at port 11471, and never adopt/terminate a separately running Stremio.
+Development and packaged builds must use the same startup path. Distribution
+includes engine license/provenance/SBOM; no Node or Stremio install is required.
+
 - The public Locadora repository remains unchanged and contains no playback,
   torrent, subtitle, debrid, or Stremio-account implementation.
 - No secret-bearing manifest or playback URL may enter logs, fixtures, crash

@@ -14,7 +14,8 @@
     "check": "npm run typecheck && npm test && npm run build",
     "check:native-core": "cargo test --manifest-path crates/native-core/Cargo.toml",
     "check:native": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "prepare:engine": "node tools/prepare-streaming-engine.mjs"
   },
   "engines": {
     "node": ">=22.12"

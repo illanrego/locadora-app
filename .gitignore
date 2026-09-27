@@ -10,6 +10,7 @@ src-tauri/target/
 *.swp
 .DS_Store
 coverage/
+src-tauri/resources/streaming-engine/
 playwright-report/
 test-results/
 
