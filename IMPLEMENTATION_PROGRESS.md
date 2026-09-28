@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-28
 Current milestone: repair embedded mpv startup under desktop locales
-Status: reproduced locale failure; fix implemented, checks/rebuild in progress
+Status: reproduced locale failure fixed; full checks and native rebuild passed; user recheck pending
 
 ## Resume checkpoint
 
@@ -30,7 +30,10 @@ Verification for the locale fix:
 - `cargo test --manifest-path crates/native-core/Cargo.toml -- --test-threads=1`:
   18 passed, including native playback/subtitle IPC tests.
 - Strict Tauri Clippy, `cargo fmt --check` and `git diff --check` passed.
-- `npm run tauri -- build`: in progress; no GUI/real-movie acceptance claimed.
+- `npm run tauri -- build`: passed (optimized Rust build 1m51s); release executable
+  and Debian installer refreshed after fix commit `5049907`. Existing `locadora`
+  alias runs the corrected executable after closing/reopening any old instance.
+  No GUI/real-movie acceptance claimed.
 
 Current priority: ship Locadora as a single-install standalone app with its own
 managed compatible streaming engine (D-018), and redesign its embedded player with modern
@@ -151,8 +154,9 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: finish the locale regression/full-suite checks and rebuild the release
-and Debian installer, then obtain the user's playback recheck. After that, resume
+Next task: obtain the user's playback recheck of the rebuilt locale-corrected app.
+If startup still fails, use the newly preserved typed cause before changing code.
+After that, resume
 the synthetic peer-transfer and HTTP Range/seek coverage.
 Do not launch GUI/manual tests without the user's request. User acceptance of
 real playback with Stremio closed, clean-machine installation, Flatpak delivery,
