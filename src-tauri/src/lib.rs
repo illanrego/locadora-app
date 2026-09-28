@@ -1,10 +1,12 @@
 mod commands;
 mod embedded_surface;
+mod native_locale;
 mod streaming_engine;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    native_locale::configure();
     tauri::Builder::default()
         .manage(commands::PlayerState::default())
         .manage(streaming_engine::EngineState::default())

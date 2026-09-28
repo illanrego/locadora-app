@@ -1,10 +1,36 @@
 # Implementation progress
 
 Last updated: 2026-09-28
-Current milestone: standalone Linux release and Debian installer built
-Status: implementation delivered for acceptance; full delivery criteria remain open
+Current milestone: repair embedded mpv startup under desktop locales
+Status: reproduced locale failure; fix implemented, checks/rebuild in progress
 
 ## Resume checkpoint
+
+2026-09-28 user playback failure supersedes the peer-transfer test priority:
+`Could not initialize embedded mpv`. The installed libmpv returns NULL from
+`mpv_create()` under `en_US.UTF-8`, but succeeds under `C`. Its installed
+`/usr/include/mpv/client.h` explicitly requires LC_NUMERIC=C. GTK normally
+sets LC_ALL from the user's environment, whereas previous headless Rust tests
+left the C-runtime locale at its default. This explains the missed integration
+case; the generic surface error also hid the underlying startup stage.
+
+`src-tauri/src/native_locale.rs` now initializes the user's locale once at entry,
+resets only LC_NUMERIC to C and calls gtk_disable_setlocale before GTK startup,
+preventing GTK from undoing the correction. No per-playback/global locale race
+is introduced; other locale categories remain unchanged. The surface now retains
+the safe typed PlayerError in its startup message. A subprocess regression first
+reproduces rejection, then verifies handle creation and an actual embedded
+MpvSession/control channel after correction. C.UTF-8 is accepted by this libmpv,
+so the regression intentionally uses installed en_US.UTF-8 instead.
+
+Verification for the locale fix:
+- `npm run check`: 106 tests passed (27 files), typecheck/build passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml`: 25 passed, 2 opt-in ignored,
+  including the isolated non-C locale regression and embedded session startup.
+- `cargo test --manifest-path crates/native-core/Cargo.toml -- --test-threads=1`:
+  18 passed, including native playback/subtitle IPC tests.
+- Strict Tauri Clippy, `cargo fmt --check` and `git diff --check` passed.
+- `npm run tauri -- build`: in progress; no GUI/real-movie acceptance claimed.
 
 Current priority: ship Locadora as a single-install standalone app with its own
 managed compatible streaming engine (D-018), and redesign its embedded player with modern
@@ -34,7 +60,7 @@ test/watchFlow.test.tsx test/useStremioVideo.test.tsx` passed (11 tests).
 `git diff --check` passed. The build still reports the existing large JS chunk
 warning. No GUI/browser/manual playback testing was performed or claimed.
 
-Standalone engine milestones 1/2/4 remain incomplete. The official server's
+Historical pre-D-018 checkpoint: standalone milestones 1/2/4 were incomplete. The official server's
 redistribution terms were not established; no engine has been added. A concrete
 unofficial MIT candidate is recorded in `docs/STREAMING_ENGINE_FINDINGS.md` for
 evaluation, not as an adopted dependency. The user has been asked to choose the
@@ -125,8 +151,9 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: add an automated synthetic peer-transfer and HTTP Range/seek test
-against the bundled engine, beyond the existing metadata/lifecycle contract test.
+Next task: finish the locale regression/full-suite checks and rebuild the release
+and Debian installer, then obtain the user's playback recheck. After that, resume
+the synthetic peer-transfer and HTTP Range/seek coverage.
 Do not launch GUI/manual tests without the user's request. User acceptance of
 real playback with Stremio closed, clean-machine installation, Flatpak delivery,
 and final public-distribution license/source audit remain outstanding.
@@ -694,10 +721,9 @@ when they need user or real-environment confirmation.
 - The sanitized fixture from the user's configured stream add-on is still needed
   to confirm Torrentio-style field reliability. Synthetic fixtures may be used
   for implementation but cannot close that Phase 0 criterion.
-- Current torrent playback still relies on an external service at port 11470.
-  This is an implementation gap, not the approved product behavior. Engine
-  packaging/supervision and complete dependency notices remain to be implemented
-  under D-016 and `docs/STANDALONE_PLAYER_PLAN.md`.
+- Torrent playback uses the bundled compatible engine on port 11471 (D-018).
+  Real peer transfer, clean installation and final distribution-license/source
+  acceptance remain open; a running external Stremio is not required.
 - Series Quick Watch rules are deliberately undefined.
 - Public release licensing must be re-reviewed after the final native/player
   dependency graph is locked.

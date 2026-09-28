@@ -240,7 +240,7 @@ pub fn start() -> Result<MpvSession, String> {
             .as_ref()
             .ok_or("Embedded video surface is unavailable")?;
         let session = MpvSession::start(&player_runtime_root(), VideoOutput::Embedded)
-            .map_err(|_| "Could not initialize embedded mpv")?;
+            .map_err(|error| format!("Could not initialize embedded mpv: {error}"))?;
         surface.area.show();
         surface.area.realize();
         surface.area.make_current();
