@@ -88,7 +88,7 @@ function decodeNativeImage(dataUrl: string): Blob {
   return new Blob([bytes], { type: match[1] });
 }
 
-async function resolveArtwork(url: string, kind: ArtworkKind): Promise<ArtworkResolution | null> {
+export async function resolveArtwork(url: string, kind: ArtworkKind): Promise<ArtworkResolution | null> {
   const cachesApi = cacheStorage();
   const key = `${kind}:${url}`;
   const existing = pending.get(key);

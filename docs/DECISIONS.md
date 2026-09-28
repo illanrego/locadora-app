@@ -203,6 +203,17 @@ process at port 11471, and never adopt/terminate a separately running Stremio.
 Development and packaged builds must use the same startup path. Distribution
 includes engine license/provenance/SBOM; no Node or Stremio install is required.
 
+### D-019 — Full-window immersive parity and subtle fullscreen controls
+
+Accepted 2026-09-28 by direct user request. Immersive mode replaces the normal
+2D browsing page. Adapt the existing MIT Locadora web room/VHS scene locally,
+retaining geometry, lighting, plaque, camera and interaction behavior; keep the
+web checkout read-only. Desktop catalogue identities and cached native artwork
+remain authoritative. Maintain accessible controls and automatic 2D fallback.
+Fullscreen uses a compact neutral transport strip without the windowed title
+header or routine buffer status. Activity auto-hide and secondary player panels
+remain; GTK stacking still requires reserving visible space for the strip.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

@@ -47,6 +47,8 @@ export default function App() {
   const [nativeCapabilities, setNativeCapabilities] = useState<NativeCapabilities | null>(null);
   const [quickWatchEnabled, setQuickWatchEnabled] = useState(readQuickWatchEnabled);
   const [immersiveEnabled, setImmersiveEnabled] = useState(readImmersiveEnabled);
+  const [immersiveStand, setImmersiveStand] = useState(0);
+  const [immersiveFiltersOpen, setImmersiveFiltersOpen] = useState(false);
   const [immersiveReady, setImmersiveReady] = useState(false);
   const [immersiveError, setImmersiveError] = useState('');
   const shelfRequestRef = useRef(0);
@@ -67,6 +69,7 @@ export default function App() {
       setPages((current) => nextStand === 0 ? [page] : [...current, page]);
       setStand(nextStand);
       setStatus('ready');
+      return true;
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === 'AbortError') return;
       if (request !== shelfRequestRef.current) return;
@@ -77,6 +80,7 @@ export default function App() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setImmersiveStand(0);
     void fetchPage(0, controller.signal);
     return () => controller.abort();
   }, [fetchPage]);
@@ -91,6 +95,24 @@ export default function App() {
     }));
   }, [locale, pages, query]);
   const visibleTitles = useMemo(() => visiblePages.flatMap((page) => page.titles), [visiblePages]);
+
+  const immersiveTitles = visiblePages[Math.min(immersiveStand, Math.max(0, visiblePages.length - 1))]?.titles ?? [];
+  const navigateImmersive = (direction: number) => {
+    if (status === 'loading') return;
+    const next = immersiveStand + direction;
+    if (next < 0) return;
+    if (next < pages.length) setImmersiveStand(next);
+    else if (pages.at(-1)?.hasNextStand) {
+      void fetchPage(pages.length).then((loaded) => { if (loaded) setImmersiveStand(next); });
+    }
+  };
+  const configureImmersive = (index: number, nextYear: number) => {
+    setGenreIndex(index);
+    setQuery('');
+    setYearDraft(clampYear(nextYear));
+    setYear(clampYear(nextYear));
+    setImmersiveStand(0);
+  };
 
   const hasNextStand = pages.at(-1)?.hasNextStand ?? false;
   const source = pages[0]?.source ?? 'fixture';
@@ -195,8 +217,8 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app-shell" style={{ '--genre-accent': genre.accent } as React.CSSProperties}>
-      <a className="skip-link" href="#shelf">{locale === 'pt-BR' ? 'Pular para a prateleira' : 'Skip to shelf'}</a>
+    <div className={`app-shell${immersiveEnabled ? ' is-immersive' : ''}`} style={{ '--genre-accent': genre.accent } as React.CSSProperties}>
+      <a className="skip-link" href={immersiveEnabled ? '#immersive-shelf' : '#shelf'}>{locale === 'pt-BR' ? 'Pular para a prateleira' : 'Skip to shelf'}</a>
       <header className="store-header">
         <div className="masthead">
           <a className="brand" href="#top" aria-label="Will's Locadora">
@@ -207,8 +229,9 @@ export default function App() {
             <button type="button" onClick={() => setPanel('saved')}>{locale === 'pt-BR' ? 'Salvos' : 'Saved'}</button>
             <button type="button" onClick={() => setPanel('account')}>{t.account}</button>
             <button type="button" aria-pressed={immersiveEnabled} onClick={toggleImmersive}>
-              {locale === 'pt-BR' ? 'Modo imersivo' : 'Immersive mode'}
+              {immersiveEnabled ? (locale === 'pt-BR' ? 'Modo 2D' : '2D mode') : (locale === 'pt-BR' ? 'Modo imersivo' : 'Immersive mode')}
             </button>
+            {immersiveEnabled && <button type="button" aria-expanded={immersiveFiltersOpen} onClick={() => setImmersiveFiltersOpen((value) => !value)}>{locale === 'pt-BR' ? 'Buscar fitas' : 'Find tapes'}</button>}
             <button type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}>{t.settings}</button>
             <button type="button" className="basket-button" onClick={() => setPanel('basket')}>
               {t.basket}<span aria-label={`${basket.length} / 3`}>{basket.length}</span>
@@ -216,7 +239,7 @@ export default function App() {
           </nav>
         </div>
 
-        <div className="browse-controls">
+        <div className="browse-controls" hidden={immersiveEnabled && !immersiveFiltersOpen}>
           <label>
             <span>{t.genre}</span>
             <select className="genre-picker" value={genreIndex} onChange={(event) => chooseGenre(Number(event.target.value))}>
@@ -301,7 +324,19 @@ export default function App() {
         )}
       </header>
 
-      <main id="top">
+      {immersiveEnabled ? <main className="immersive-room" id="top" aria-label={locale === 'pt-BR' ? 'Locadora imersiva' : 'Immersive store'}>
+        {pages.length > 0 && <Suspense fallback={<p className="immersive-loading">{t.loading}</p>}>
+          <ImmersiveShelf titles={immersiveTitles} genre={genre} year={year} locale={locale} stand={immersiveStand}
+            paused={watchTitle !== null || selected !== null || panel !== null || mediaSettingsOpen || donationOpen}
+            onInspect={inspectTitle} onReady={immersiveStarted} onFailure={immersiveFailed}
+            onConfigure={configureImmersive} onNavigate={navigateImmersive} />
+        </Suspense>}
+        {(status === 'loading' || (!immersiveReady && status !== 'error')) && <p className="immersive-loading" role="status">{t.loading}</p>}
+        {status === 'error' && <p className="immersive-error" role="alert">{error} <button type="button" onClick={() => void fetchPage(pages.length)}>{t.retry}</button></p>}
+        {!immersiveTitles.length && status === 'ready' && <p className="immersive-loading" role="status">{t.empty}</p>}
+        <button className="immersive-stand-button immersive-previous-stand" type="button" disabled={immersiveStand === 0 || status === 'loading'} onClick={() => navigateImmersive(-1)} aria-label={locale === 'pt-BR' ? 'Estante anterior' : 'Previous stand'}>‹</button>
+        <button className="immersive-stand-button immersive-next-stand" type="button" disabled={status === 'loading' || (immersiveStand >= pages.length - 1 && !hasNextStand)} onClick={() => navigateImmersive(1)} aria-label={locale === 'pt-BR' ? 'Próxima estante' : 'Next stand'}>›</button>
+      </main> : <main id="top">
         <p className="rental-intro">{t.intro}</p>
         <section className="shelf-room" aria-labelledby="shelf-title">
           <div className="fluorescent" aria-hidden="true" />
@@ -317,21 +352,6 @@ export default function App() {
 
           {immersiveError && <p className="immersive-error" role="status">{immersiveError}</p>}
 
-          {immersiveEnabled && status === 'ready' && (
-            <Suspense fallback={<p className="immersive-loading">{locale === 'pt-BR' ? 'Acendendo as luzes…' : 'Turning on the lights…'}</p>}>
-              <ImmersiveShelf
-                titles={visibleTitles}
-                genre={genre}
-                year={year}
-                locale={locale}
-                paused={watchTitle !== null}
-                onInspect={inspectTitle}
-                onReady={immersiveStarted}
-                onFailure={immersiveFailed}
-              />
-            </Suspense>
-          )}
-
           {status === 'error' && !pages.length ? (
             <div className="empty-state">
               <span className="empty-tape" aria-hidden="true" />
@@ -340,7 +360,7 @@ export default function App() {
               <button type="button" onClick={() => void fetchPage(stand)}>{t.retry}</button>
             </div>
           ) : (
-            <div id="shelf" className="shelf-stack" aria-busy={status === 'loading'} hidden={immersiveEnabled && immersiveReady}>
+            <div id="shelf" className="shelf-stack" aria-busy={status === 'loading'}>
               {visiblePages.map((page, pageIndex) => (
                 <section className="shelf-stand" aria-label={`${locale === 'pt-BR' ? 'Estante' : 'Stand'} ${pageIndex + 1}`} key={pageIndex}>
                   <span className="shelf-stand-label" aria-hidden="true">
@@ -374,12 +394,12 @@ export default function App() {
           )}
           {!visibleTitles.length && status === 'ready' && <p className="search-empty">{t.empty}</p>}
         </section>
-      </main>
+      </main>}
 
-      <footer>
+      {!immersiveEnabled && <footer>
         <span>Be kind, rewind.</span>
         <button type="button" className="support-link" onClick={() => setDonationOpen(true)}>{locale === 'pt-BR' ? 'Me pague um café' : 'Buy me a coffee'}</button>
-      </footer>
+      </footer>}
 
       {selected && (
         <TitleInspection

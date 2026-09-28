@@ -418,7 +418,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
         </aside>}
       </div>
       <section className="cinema-dock" aria-label={pt ? 'Controles do player' : 'Player controls'}>
-        <div className="cinema-status-row">
+        <div className={`cinema-status-row${phase === 'playing' || phase === 'paused' ? ' is-routine' : ''}`}>
           <span className={`player-phase phase-${phase}`} role="status">{phaseLabels[phase][pt ? 0 : 1]}</span>
           <span className="cinema-buffer">{active && !playerError && `${Math.floor(bufferedAhead / 1000)}s ${pt ? 'em buffer' : 'buffered'}`}</span>
           {lookupState === 'loading' && <button type="button" onClick={close}>{pt ? 'Cancelar' : 'Cancel'}</button>}
@@ -451,7 +451,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
               <input type="range" min="0" max="100" aria-label="Volume" disabled={!canControl} value={video.state.muted ? 0 : video.state.volume} onChange={(event) => video.setVolume(event.currentTarget.valueAsNumber)} /></div>
             <button ref={tracksButtonRef} type="button" className="cinema-panel-button" aria-expanded={tracksVisible} aria-controls={tracksVisible ? 'cinema-options' : undefined} onClick={toggleTracks}><PlayerIcon name="tracks" /><span>{pt ? 'Áudio e legendas' : 'Audio & subtitles'}</span></button>
             <button ref={sourcesButtonRef} type="button" className="cinema-panel-button" disabled={!candidates.length} aria-expanded={manualVisible} aria-controls={manualVisible ? 'cinema-options' : undefined} onClick={toggleSources}><PlayerIcon name="sources" /><span>{pt ? 'Fontes' : 'Sources'}</span></button>
-            <button type="button" className="cinema-icon-button" disabled={!canControl} aria-label={pt ? 'Tela cheia' : 'Fullscreen'} title={pt ? 'Tela cheia · F · Esc para voltar' : 'Fullscreen · F · Escape to return'} onClick={() => video.setFullscreen(true)}><PlayerIcon name="fullscreen" /></button>
+            <button type="button" className="cinema-icon-button" disabled={!canControl} aria-label={video.state.fullscreen ? (pt ? 'Sair da tela cheia' : 'Exit fullscreen') : (pt ? 'Tela cheia' : 'Fullscreen')} title={pt ? 'Tela cheia · F · Esc para voltar' : 'Fullscreen · F · Escape to return'} onClick={() => video.setFullscreen(!video.state.fullscreen)}><PlayerIcon name="fullscreen" /></button>
           </div>
         </div>
       </section>

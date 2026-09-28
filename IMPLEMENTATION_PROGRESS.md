@@ -1,11 +1,49 @@
 # Implementation progress
 
 Last updated: 2026-09-28
-Current milestone: embedded windowed playback and player chrome
-Status: outer-frame geometry fix, fullscreen activity controls and resolution
-filter implemented and native executable rebuilt; user visual acceptance pending
+Current milestone: subtle fullscreen controls and faithful full-window immersive browsing
+Status: implementation, automated checks and native rebuild passed;
+user visual acceptance pending
 
 ## Resume checkpoint
+
+2026-09-28 fullscreen refinement and web immersive scene port:
+- User changes priority to subtle fullscreen chrome and an immersive view that
+  completely replaces 2D. Fullscreen now omits the title header and routine
+  phase/buffer row, with a slim black transport strip, smaller neutral icons,
+  thin timeline and icon-only secondary controls. Activity auto-hide remains;
+  sources, tracks, failure feedback and Escape remain available. Its fullscreen
+  button now exits as well as enters. Native GLArea still reserves control space
+  because WebView controls cannot paint above the native surface.
+- `App.tsx` mounts either the normal shelf/footer or the full-window immersive
+  room. A compact corner menu keeps account, saved, Cesta, settings, 2D return
+  and keyboard-friendly catalogue controls accessible. Each immersive stand is
+  its own catalogue page; navigation uses cached pages and fetches another only
+  at the end. WebGL initialization failure/context loss returns to normal 2D.
+- Replaced the simplified labelled-box scene with a local MIT port of the
+  reference web `immersive-shelf.mjs` and `vhs-case.mjs`, including their license:
+  `src/locadora/web-scene/`. Preserves web room/rack geometry, VHS cases/spines,
+  lamps, wall posters, floor, plaque, camera framing, selection and zoom/gesture
+  behavior. Reference repo was read/copied only, never modified.
+- `ImmersiveShelf.tsx` is the typed React adapter. It loads canvas-safe artwork
+  with four workers through the existing cache/native boundary; each case is
+  updated as its blob arrives. Original canonical identities reach inspection;
+  disposal revokes URLs and ignores late results. Rendering pauses behind
+  playback and dialogs. Decorative posters use this stand's movie covers rather
+  than requesting the web-only featured endpoint. No provider controls added.
+- Tests: `npm run check` passed (116 tests in 31 files, typecheck, production
+  build); `npm test -- test/immersiveAdapter.test.tsx test/immersiveScene.test.ts`
+  then passed 2 tests including an additional lifecycle test and actual scene
+  render callback using a mocked GPU. `node --check` passed for both copied scene
+  modules; `git diff --check` passed. Existing large-chunk warning remains.
+  Final `npm run typecheck` passed. `npm run tauri -- build --no-bundle`
+  passed (optimized build 1m46s), refreshing
+  `src-tauri/target/release/wills-locadora-player`. Close/reopen `locadora` to
+  use the new build. `git diff --cached --check` passed.
+  No GUI/browser/manual acceptance performed.
+- Pre-existing `.case-art::after` removal and untracked
+  `test/playerPresentation.test.ts` remain outside this milestone.
+
 
 2026-09-28 resolution filter and windowed/fullscreen correction:
 - Found the concrete geometry mutation: official `withHTMLSubtitles.js` sets
@@ -267,11 +305,11 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: obtain user visual acceptance of windowed playback, fullscreen
-pointer-revealed controls, source filtering and source switching in the rebuilt
-executable. If windowed rendering still fails, inspect the bounded outer-frame
-bounds/GL draw diagnostics. After acceptance remove temporary probe scaffolding,
-then resume synthetic peer-transfer and HTTP Range/seek coverage.
+Next task: obtain user visual acceptance in the rebuilt app of the subtle
+fullscreen strip and the complete immersive view switch, including plaque
+changes, stand navigation, covers, inspection, zoom and return to 2D. Preserve
+windowed video geometry fix. After playback acceptance remove its temporary
+probe scaffolding, then resume peer-transfer and HTTP Range/seek coverage.
 Do not launch GUI/manual tests without the user's request. User acceptance of
 real playback with Stremio closed, clean-machine installation, Flatpak delivery,
 and final public-distribution license/source audit remain outstanding.
