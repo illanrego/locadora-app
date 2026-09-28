@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   ensure: vi.fn().mockResolvedValue(undefined),
   dispatch: vi.fn(), select: vi.fn().mockResolvedValue(undefined), property: vi.fn().mockResolvedValue(undefined),
   bounds: vi.fn().mockResolvedValue(undefined), fullscreen: vi.fn().mockResolvedValue(undefined),
+  probe: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@stremio/stremio-video', () => ({ default: class {
   on(name: string, listener: (...args: unknown[]) => void) { mocks.listeners.set(name, listener); }
@@ -22,6 +23,7 @@ vi.mock('../src/platform/nativeBridge', () => ({
   setNativePlayerProperty: mocks.property,
   setNativeVideoBounds: mocks.bounds,
   setNativePlayerFullscreen: mocks.fullscreen,
+  reportSurfaceProbe: mocks.probe,
   onNativePlayerFullscreenChanged: async () => () => undefined,
   onNativePlayerRenderError: async () => () => undefined,
 }));
@@ -82,6 +84,20 @@ describe('native subtitle coordination', () => {
     );
     act(() => { result.current.setFullscreen(true); });
     await waitFor(() => expect(mocks.fullscreen).toHaveBeenCalledWith(true));
+  });
+
+  it('measures the stable outer frame even when the upstream subtitle host collapses', async () => {
+    const { result } = renderHook(() => useStremioVideo('0.35.1'));
+    const host = document.createElement('div');
+    host.style.position = 'relative';
+    const viewport = document.createElement('div');
+    viewport.getBoundingClientRect = () => ({ left: 10, top: 60, right: 810, bottom: 510, width: 800, height: 450, x: 10, y: 60, toJSON() {} });
+    Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: host });
+    Object.defineProperty(result.current.viewportRef, 'current', { configurable: true, value: viewport });
+    await act(async () => { await result.current.load({ url: 'https://media.example.invalid/video' }); });
+    await waitFor(() => expect(mocks.bounds).toHaveBeenCalledWith(expect.objectContaining({ x: 10, y: 60, width: 800, height: 450, visible: true })));
+    act(() => result.current.unload());
+    await waitFor(() => expect(mocks.bounds).toHaveBeenLastCalledWith(expect.objectContaining({ visible: false })));
   });
 
   it('loads external subtitles into mpv without requiring Stremio Service or an HTML overlay', async () => {

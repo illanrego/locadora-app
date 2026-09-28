@@ -178,6 +178,15 @@ export async function setNativeVideoBounds(request: NativeVideoBounds): Promise<
   return invoke('player_set_bounds', { request });
 }
 
+/**
+ * TEMPORARY diagnostic channel for the missing embedded picture. Numeric and
+ * layout state only; the native side enforces a character and length allowlist.
+ */
+export async function reportSurfaceProbe(detail: string): Promise<void> {
+  if (!isNativeShell()) return;
+  return invoke('player_surface_probe', { detail });
+}
+
 export async function setNativePlayerFullscreen(fullscreen: boolean): Promise<void> {
   if (!isNativeShell()) return;
   return invoke('player_fullscreen', { fullscreen });

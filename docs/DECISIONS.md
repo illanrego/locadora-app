@@ -136,12 +136,17 @@ Automatic synchronization remains a feasibility proposal only.
 Linux playback uses the installed libmpv client and OpenGL render APIs inside a
 GTK GLArea layered into Tauri's existing main window. React reports the bounded
 video-frame geometry; the native widget draws only there and leaves Locadora's
-controls in the WebView. Fullscreen expands the native surface over the window,
-blocks pointer input from reaching hidden controls, and Escape restores the
-windowed Locadora layout. Source resolution remains owned by official Stremio
+controls in the WebView. Fullscreen follows the app-owned video-frame rectangle in the expanded window.
+Pointer input passes through to activity-sensitive WebView controls; visible
+controls reserve space beside the native picture and hide after three idle
+seconds. Escape restores the windowed Locadora layout. Source resolution remains owned by official Stremio
 Video, while existing IPC continues to own bounded controls, events, buffering
 and subtitle delivery. No second mpv process or top-level playback window is
 created in embedded mode.
+
+The outer React frame owns geometry; Stremio may mutate only the inner host.
+This avoids its HTML subtitle wrapper changing the measured surface to a
+zero-height relative-positioned element.
 
 The GL render context is created and destroyed on GTK's main thread and is
 released before libmpv and before the application window. X11 resolves OpenGL

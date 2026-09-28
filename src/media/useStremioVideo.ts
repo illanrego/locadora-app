@@ -1,6 +1,7 @@
 import StremioVideo from '@stremio/stremio-video';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { safeDiagnostic } from './redaction';
+import { visibleVideoBounds } from './videoBounds';
 import { StremioShellTransport } from '../platform/stremioShellTransport';
 import { STREMIO_SERVICE_URL, ensureStreamingService } from '../platform/stremioService';
 import type { StremioPlayableStream } from './stremioStream';
@@ -8,6 +9,7 @@ import type { StremioExtraSubtitleTrack } from './subtitleResolution';
 import {
   onNativePlayerFullscreenChanged,
   onNativePlayerRenderError,
+  reportSurfaceProbe,
   selectNativeSubtitle,
   setNativePlayerFullscreen,
   setNativePlayerProperty,
@@ -79,6 +81,7 @@ function stremioVideoError(value: unknown): string {
 }
 
 export interface StremioVideoController {
+  viewportRef: RefObject<HTMLDivElement | null>;
   containerRef: RefObject<HTMLDivElement | null>;
   state: StremioVideoState;
   load: (stream: StremioPlayableStream) => Promise<void>;
@@ -96,6 +99,7 @@ export interface StremioVideoController {
 }
 
 export function useStremioVideo(reportedMpvVersion: string | null): StremioVideoController {
+  const viewportRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<StremioVideo | null>(null);
   const transportRef = useRef<StremioShellTransport | null>(null);
@@ -104,36 +108,105 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
   const extraTracks = useRef<StremioExtraSubtitleTrack[]>([]);
   const selectedExtra = useRef<string | null>(null);
   const nativeSurfaceVisible = useRef(false);
+  // TEMPORARY: which call site scheduled the last bounds report, for the
+  // missing-picture diagnostic. Remove with the probe.
+  const reportTrigger = useRef('mount');
+  // The surface is re-measured shortly after a load because the cinema layout
+  // settles asynchronously; a single report can land mid-layout.
+  const scheduleReport = useRef<(reason?: string) => void>(() => {});
   const [state, setState] = useState(INITIAL_STATE);
 
   useEffect(() => {
+    // TEMPORARY: bounded probe describing the measured surface element. Remove
+    // once the embedded picture is confirmed on screen.
+    let probes = 0;
+    const sheetProbe = (() => {
+      let rules = 0;
+      let rulePosition = 'none';
+      const walk = (list: CSSRuleList | undefined) => {
+        for (const rule of Array.from(list ?? [])) {
+          const style = rule as CSSStyleRule;
+          if (style.selectorText && style.selectorText.includes('stremio-video-surface')) {
+            rules += 1;
+            if (style.style?.position) rulePosition = style.style.position;
+          }
+          const nested = (rule as CSSMediaRule).cssRules;
+          if (nested) walk(nested);
+        }
+      };
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          walk(sheet.cssRules);
+        } catch {
+          rules -= 1;
+        }
+      }
+      return `rules=${rules} rulepos=${rulePosition} sheets=${document.styleSheets.length}`;
+    })();
+    const measure = (value: DOMRect | null | undefined) =>
+      value
+        ? `${Math.round(value.left)},${Math.round(value.top)},${Math.round(value.width)}x${Math.round(value.height)}`
+        : 'none';
+    let lastGood: ReturnType<typeof visibleVideoBounds> | null = null;
+    let retries = 0;
     const reportBounds = () => {
-      const element = containerRef.current;
+      const element = viewportRef.current ?? containerRef.current;
       if (!element) return;
       const bounds = element.getBoundingClientRect();
-      void setNativeVideoBounds({
-        x: Math.max(0, bounds.left),
-        y: Math.max(0, bounds.top),
-        width: Math.max(0, Math.min(bounds.right, window.innerWidth) - Math.max(bounds.left, 0)),
-        height: Math.max(0, Math.min(bounds.bottom, window.innerHeight) - Math.max(bounds.top, 0)),
-        viewportWidth: window.innerWidth,
-        viewportHeight: window.innerHeight,
-        visible: nativeSurfaceVisible.current
-          && bounds.left >= 0
-          && bounds.top >= 0
-          && bounds.right <= window.innerWidth
-          && bounds.bottom <= window.innerHeight,
-      });
+      const next = visibleVideoBounds(bounds, window.innerWidth, window.innerHeight, nativeSurfaceVisible.current);
+      if (probes < 12) {
+        probes += 1;
+        const style = window.getComputedStyle(element);
+        const child = element.firstElementChild as HTMLElement | null;
+        const chain: string[] = [];
+        let node: HTMLElement | null = element;
+        while (node && chain.length < 6) {
+          const name = typeof node.className === 'string' && node.className.trim()
+            ? `.${node.className.trim().replace(/\s+/g, '.')}`
+            : '';
+          chain.push(`${node.tagName.toLowerCase()}${name}=${node.offsetHeight}`);
+          node = node.parentElement;
+        }
+        void reportSurfaceProbe(
+          `n=${probes} why=${reportTrigger.current} vis=${nativeSurfaceVisible.current ? 1 : 0} conn=${element.isConnected ? 1 : 0}` +
+            ` off=${element.offsetWidth}x${element.offsetHeight} pos=${style.position} disp=${style.display} cssh=${style.height}` +
+            ` inline=${element.getAttribute('style') ?? 'none'}` +
+            ` rect=${measure(bounds)} child=${measure(child?.getBoundingClientRect())} ccls=${child?.className}` +
+            ` cpos=${child ? window.getComputedStyle(child).position : 'none'}` +
+            ` modal=${measure(element.closest('dialog')?.getBoundingClientRect())} vp=${window.innerWidth}x${window.innerHeight}` +
+            ` ${sheetProbe} chain=${chain.join('>')}`,
+        ).catch(() => {});
+      }
+      if (next.width >= 1 && next.height >= 1) {
+        lastGood = next;
+        retries = 0;
+      } else if (nativeSurfaceVisible.current) {
+        // A layout pass can measure the surface as zero-sized for a frame (for
+        // example while the dialog re-lays out before the player settles).
+        // Reporting that hides the native surface until some unrelated resize
+        // happens, so retry briefly and keep the last real rectangle.
+        if (lastGood) void setNativeVideoBounds({ ...lastGood, visible: true });
+        if (retries < 90) {
+          retries += 1;
+          schedule();
+        }
+        return;
+      }
+      void setNativeVideoBounds(next);
     };
     let frame = 0;
-    const schedule = () => {
+    const schedule = (reason?: string) => {
+      if (reason) reportTrigger.current = reason;
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(reportBounds);
     };
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
-    if (containerRef.current) observer?.observe(containerRef.current);
-    window.addEventListener('resize', schedule);
-    window.addEventListener('scroll', schedule, true);
+    scheduleReport.current = schedule;
+    const onResize = () => schedule();
+    const onScroll = () => schedule();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => schedule('observer'));
+    if (viewportRef.current ?? containerRef.current) observer?.observe((viewportRef.current ?? containerRef.current)!);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('scroll', onScroll, true);
     let disposed = false;
     const eventListeners: Array<() => void> = [];
     void onNativePlayerFullscreenChanged((fullscreen) => {
@@ -148,12 +221,12 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
       if (disposed) unlisten();
       else eventListeners.push(unlisten);
     });
-    schedule();
+    schedule('mount');
     return () => {
       observer?.disconnect();
       window.cancelAnimationFrame(frame);
-      window.removeEventListener('resize', schedule);
-      window.removeEventListener('scroll', schedule, true);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onScroll, true);
       disposed = true;
       eventListeners.forEach((unlisten) => unlisten());
       nativeSurfaceVisible.current = false;
@@ -229,6 +302,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     const usesTorrent = 'infoHash' in stream;
     video.dispatch({ type: 'command', commandName: 'unload' });
     nativeSurfaceVisible.current = false;
+    reportTrigger.current = 'load-pre';
     window.dispatchEvent(new Event('resize'));
     if (usesTorrent) await ensureStreamingService();
     const serviceAvailable = usesTorrent;
@@ -236,7 +310,13 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     await transport.start();
     if (generation !== loadGeneration.current) return;
     nativeSurfaceVisible.current = true;
+    reportTrigger.current = 'load-post';
     window.dispatchEvent(new Event('resize'));
+    // Re-measure while the cinema layout settles; a single report can land
+    // mid-layout and would otherwise leave the native surface hidden.
+    for (const delay of [150, 400, 900, 2000]) {
+      window.setTimeout(() => scheduleReport.current('settle'), delay);
+    }
     setState((current) => ({ ...current, streamingServiceAvailable: serviceAvailable }));
     video.dispatch({
       type: 'command',
@@ -262,6 +342,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     subtitleGeneration.current += 1;
     selectedExtra.current = null;
     nativeSurfaceVisible.current = false;
+    reportTrigger.current = 'unload';
     void setNativePlayerFullscreen(false);
     window.dispatchEvent(new Event('resize'));
     videoRef.current?.dispatch({ type: 'command', commandName: 'unload' });
@@ -344,6 +425,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
   }, []);
 
   return {
+    viewportRef,
     containerRef,
     state,
     load,

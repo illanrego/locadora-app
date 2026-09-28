@@ -45,6 +45,7 @@ pub fn run() {
             commands::media_configuration_disconnect,
             commands::player_start,
             commands::player_set_bounds,
+            commands::player_surface_probe,
             commands::player_fullscreen,
             commands::player_load,
             commands::player_control,

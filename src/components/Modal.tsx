@@ -1,6 +1,6 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode, type DOMAttributes } from 'react';
 
-interface ModalProps {
+interface ModalProps extends Pick<DOMAttributes<HTMLDialogElement>, 'onPointerMove' | 'onKeyDown' | 'onFocusCapture' | 'onBlurCapture'> {
   label: string;
   onClose: () => void;
   children: ReactNode;
@@ -8,7 +8,7 @@ interface ModalProps {
   onCancel?: () => void;
 }
 
-export function Modal({ label, onClose, children, className = '', onCancel }: ModalProps) {
+export function Modal({ label, onClose, children, className = '', onCancel, ...events }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -22,6 +22,7 @@ export function Modal({ label, onClose, children, className = '', onCancel }: Mo
 
   return (
     <dialog
+      {...events}
       ref={dialogRef}
       className={`modal ${className}`.trim()}
       aria-label={label}

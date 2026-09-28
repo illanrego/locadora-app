@@ -27,6 +27,7 @@ function finiteNonNegativeInteger(value: unknown): number | null {
 }
 
 function parseResolution(structured: unknown, display: string): Resolution {
+  if (typeof structured === 'number' && [2160, 1080, 720, 480].includes(structured)) return structured as Resolution;
   const source = `${text(structured)} ${display}`;
   const match = source.match(/(?:^|\D)(2160|1080|720|480)p?(?:\D|$)/i);
   return match ? Number(match[1]) as Exclude<Resolution, null> : null;

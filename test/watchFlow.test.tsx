@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -44,7 +44,7 @@ beforeEach(() => {
   mocks.resolve.mockResolvedValue(resolution);
   mocks.subtitles.mockResolvedValue([]);
   mocks.controller = {
-    containerRef: { current: null }, state: { ...initialState }, load: vi.fn().mockResolvedValue(undefined),
+    viewportRef: { current: null }, containerRef: { current: null }, state: { ...initialState }, load: vi.fn().mockResolvedValue(undefined),
     unload: vi.fn(), setPaused: vi.fn(), seekRelative: vi.fn(), seekTo: vi.fn(), setFullscreen: vi.fn(),
     setVolume: vi.fn(), setMuted: vi.fn(), selectAudioTrack: vi.fn(), selectSubtitleTrack: vi.fn(),
     setSubtitleDelay: vi.fn(), addExtraSubtitlesTracks: vi.fn().mockReturnValue(true),
@@ -71,6 +71,39 @@ describe('cinema player interactions', () => {
     await user.click(sourceButtons[1]);
     expect(mocks.controller.load).toHaveBeenLastCalledWith({ url: 'https://media.example.invalid/second' });
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+  });
+
+  it('filters sources by resolution and keeps the selected source when switching filters', async () => {
+    const user = userEvent.setup();
+    mount(false, 'pt-BR');
+    const filter = await screen.findByRole('combobox', { name: 'Resolução' });
+    await user.selectOptions(filter, '720');
+    const list = screen.getByRole('list', { name: 'Fontes disponíveis' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    expect(list).toHaveTextContent('720p');
+    expect(mocks.controller.load).not.toHaveBeenCalled();
+    await user.click(within(list).getByRole('button'));
+    expect(mocks.controller.load).toHaveBeenLastCalledWith({ url: 'https://media.example.invalid/second' });
+  });
+
+  it('reveals fullscreen controls on movement and retains them while options are open', async () => {
+    const view = mount();
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalled());
+    vi.useFakeTimers();
+    try {
+      mocks.controller.state = { ...initialState, fullscreen: true };
+      view.rerender(<WatchFlow {...view.props} />);
+      const dialog = screen.getByRole('dialog');
+      act(() => vi.advanceTimersByTime(3000));
+      expect(dialog).toHaveClass('controls-hidden');
+      fireEvent.pointerMove(dialog);
+      expect(dialog).not.toHaveClass('controls-hidden');
+      fireEvent.click(screen.getByRole('button', { name: 'Sources' }));
+      act(() => vi.advanceTimersByTime(5000));
+      expect(dialog).not.toHaveClass('controls-hidden');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('opens sources without autoplay when Quick Watch is off and allows retry after load failure', async () => {

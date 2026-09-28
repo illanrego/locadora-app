@@ -9,6 +9,7 @@ import { normalizeSubtitleLanguage } from '../media/subtitles';
 import { readSubtitleDelay, writeSubtitleDelay, videoDelayIdentity } from '../media/subtitleDelayStore';
 import { useStremioVideo } from '../media/useStremioVideo';
 import { readMediaConfiguration } from '../platform/nativeBridge';
+import { filterSources, type ResolutionFilter } from '../media/sourcePicker';
 import { Modal } from './Modal';
 import { PlayerIcon } from './PlayerIcon';
 
@@ -53,6 +54,11 @@ function explanation(resolution: MediaResolution | null, locale: Locale): string
 export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClose }: WatchFlowProps) {
   const video = useStremioVideo(mpvVersion);
   const [resolution, setResolution] = useState<MediaResolution | null>(null);
+  const [resolutionFilter, setResolutionFilter] = useState<ResolutionFilter>('all');
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const controlsFocused = useRef(false);
+  const controlsHovered = useRef(false);
   const [manualVisible, setManualVisible] = useState(false);
   const [tracksVisible, setTracksVisible] = useState(false);
   const [lookupState, setLookupState] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -132,6 +138,9 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
   }, [onClose, video.unload]);
 
   const candidates = resolution?.manualCandidates ?? [];
+  const filteredCandidates = filterSources(candidates, resolutionFilter);
+  const availableResolutions = [...new Set(candidates.map((candidate) => candidate.resolution))]
+    .sort((a, b) => (b ?? -1) - (a ?? -1));
   const current = resolution?.candidates.find((candidate) => candidate.stableId === candidateId) ?? null;
   const delayIdentity = videoDelayIdentity(current);
   const subtitleOptions = [
@@ -249,6 +258,20 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
   const toggleTracks = () => { setTracksVisible(!tracksVisible); setManualVisible(false); };
   const toggleSources = () => { setManualVisible(!manualVisible); setTracksVisible(false); };
   const panelOpen = manualVisible || tracksVisible;
+  const revealControls = useCallback(() => {
+    setControlsVisible(true);
+    if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
+    if (video.state.fullscreen && canControl && !video.state.paused && !panelOpen && !controlsFocused.current && !controlsHovered.current) {
+      hideControlsTimer.current = setTimeout(() => setControlsVisible(false), 3000);
+    }
+  }, [video.state.fullscreen, video.state.paused, canControl, panelOpen]);
+  useEffect(() => {
+    revealControls();
+    return () => { if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current); };
+  }, [revealControls]);
+  useEffect(() => {
+    window.dispatchEvent(new Event('resize'));
+  }, [controlsVisible, panelOpen, video.state.fullscreen]);
   const closePanel = () => {
     (tracksVisible ? tracksButtonRef : sourcesButtonRef).current?.focus();
     setManualVisible(false);
@@ -265,19 +288,29 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
     else close();
   };
   return (
-    <Modal label={`${pt ? 'Assistindo' : 'Watching'} · ${title.name}`} onClose={close} onCancel={cancel} className={`watch-modal${video.state.fullscreen ? ' player-is-fullscreen' : ''}`}>
+    <Modal label={`${pt ? 'Assistindo' : 'Watching'} · ${title.name}`} onClose={close} onCancel={cancel} className={`watch-modal${video.state.fullscreen ? ' player-is-fullscreen' : ''}${video.state.fullscreen && !controlsVisible ? ' controls-hidden' : ''}`}
+      onPointerMove={(event) => {
+        controlsHovered.current = event.target instanceof Element && Boolean(event.target.closest('.cinema-dock, .cinema-header, .cinema-panel'));
+        revealControls();
+      }} onKeyDown={revealControls}
+      onFocusCapture={(event) => { controlsFocused.current = event.target !== event.currentTarget && event.target instanceof Element && event.target.matches(':focus-visible'); revealControls(); }}
+      onBlurCapture={(event) => {
+        if (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget)) controlsFocused.current = false;
+        else controlsFocused.current = event.relatedTarget instanceof Element && event.relatedTarget !== event.currentTarget && event.relatedTarget.matches(':focus-visible');
+        revealControls();
+      }}>
       <header className="cinema-header">
         <button type="button" className="cinema-icon-button" onClick={close} aria-label={pt ? 'Voltar à locadora' : 'Back to Locadora'} title={pt ? 'Voltar à locadora' : 'Back to Locadora'}><PlayerIcon name="back" /></button>
-        <div className="cinema-title"><span>WILL’S LOCADORA <i aria-hidden="true">/</i> {pt ? 'EM CARTAZ' : 'NOW SHOWING'}</span><h2>{title.name}</h2></div>
-        <span className="cinema-edition">{title.year}{current?.resolution ? <b>{current.resolution}p</b> : null}</span>
+        <div className="cinema-title"><h2>{title.name}</h2></div>
       </header>
       <div className={`cinema-body${panelOpen ? ' has-panel' : ''}`}>
-        <div className="cinema-screen">
+        <div ref={video.viewportRef} className="cinema-screen" onPointerDown={(event) => { event.currentTarget.closest('dialog')?.focus(); controlsFocused.current = false; revealControls(); }}>
           <div ref={video.containerRef} className="stremio-video-surface"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
             aria-label={pt ? `Vídeo de ${title.name}` : `${title.name} video`}
             onDoubleClick={() => { if (canControl) video.setFullscreen(true); }}>
-            <div className="cinema-placeholder" aria-hidden="true">
-              <span className="cinema-reel">W<span> / </span>L</span>
+            <div className={`cinema-placeholder${!video.state.loaded || video.state.buffering ? ' is-loading' : ''}`} aria-hidden="true">
+              <strong className="brand-logo">WILL'S LOCADORA</strong>
               <span>{phaseLabels[phase][pt ? 0 : 1]}</span>
             </div>
           </div>
@@ -354,8 +387,15 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
           {video.state.subtitleError && <p role="alert">{pt ? 'Não foi possível aplicar a legenda ou sincronia. Tente selecionar novamente; legendas externas precisam de HTTPS e formato SRT, VTT ou ASS.' : 'Could not apply subtitle or sync. Try selecting again; external subtitles require HTTPS and SRT, VTT or ASS format.'}</p>}
           </section> : <section className="manual-picker">
           <p>{pt ? 'Troque de fonte se a reprodução estiver instável.' : 'Switch sources if playback is unstable.'}</p>
+          <label className="source-resolution"><span>{pt ? 'Resolução' : 'Resolution'}</span>
+            <select value={resolutionFilter} onChange={(event) => setResolutionFilter(event.target.value as ResolutionFilter)}>
+              <option value="all">{pt ? 'Todas as resoluções' : 'All resolutions'}</option>
+              {availableResolutions.map((value) => <option key={value ?? 'unknown'} value={value ?? 'unknown'}>{value ? `${value}p` : (pt ? 'Desconhecida' : 'Unknown')}</option>)}
+            </select>
+          </label>
+          <p>{pt ? 'Mais seeds primeiro' : 'Most seeds first'}</p>
           <ol aria-label={pt ? 'Fontes disponíveis' : 'Available sources'}>
-            {candidates.map((candidate) => (
+            {filteredCandidates.map((candidate) => (
               <li key={candidate.stableId}>
                 <button
                   type="button"

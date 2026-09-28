@@ -1,10 +1,47 @@
 # Implementation progress
 
 Last updated: 2026-09-28
-Current milestone: repair embedded mpv startup under desktop locales
-Status: reproduced locale failure fixed; full checks and native rebuild passed; user recheck pending
+Current milestone: embedded windowed playback and player chrome
+Status: outer-frame geometry fix, fullscreen activity controls and resolution
+filter implemented and native executable rebuilt; user visual acceptance pending
 
 ## Resume checkpoint
+
+2026-09-28 resolution filter and windowed/fullscreen correction:
+- Found the concrete geometry mutation: official `withHTMLSubtitles.js` sets
+  `containerElement.style.position = 'relative'`, overriding React's absolute
+  host style and collapsing its auto height. `useStremioVideo.viewportRef` now
+  measures/observes the app-owned `.cinema-screen`; Stremio only owns the inner
+  host, which also has explicit full width/height. A hook regression reproduces
+  the zero-height inner host and checks visible outer-frame bounds and unload.
+- Native layout now uses that rectangle in both windowed and fullscreen modes,
+  always passes pointer input to the WebView, and honors explicit hide reports.
+  Fullscreen controls appear on pointer movement/keyboard activity and hide after
+  three idle seconds; pause, open options, control hover and keyboard focus keep
+  them available. The native picture resizes to reserve visible chrome space;
+  controls are not composited transparently over GLArea. Escape still exits.
+- Fontes has a resolution select (all, available resolutions, unknown) and
+  descending seed counts, unknown seeds last. Sorting is manual-picker-only;
+  Quick Watch tiers stay intact. Numeric structured resolutions are now parsed
+  instead of silently becoming unknown. Synthetic filter and interaction tests
+  cover filtering, source switch, inactivity and option-panel retention.
+- Preserved prior uncommitted presentation/diagnostic work. Temporary probes
+  remain bounded and descriptor-free until user confirms windowed rendering.
+- Checks: `npm run check` passed (113 tests, 29 files, typecheck and build).
+  `cargo test --manifest-path src-tauri/Cargo.toml`: 25 passed, 2 opt-in ignored.
+  `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`:
+  passed. `cargo fmt --manifest-path src-tauri/Cargo.toml --check` passed.
+  After the focus/hover refinement, `npm test -- test/watchFlow.test.tsx
+  test/useStremioVideo.test.tsx test/sourcePicker.test.ts`: 17 passed.
+  `npm run tauri -- build --no-bundle`: passed (optimized Rust build 1m30s),
+  refreshing `src-tauri/target/release/wills-locadora-player`; close/reopen the
+  existing `locadora` launcher to load this build. Typecheck/production assets
+  rebuilt by Tauri; existing large-chunk advisory remains. `git diff --check`
+  and `git diff --cached --check` passed.
+  Prior tape-cover CSS removal and its existing presentation-test file are left
+  outside this milestone commit; related earlier player work is included.
+  No GUI/browser/manual playback checks performed.
+
 
 2026-09-28 user playback failure supersedes the peer-transfer test priority:
 `Could not initialize embedded mpv`. The installed libmpv returns NULL from
@@ -34,6 +71,82 @@ Verification for the locale fix:
   and Debian installer refreshed after fix commit `5049907`. Existing `locadora`
   alias runs the corrected executable after closing/reopening any old instance.
   No GUI/real-movie acceptance claimed.
+
+2026-09-28 player-presentation checkpoint (native overlay vs. WebView backdrop):
+four fixes were built into the release executable for the user's picture check.
+(1) `tools/shellOverlayShim.ts` (Vite `enforce: 'pre'` transform) stops official
+Stremio Video's `setBackground(false)` from making the video container's
+ancestor transparent, but only when the shell transport advertises the new
+`nativeVideoOverlay: true` capability — Locadora paints mpv ABOVE the WebView, so
+the upstream backdrop-mutation contract would otherwise blank the picture.
+(2) `src/media/videoBounds.ts` reports a clipped-but-visible rectangle instead of
+hiding the whole surface as soon as any edge passed the viewport by a fraction
+of a pixel. (3) The loading placeholder now uses the hero wordmark
+(`.brand-logo`) with a slow pulse, disabled under `prefers-reduced-motion`.
+(4) The inset cover frame (`.case-art::after`) was removed from the 2D tape art.
+`src-tauri/src/embedded_surface.rs` also emits ONE bounded `[locadora-video]`
+line 5s after startup (`visible/mapped/bounds-visible/size/draws/frame-updates`)
+to separate a hidden surface from a drawing failure. No request headers, URLs or
+session material are logged, and mpv log forwarding stays off.
+
+Test-infrastructure correction: `styles.css?raw` returned an empty string under
+Vitest's default CSS stubbing, so `test/playerPresentation.test.ts`'s stylesheet
+guard passed vacuously. `vite.config.ts` now imports `defineConfig` from
+`vitest/config` and sets `test.css: true`, which makes `?raw` return the real
+41 KB stylesheet and keeps the assertion meaningful.
+
+Verification for this checkpoint: `npm run check` passed (28 files, 109 tests,
+typecheck, production build). `npm run tauri -- build --no-bundle` passed and
+refreshed `src-tauri/target/release/wills-locadora-player`, 35,755,888 bytes,
+2026-09-28 08:22:18 -0300, SHA-256
+`633f2b807bdd2e24e8c4b78e206cda0c2b34780f345f2c74e6e27dd8ed5b6105`, the target of
+the user's `locadora` alias. Only the Rust `[locadora-video]` literal is greppable
+in that binary: Tauri compresses embedded frontend assets, so binary grep cannot
+confirm frontend markers — compare `dist/` timestamps against the executable
+instead. No GUI, playback or visual acceptance is claimed; the user rechecks.
+
+2026-09-28 windowed-playback checkpoint (user-confirmed fullscreen playback):
+the user reported that embedded playback works, but ONLY in fullscreen. That
+confirms the whole render chain (mpv, GTK GLArea, GL, mpv render API and the
+native bounds plumbing) and isolates the fault to the windowed visibility gate:
+`Surface::layout` showed the area only when `fullscreen || bounds.visible`, and
+the WebView reported a degenerate rectangle (`offsetHeight 0` with a 573 px
+parent) right when the stream load dispatched, so the native surface stayed
+hidden with audio, seek and buffering all advancing.
+
+Native fix: the surface now keeps `last_real_bounds` (the most recent report
+that actually carried a width and height) and uses it for margins, and only a
+report with a real rectangle may change `requested_visible`. A zero-sized layout
+pass can no longer hide the video. The windowed recheck is pending; the frontend
+also gained a bounded hold/retry for the same measurement (never report a
+degenerate rectangle while the player wants the surface visible, plus
+re-measures at 150/400/900/2000 ms after load).
+
+Temporary diagnostics still in the tree (remove once windowed playback is
+confirmed): the `player_surface_probe` command (character- and length-allowlisted,
+shared 12-line budget), the bounds/transition logging, the 5 s and 15 s samples,
+the inline `position/inset` lock on the surface div, and the frontend probe that
+reports the measured element plus the height-annotated ancestor chain.
+
+Player chrome (user request: too crowded, double border plus a black gap):
+the watch modal now fills the window (`100vw/100dvh`, no border, no radius, no
+shadow, opaque `::backdrop`), so the OS window frame is the only frame and the
+inset ring that showed the app header behind it is gone. The header row lost its
+`WILL'S LOCADORA / EM CARTAZ` breadcrumb and the year/resolution badge, and is
+slimmer; the transport dock is unchanged for now. Auto-hiding controls were
+deliberately NOT implemented: mpv paints above the WebView, so HTML drawn over
+the video area is invisible and any overlay design must resize the native
+surface instead.
+
+Verification for this checkpoint: `npm run check` passed (28 files, 109 tests,
+typecheck, production build); `cargo clippy --manifest-path src-tauri/Cargo.toml
+--all-targets -- -D warnings` and `cargo fmt --check` passed; `npm run tauri --
+build --no-bundle` passed and refreshed
+`src-tauri/target/release/wills-locadora-player` (35,791,400 bytes, 2026-09-28
+10:37:26 -0300, SHA-256
+`f780831ffa747049265459338a8725318f62687757258db45800c17bee08d991`), the target of
+the user's `locadora` alias; `git diff --check` passed. Fullscreen playback is a
+user report; windowed playback is NOT yet confirmed.
 
 Current priority: ship Locadora as a single-install standalone app with its own
 managed compatible streaming engine (D-018), and redesign its embedded player with modern
@@ -154,10 +267,11 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: obtain the user's playback recheck of the rebuilt locale-corrected app.
-If startup still fails, use the newly preserved typed cause before changing code.
-After that, resume
-the synthetic peer-transfer and HTTP Range/seek coverage.
+Next task: obtain user visual acceptance of windowed playback, fullscreen
+pointer-revealed controls, source filtering and source switching in the rebuilt
+executable. If windowed rendering still fails, inspect the bounded outer-frame
+bounds/GL draw diagnostics. After acceptance remove temporary probe scaffolding,
+then resume synthetic peer-transfer and HTTP Range/seek coverage.
 Do not launch GUI/manual tests without the user's request. User acceptance of
 real playback with Stremio closed, clean-machine installation, Flatpak delivery,
 and final public-distribution license/source audit remain outstanding.
