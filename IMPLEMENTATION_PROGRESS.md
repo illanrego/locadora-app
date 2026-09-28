@@ -1,8 +1,8 @@
 # Implementation progress
 
-Last updated: 2026-09-27
-Current milestone: standalone engine integration in progress
-Status: in progress
+Last updated: 2026-09-28
+Current milestone: standalone Linux release and Debian installer built
+Status: implementation delivered for acceptance; full delivery criteria remain open
 
 ## Resume checkpoint
 
@@ -125,8 +125,35 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: finish the standalone release/installer build, inspect Debian package
-dependencies and embedded binary identity, then record the delivery checkpoint.
+Next task: add an automated synthetic peer-transfer and HTTP Range/seek test
+against the bundled engine, beyond the existing metadata/lifecycle contract test.
+Do not launch GUI/manual tests without the user's request. User acceptance of
+real playback with Stremio closed, clean-machine installation, Flatpak delivery,
+and final public-distribution license/source audit remain outstanding.
+
+2026-09-28 delivery checkpoint (artifacts built 2026-09-27 11:15 -0300):
+- Commits: `8037ff9` pins/stages the engine; `dece2af` implements its lifecycle,
+  native metadata bridge, tests and Debian packaging.
+- `npm run tauri -- build`: passed, optimized native compilation and one Debian
+  bundle. Initial sandbox run could not spawn the extraction tool; approved
+  outside-sandbox retry succeeded. No GUI or installer was launched.
+- Executable: `src-tauri/target/release/wills-locadora-player`, 35,756,592 bytes.
+  Existing `locadora` alias targets this file; no alias change is needed.
+  SHA-256: `92bf6841518b92a6625c4f1d99a7c5f5bd89f076f82b33fbe138fe7415c0ee17`.
+- Installer: `src-tauri/target/release/bundle/deb/Will's Locadora_0.1.0_amd64.deb`,
+  17,629,396 bytes; SHA-256
+  `560dc108589c04313a660ce5cf6d7ede51790fdbfe329a8d664d55539283a973`.
+- `dpkg-deb --field` verified package `will-s-locadora`, version `0.1.0`, amd64,
+  dependencies `libmpv2, mpv, ffmpeg, libepoxy0, libwebkit2gtk-4.1-0, libgtk-3-0`.
+  `dpkg-deb --contents` verified executable, desktop entry and icon.
+- Binary byte inspection verified embedded engine, LICENSE, provenance and SBOM.
+  Package executable differs from the release executable only at three bytes:
+  Tauri's bundle-type marker changes `UNK` to `DEB`. Packaged executable SHA-256:
+  `745786dfc677e54770a586af519102184b79990dad5e73c2c26a4a7557aa5cdd`.
+- `ldd` resolved the local native libraries with no missing dependency reported.
+  This is not a clean-machine installation test.
+- Strict Clippy and formatting checks passed for both Rust manifests. No code
+  changed after the full suites recorded below; this checkpoint is documentation.
 
 2026-09-27 standalone integration: `streaming_engine.rs` now owns an embedded
 v0.16.1 process on port 11471, with private sessions, serialized/bounded readiness,

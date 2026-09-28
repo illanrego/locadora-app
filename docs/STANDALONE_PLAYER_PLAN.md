@@ -1,7 +1,7 @@
 # Standalone Locadora and player redesign
 
-Updated: 2026-09-27. Status: bundled compatible engine implemented (D-018),
-native lifecycle checks passing; installer delivery in progress, user acceptance pending.
+Updated: 2026-09-28. Status: bundled compatible engine implemented (D-018),
+native lifecycle checks passing; release and Debian installer built, acceptance pending.
 
 ## Start here
 
@@ -17,7 +17,8 @@ Read the repository's `AGENTS.md` and its four required documents first.
 plan for the current priority. `IMPLEMENTATION_PROGRESS.md` owns the single next
 task and verification record. Earlier playback plans are historical milestones.
 
-Current continuation: finish installer delivery and record acceptance limits.
+Current continuation: synthetic peer-transfer/Range coverage, then outstanding
+clean-install and user playback acceptance; Flatpak remains undelivered.
 See `STREAMING_ENGINE_FINDINGS.md` for the historical official-server finding,
 and `../IMPLEMENTATION_PROGRESS.md` for the precise build checkpoint. D-018
 records the approved compatible-engine choice; do not reopen that decision.
