@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import { normalizeMemberHistoryPage, normalizeMemberState, type MemberState, type MemberTitle } from '../member/memberState';
+import type { DiscoveryTitle } from '../domain/content';
+import { memberDiscoveryTitle, normalizeMemberHistoryPage, normalizeMemberState, type MemberState, type MemberTitle } from '../member/memberState';
 import {
   fetchMemberState,
   fetchMemberHistory,
@@ -16,6 +17,7 @@ import { TitleReviews } from './TitleReviews';
 
 interface MemberPanelProps {
   locale: Locale;
+  onInspect: (title: DiscoveryTitle) => void;
 }
 
 function messageFrom(cause: unknown, fallback: string): string {
@@ -28,13 +30,20 @@ function formatDate(value: string | null, locale: Locale): string {
   return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date);
 }
 
-function TapeList({ items, locale, empty }: { items: MemberTitle[]; locale: Locale; empty: string }) {
+function MemberTitleLink({ item, locale, onInspect }: { item: MemberTitle; locale: Locale; onInspect: (title: DiscoveryTitle) => void }) {
+  const title = memberDiscoveryTitle(item);
+  return <button type="button" className="member-title-link" disabled={!title}
+    aria-label={locale === 'pt-BR' ? `Inspecionar ${item.name}` : `Inspect ${item.name}`}
+    onClick={() => { if (title) onInspect(title); }}>{item.name}</button>;
+}
+
+function TapeList({ items, locale, empty, onInspect }: { items: MemberTitle[]; locale: Locale; empty: string; onInspect: (title: DiscoveryTitle) => void }) {
   if (!items.length) return <p className="member-empty">{empty}</p>;
   return (
     <ul className="member-tape-list">
       {items.map((item) => (
         <li key={item.id}>
-          <span><strong>{item.name}</strong><small>{item.year ?? '—'} · {item.type === 'movie' ? (locale === 'pt-BR' ? 'filme' : 'movie') : (locale === 'pt-BR' ? 'série' : 'series')}</small></span>
+          <span><MemberTitleLink item={item} locale={locale} onInspect={onInspect} /><small>{item.year ?? '—'} · {item.type === 'movie' ? (locale === 'pt-BR' ? 'filme' : 'movie') : (locale === 'pt-BR' ? 'série' : 'series')}</small></span>
           {item.unavailable && <em>{locale === 'pt-BR' ? 'fora do acervo' : 'unavailable'}</em>}
         </li>
       ))}
@@ -42,7 +51,7 @@ function TapeList({ items, locale, empty }: { items: MemberTitle[]; locale: Loca
   );
 }
 
-export function MemberPanel({ locale }: MemberPanelProps) {
+export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
   const [session, setSession] = useState<MemberSessionStatus | null>(null);
   const [member, setMember] = useState<MemberState | null>(null);
   const [identifier, setIdentifier] = useState('');
@@ -277,7 +286,7 @@ export function MemberPanel({ locale }: MemberPanelProps) {
               <ul className="member-tape-list member-return-list">
                 {member.activeRental.items.map((item) => (
                   <li key={item.id}>
-                    <span><strong>{item.name}</strong><small>{item.year ?? '—'}</small></span>
+                    <span><MemberTitleLink item={item} locale={locale} onInspect={onInspect} /><small>{item.year ?? '—'}</small></span>
                     <div className="return-actions" aria-label={pt ? `Devolver ${item.name}` : `Return ${item.name}`}>
                       <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item, 'watched')}>{pt ? 'Assisti' : 'Watched'}</button>
                       <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item, 'not_watched')}>{pt ? 'Não assisti' : 'Not watched'}</button>
@@ -297,11 +306,15 @@ export function MemberPanel({ locale }: MemberPanelProps) {
           )}
           <section className="member-section">
             <h3>{pt ? 'Salvas para depois' : 'Saved for later'}</h3>
-            <TapeList items={member.collections.watchLater.slice(0, 5)} locale={locale} empty={pt ? 'Nenhuma fita salva.' : 'No saved tapes.'} />
+            <TapeList onInspect={onInspect} items={member.collections.watchLater} locale={locale} empty={pt ? 'Nenhuma fita salva.' : 'No saved tapes.'} />
+          </section>
+          <section className="member-section">
+            <h3>{pt ? 'Favoritas' : 'Favorites'}</h3>
+            <TapeList onInspect={onInspect} items={member.collections.favorites} locale={locale} empty={pt ? 'Nenhuma fita favorita.' : 'No favorite tapes.'} />
           </section>
           <section className="member-section">
             <h3>{pt ? 'Últimas devoluções' : 'Recent returns'}</h3>
-            <TapeList items={member.history} locale={locale} empty={pt ? 'Seu histórico ainda está vazio.' : 'Your history is still empty.'} />
+            <TapeList onInspect={onInspect} items={member.history} locale={locale} empty={pt ? 'Seu histórico ainda está vazio.' : 'Your history is still empty.'} />
             {member.historyHasMore && <button type="button" className="history-more" disabled={historyBusy} onClick={() => void loadMoreHistory()}>{historyBusy ? (pt ? 'Buscando…' : 'Loading…') : (pt ? 'Mais histórico' : 'More history')}</button>}
           </section>
         </>

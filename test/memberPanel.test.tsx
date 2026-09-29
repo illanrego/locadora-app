@@ -29,6 +29,31 @@ afterEach(() => {
 });
 
 describe('Locadora member panel', () => {
+  it('opens watch-later, favorite, active and returned titles without changing rental state', async () => {
+    native.readMemberSession.mockResolvedValue({ configured: true, signedIn: true, user: { id: 'user-1', username: 'will' } });
+    const title = (tmdbId: number, name: string) => ({ id: `item-${tmdbId}`, tmdbId, type: 'movie', name, year: 1999 });
+    native.fetchMemberState.mockResolvedValue({
+      profile: { userId: 'user-1', username: 'will' },
+      activeRental: { id: 'rental', items: [title(1, 'Rented tape')] },
+      collections: { watch_later: Array.from({ length: 6 }, (_, i) => title(10 + i, `Later ${i + 1}`)), favorite: [title(2, 'Favorite tape')] },
+      history: [title(3, 'Returned tape')],
+    });
+    const inspect = vi.fn();
+    const user = userEvent.setup();
+    render(<MemberPanel locale="pt-BR" onInspect={inspect} />);
+    await user.click(await screen.findByRole('button', { name: 'Inspecionar Rented tape' }));
+    expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ identity: expect.objectContaining({ canonicalKey: 'movie:tmdb:1' }) }));
+    await user.click(screen.getByRole('button', { name: 'Inspecionar Later 6' }));
+    expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Later 6' }));
+    await user.click(screen.getByRole('button', { name: 'Inspecionar Favorite tape' }));
+    expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Favorite tape' }));
+    screen.getByRole('button', { name: 'Inspecionar Returned tape' }).focus();
+    await user.keyboard('{Enter}');
+    expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Returned tape' }));
+    expect(native.returnMemberRental).not.toHaveBeenCalled();
+    expect(native.writeMemberReview).not.toHaveBeenCalled();
+  });
+
   it('creates an account and completes the separate public profile', async () => {
     native.readMemberSession.mockResolvedValue({ configured: true, signedIn: false, user: null });
     native.signUpMember.mockResolvedValue({ configured: true, signedIn: true, user: { id: 'user-1', username: 'will' } });
@@ -41,7 +66,7 @@ describe('Locadora member panel', () => {
       historyHasMore: false,
     });
     const user = userEvent.setup();
-    render(<MemberPanel locale="pt-BR" />);
+    render(<MemberPanel locale="pt-BR" onInspect={vi.fn()} />);
 
     await user.click(await screen.findByRole('button', { name: 'Criar conta' }));
     await user.type(screen.getByLabelText('Email'), 'member@example.invalid');
@@ -73,7 +98,7 @@ describe('Locadora member panel', () => {
     native.fetchTitleReviews.mockResolvedValue({ summary: { averageRating: 0, ratingCount: 0 }, reviews: [] });
     native.fetchMemberReviewEligibility.mockResolvedValue({ eligible: true });
     const user = userEvent.setup();
-    render(<MemberPanel locale="pt-BR" />);
+    render(<MemberPanel locale="pt-BR" onInspect={vi.fn()} />);
 
     await user.click(await screen.findByRole('button', { name: 'Assisti' }));
 
@@ -91,7 +116,7 @@ describe('Locadora member panel', () => {
     native.fetchMemberState.mockResolvedValue({ profile: { userId: 'user-1', username: 'will' }, activeRental: null, collections: {}, history: [first], historyHasMore: true });
     native.fetchMemberHistory.mockResolvedValue({ history: [first, second], hasMore: false });
     const user = userEvent.setup();
-    render(<MemberPanel locale="pt-BR" />);
+    render(<MemberPanel locale="pt-BR" onInspect={vi.fn()} />);
 
     await user.click(await screen.findByRole('button', { name: 'Mais histórico' }));
 

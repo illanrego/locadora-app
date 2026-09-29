@@ -1,11 +1,33 @@
 # Implementation progress
 
 Last updated: 2026-09-28
-Current milestone: subtle fullscreen controls and faithful full-window immersive browsing
-Status: implementation, automated checks and native rebuild passed;
-user visual acceptance pending
+Current milestone: inspect titles from Carteirinha and saved lists
+Status: focused checks passed; native rebuild in progress
 
 ## Resume checkpoint
+
+2026-09-28 Carteirinha/saved-list inspection:
+- User changes priority to opening tape inspection by clicking a list title.
+  Active rentals, watch-later, favorites and return history now use accessible
+  title buttons. Carteirinha now shows its previously missing favorites section
+  and all normalized watch-later entries instead of only the first five.
+- `SidePanel` passes the shared inspection callback to `MemberPanel` and
+  `SavedPanel`; `App` dismisses the list panel and opens its existing inspection,
+  including asynchronous title details, Watch and Cesta/rental actions. No
+  overlapping modal remains above inspection.
+- Shared `memberDiscoveryTitle` in `src/member/memberState.ts` bridges records by
+  their TMDB ID/type, never rental-item IDs. Remote/local saved lists use the same
+  conversion. Inspection clicks never return a rental, mark it watched, remove
+  a saved title or submit a review; those actions keep separate controls.
+- Checks: `npm run typecheck` passed; `npm test -- test/memberPanel.test.tsx
+  test/app.test.tsx test/memberState.test.ts` passed (20 tests across 3 files).
+  Coverage includes all account lists, the sixth watch-later item, keyboard
+  activation, canonical identity, no return/review write on inspect, and saved/
+  favorite inspection through adding to Cesta. `git diff --check` passed.
+  Native rebuild pending. No GUI/manual/live member-data testing performed.
+- Existing tape-cover CSS removal and untracked presentation test remain
+  outside this milestone.
+
 
 2026-09-28 fullscreen refinement and web immersive scene port:
 - User changes priority to subtle fullscreen chrome and an immersive view that
@@ -305,11 +327,11 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: obtain user visual acceptance in the rebuilt app of the subtle
-fullscreen strip and the complete immersive view switch, including plaque
-changes, stand navigation, covers, inspection, zoom and return to 2D. Preserve
-windowed video geometry fix. After playback acceptance remove its temporary
-probe scaffolding, then resume peer-transfer and HTTP Range/seek coverage.
+Next task: obtain user acceptance in the rebuilt app of opening a saved,
+favorite or rented title from Carteirinha/Salvos, then watching or adding it to
+Cesta through inspection. Prior immersive/fullscreen visual acceptance remains
+pending; preserve the windowed video geometry fix. After playback acceptance
+remove temporary probe scaffolding, then resume peer-transfer/Range coverage.
 Do not launch GUI/manual tests without the user's request. User acceptance of
 real playback with Stremio closed, clean-machine installation, Flatpak delivery,
 and final public-distribution license/source audit remain outstanding.

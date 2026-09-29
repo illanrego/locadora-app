@@ -468,3 +468,6 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   .player-is-fullscreen .cinema-transport { flex-wrap: nowrap; justify-content: space-between; gap: 0; }
   .player-is-fullscreen .cinema-volume { display: none; }
 }
+
+.member-tape-list .member-title-link, .saved-title-list .member-title-link { display: block; min-height: 32px; max-width: 100%; padding: .2rem 0; border: 0; border-radius: 0; box-shadow: none; color: var(--cream); background: transparent; font-family: inherit; font-size: .8rem; font-weight: 700; line-height: 1.4; text-align: left; text-transform: none; letter-spacing: normal; white-space: normal; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: #f6ebcc55; text-underline-offset: .2em; }
+.member-tape-list .member-title-link:hover, .saved-title-list .member-title-link:hover { color: var(--yellow); background: transparent; text-decoration-color: currentColor; }

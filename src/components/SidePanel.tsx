@@ -11,6 +11,7 @@ interface SidePanelProps {
   locale: Locale;
   basket: DiscoveryTitle[];
   saved: LocalSavedCollections;
+  onInspect: (title: DiscoveryTitle) => void;
   onRemove: (title: DiscoveryTitle) => void;
   onSetSaved: (title: DiscoveryTitle, collection: SavedCollection, enabled: boolean) => Promise<boolean>;
   onBasketComplete: (rented: DiscoveryTitle[]) => void;
@@ -18,7 +19,7 @@ interface SidePanelProps {
   onClose: () => void;
 }
 
-export function SidePanel({ kind, locale, basket, saved, onRemove, onSetSaved, onBasketComplete, onOpenAccount, onClose }: SidePanelProps) {
+export function SidePanel({ kind, locale, basket, saved, onRemove, onSetSaved, onBasketComplete, onOpenAccount, onClose, onInspect }: SidePanelProps) {
   const t = copy[locale];
   const heading = kind === 'basket' ? t.basket : kind === 'saved' ? (locale === 'pt-BR' ? 'Salvos' : 'Saved') : t.account;
   return (
@@ -31,9 +32,9 @@ export function SidePanel({ kind, locale, basket, saved, onRemove, onSetSaved, o
       {kind === 'basket' ? (
         <BasketPanel locale={locale} basket={basket} onRemove={onRemove} onComplete={onBasketComplete} onOpenAccount={onOpenAccount} />
       ) : kind === 'account' ? (
-        <MemberPanel locale={locale} />
+        <MemberPanel locale={locale} onInspect={onInspect} />
       ) : (
-        <SavedPanel locale={locale} local={saved} onSet={onSetSaved} />
+        <SavedPanel onInspect={onInspect} locale={locale} local={saved} onSet={onSetSaved} />
       )}
     </Modal>
   );

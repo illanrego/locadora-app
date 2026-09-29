@@ -1,28 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { normalizeDiscoveryTitle, type DiscoveryTitle } from '../domain/content';
+import { type DiscoveryTitle } from '../domain/content';
 import type { LocalSavedCollections, SavedCollection } from '../member/localSaved';
-import { normalizeMemberState, type MemberState, type MemberTitle } from '../member/memberState';
+import { memberDiscoveryTitle, normalizeMemberState, type MemberState, type MemberTitle } from '../member/memberState';
 import { fetchMemberState, readMemberSession } from '../platform/nativeBridge';
 import type { Locale } from '../locadora/catalog';
 
 interface SavedPanelProps {
   locale: Locale;
   local: LocalSavedCollections;
+  onInspect: (title: DiscoveryTitle) => void;
   onSet: (title: DiscoveryTitle, collection: SavedCollection, enabled: boolean) => Promise<boolean>;
 }
 
 interface SavedDisplay {
   key: string;
   title: DiscoveryTitle;
-}
-
-function memberDiscoveryTitle(title: MemberTitle): DiscoveryTitle | null {
-  return normalizeDiscoveryTitle({
-    tmdbId: title.tmdbId,
-    type: title.type,
-    name: title.name,
-    year: title.year,
-  });
 }
 
 function displayItems(local: DiscoveryTitle[], remote: MemberTitle[]): SavedDisplay[] {
@@ -35,7 +27,7 @@ function displayItems(local: DiscoveryTitle[], remote: MemberTitle[]): SavedDisp
   return [...items].map(([key, title]) => ({ key, title }));
 }
 
-export function SavedPanel({ locale, local, onSet }: SavedPanelProps) {
+export function SavedPanel({ locale, local, onSet, onInspect }: SavedPanelProps) {
   const [collection, setCollection] = useState<SavedCollection>('watch_later');
   const [member, setMember] = useState<MemberState | null>(null);
   const [signedIn, setSignedIn] = useState(false);
@@ -96,7 +88,7 @@ export function SavedPanel({ locale, local, onSet }: SavedPanelProps) {
         <ul className="saved-title-list">
           {items.map((item) => (
             <li key={item.key}>
-              <span><strong>{item.title.name}</strong><small>{item.title.year ?? '—'} · {item.title.identity.type}</small></span>
+              <span><button type="button" className="member-title-link" onClick={() => onInspect(item.title)} aria-label={pt ? `Inspecionar ${item.title.name}` : `Inspect ${item.title.name}`}>{item.title.name}</button><small>{item.title.year ?? '—'} · {item.title.identity.type}</small></span>
               <button type="button" disabled={busyKey === item.key} onClick={() => void remove(item)}>{pt ? 'Remover' : 'Remove'}</button>
             </li>
           ))}

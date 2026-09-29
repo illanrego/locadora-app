@@ -138,6 +138,29 @@ describe('accessible Locadora shelf', () => {
     expect(screen.getByRole('button', { name: 'Quick Watch automático' })).toHaveAttribute('aria-pressed', 'false');
   });
 
+  it('opens saved and favorite titles in inspection and can add them to Cesta', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Inspecionar Agent 327/i }));
+    let inspection = screen.getByRole('dialog', { name: /Agent 327/i });
+    await user.click(within(inspection).getByRole('button', { name: 'Salvar para depois' }));
+    await user.click(within(inspection).getByRole('button', { name: 'Marcar como favorita' }));
+    await user.click(within(inspection).getByRole('button', { name: 'Fechar' }));
+    await user.click(screen.getByRole('button', { name: 'Salvos' }));
+    let saved = screen.getByRole('dialog', { name: 'Salvos' });
+    await user.click(within(saved).getByRole('button', { name: /Inspecionar Agent 327/i }));
+    inspection = screen.getByRole('dialog', { name: /Agent 327/i });
+    expect(screen.queryByRole('dialog', { name: 'Salvos' })).not.toBeInTheDocument();
+    await user.click(within(inspection).getByRole('button', { name: 'Fechar' }));
+    await user.click(screen.getByRole('button', { name: 'Salvos' }));
+    saved = screen.getByRole('dialog', { name: 'Salvos' });
+    await user.click(within(saved).getByRole('tab', { name: 'Favoritas' }));
+    await user.click(within(saved).getByRole('button', { name: /Inspecionar Agent 327/i }));
+    inspection = screen.getByRole('dialog', { name: /Agent 327/i });
+    await user.click(within(inspection).getByRole('button', { name: 'Colocar na Cesta' }));
+    expect(screen.getByLabelText('1 / 3')).toBeInTheDocument();
+  });
+
   it('exposes the immersive toggle in the header and keeps the 2D shelf usable', async () => {
     render(<App />);
     expect(screen.getByRole('button', { name: 'Modo imersivo' })).toBeInTheDocument();

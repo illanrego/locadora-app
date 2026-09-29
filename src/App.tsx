@@ -421,6 +421,7 @@ export default function App() {
         locale={locale}
         basket={basket}
         saved={saved}
+        onInspect={(title) => { setPanel(null); inspectTitle(title); }}
         onRemove={toggleBasket}
         onSetSaved={setSavedTitle}
         onBasketComplete={(rented) => setBasket((current) => current.filter((item) => !rented.some((title) => title.identity.canonicalKey === item.identity.canonicalKey)))}

@@ -1,3 +1,5 @@
+import { normalizeDiscoveryTitle, type DiscoveryTitle } from '../domain/content';
+
 export interface MemberTitle {
   id: string;
   canonicalKey: string;
@@ -122,4 +124,14 @@ export function normalizeMemberHistoryPage(value: unknown): MemberHistoryPage {
     history: normalizeTitles(page.history, MAX_HISTORY_ITEMS),
     hasMore: page.hasMore === true,
   };
+}
+
+/** Bridge membership records through TMDB identity, never their rental/item ID. */
+export function memberDiscoveryTitle(title: MemberTitle): DiscoveryTitle | null {
+  return normalizeDiscoveryTitle({
+    tmdbId: title.tmdbId,
+    type: title.type,
+    name: title.name,
+    year: title.year,
+  });
 }
