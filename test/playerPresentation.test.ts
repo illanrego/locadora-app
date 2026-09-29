@@ -30,4 +30,12 @@ describe('native video presentation', () => {
     expect(css).toContain('prefers-reduced-motion: reduce');
     expect(css).toContain('.cinema-placeholder.is-loading .brand-logo { animation: none; }');
   });
+  it('keeps fullscreen option panels beside the picture at every breakpoint', () => {
+    const responsiveStack = css.indexOf('.cinema-body.has-panel { grid-template-columns: minmax(0, 1fr); grid-template-rows:');
+    const fullscreenPanel = css.indexOf('.player-is-fullscreen .cinema-body.has-panel { grid-template-columns:');
+    expect(responsiveStack).toBeGreaterThan(-1);
+    expect(fullscreenPanel).toBeGreaterThan(responsiveStack);
+    expect(css.slice(fullscreenPanel, fullscreenPanel + 220)).toContain('grid-template-rows: minmax(0, 1fr)');
+    expect(css).toContain('.watch-modal.player-is-fullscreen.fullscreen-idle[open] { grid-template-rows: minmax(0, 1fr); }');
+  });
 });

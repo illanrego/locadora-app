@@ -421,7 +421,11 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 /* Fullscreen has its own quiet transport strip; native video owns the picture. */
 .watch-modal.player-is-fullscreen { background: #000; }
 .watch-modal.player-is-fullscreen[open] { grid-template-rows: minmax(0, 1fr) auto; }
+.watch-modal.player-is-fullscreen.fullscreen-idle[open] { grid-template-rows: minmax(0, 1fr); }
 .player-is-fullscreen > .cinema-header { display: none; }
+.player-is-fullscreen .cinema-body { min-height: 0; grid-template-rows: minmax(0, 1fr); }
+.player-is-fullscreen .cinema-body.has-panel { grid-template-columns: minmax(120px, 1fr) clamp(240px, 28vw, 360px); grid-template-rows: minmax(0, 1fr); }
+.player-is-fullscreen .cinema-panel { min-height: 0; border-top: 0; border-left: 1px solid #ffffff15; }
 .player-is-fullscreen .cinema-dock { padding: 2px clamp(16px, 4vw, 64px) 8px; border: 0; background: #050608; }
 .player-is-fullscreen .cinema-status-row.is-routine { display: none; }
 .player-is-fullscreen .cinema-buffer { display: none; }

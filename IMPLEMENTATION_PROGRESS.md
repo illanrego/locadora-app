@@ -1,10 +1,35 @@
 # Implementation progress
 
-Last updated: 2026-09-28
-Current milestone: inspect titles from Carteirinha and saved lists
-Status: focused checks passed; native rebuild in progress
+Last updated: 2026-09-29
+Current milestone: deterministic fullscreen video and option-panel geometry
+Status: implementation, automated checks and native rebuild passed; user visual acceptance pending
 
 ## Resume checkpoint
+
+2026-09-29 fullscreen geometry correction:
+- User reported that the fullscreen picture retained windowed-player space and
+  that the source/subtitle panels could appear below the movie. The player now
+  has explicit windowed, fullscreen-controls, fullscreen-panel and
+  fullscreen-idle presentation states. Idle fullscreen gives the measured
+  video frame the entire window; visible controls reserve only their compact
+  bottom strip.
+- Entering fullscreen closes a panel inherited from the windowed layout. A
+  panel deliberately opened in fullscreen stays beside the picture as a
+  bounded right drawer at every responsive breakpoint; the narrow-window rule
+  can no longer move it below the movie.
+- Every fullscreen, panel and control-visibility transition now explicitly
+  refreshes the app-owned `.cinema-screen` bounds immediately and during three
+  short settling passes. This replaces reliance on an incidental browser
+  resize event and prevents a previous windowed rectangle from surviving a
+  native fullscreen transition. The GTK GLArea remains above the WebView, so
+  visible HTML controls continue to reserve space rather than overlay video.
+- Checks: `npm run check` passed (121 tests across 32 files, typecheck and
+  production build). The focused player run passed 21 tests across
+  `watchFlow`, `useStremioVideo` and `playerPresentation` before the full suite.
+  `npm run tauri -- build --no-bundle` passed (optimized build 1m24s), refreshing
+  `src-tauri/target/release/wills-locadora-player`. Existing large-chunk advice
+  remains. `git diff --check` passed. No GUI/manual playback testing performed.
+
 
 2026-09-28 Carteirinha/saved-list inspection:
 - User changes priority to opening tape inspection by clicking a list title.
@@ -327,11 +352,12 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: obtain user acceptance in the rebuilt app of opening a saved,
-favorite or rented title from Carteirinha/Salvos, then watching or adding it to
-Cesta through inspection. Prior immersive/fullscreen visual acceptance remains
-pending; preserve the windowed video geometry fix. After playback acceptance
-remove temporary probe scaffolding, then resume peer-transfer/Range coverage.
+Next task: obtain user acceptance that idle fullscreen fills the display, the
+compact controls reveal/hide correctly, and Sources/Audio & subtitles remain a
+right-side drawer rather than moving below the movie. Also recheck opening a
+saved, favorite or rented title from Carteirinha/Salvos. Preserve the windowed
+video geometry fix. After playback acceptance remove temporary probe
+scaffolding, then resume peer-transfer/Range coverage.
 Do not launch GUI/manual tests without the user's request. User acceptance of
 real playback with Stremio closed, clean-machine installation, Flatpak delivery,
 and final public-distribution license/source audit remain outstanding.

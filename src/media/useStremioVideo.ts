@@ -90,6 +90,7 @@ export interface StremioVideoController {
   seekRelative: (seconds: number) => void;
   seekTo: (milliseconds: number) => void;
   setFullscreen: (fullscreen: boolean) => void;
+  refreshBounds: () => void;
   setVolume: (volume: number) => void;
   setMuted: (muted: boolean) => void;
   selectAudioTrack: (id: string) => void;
@@ -108,6 +109,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
   const extraTracks = useRef<StremioExtraSubtitleTrack[]>([]);
   const selectedExtra = useRef<string | null>(null);
   const nativeSurfaceVisible = useRef(false);
+  const presentationTimers = useRef<number[]>([]);
   // TEMPORARY: which call site scheduled the last bounds report, for the
   // missing-picture diagnostic. Remove with the probe.
   const reportTrigger = useRef('mount');
@@ -225,6 +227,9 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     return () => {
       observer?.disconnect();
       window.cancelAnimationFrame(frame);
+      presentationTimers.current.forEach((timer) => window.clearTimeout(timer));
+      presentationTimers.current = [];
+      scheduleReport.current = () => {};
       window.removeEventListener('resize', onResize);
       window.removeEventListener('scroll', onScroll, true);
       disposed = true;
@@ -373,6 +378,15 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     });
   }, []);
 
+  const refreshBounds = useCallback(() => {
+    presentationTimers.current.forEach((timer) => window.clearTimeout(timer));
+    scheduleReport.current('presentation');
+    presentationTimers.current = [60, 180, 420].map((delay) => window.setTimeout(
+      () => scheduleReport.current('presentation-settle'),
+      delay,
+    ));
+  }, []);
+
   const setVolume = useCallback((volume: number) => {
     if (!Number.isFinite(volume)) return;
     videoRef.current?.dispatch({ type: 'setProp', propName: 'volume', propValue: Math.max(0, Math.min(100, volume)) });
@@ -434,6 +448,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     seekRelative,
     seekTo,
     setFullscreen,
+    refreshBounds,
     setVolume,
     setMuted,
     selectAudioTrack,

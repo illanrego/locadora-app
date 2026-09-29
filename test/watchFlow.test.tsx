@@ -46,6 +46,7 @@ beforeEach(() => {
   mocks.controller = {
     viewportRef: { current: null }, containerRef: { current: null }, state: { ...initialState }, load: vi.fn().mockResolvedValue(undefined),
     unload: vi.fn(), setPaused: vi.fn(), seekRelative: vi.fn(), seekTo: vi.fn(), setFullscreen: vi.fn(),
+    refreshBounds: vi.fn(),
     setVolume: vi.fn(), setMuted: vi.fn(), selectAudioTrack: vi.fn(), selectSubtitleTrack: vi.fn(),
     setSubtitleDelay: vi.fn(), addExtraSubtitlesTracks: vi.fn().mockReturnValue(true),
   };
@@ -96,14 +97,30 @@ describe('cinema player interactions', () => {
       const dialog = screen.getByRole('dialog');
       act(() => vi.advanceTimersByTime(3000));
       expect(dialog).toHaveClass('controls-hidden');
+      expect(dialog).toHaveClass('fullscreen-idle');
       fireEvent.pointerMove(dialog);
       expect(dialog).not.toHaveClass('controls-hidden');
+      expect(dialog).toHaveClass('fullscreen-controls-visible');
       fireEvent.click(screen.getByRole('button', { name: 'Sources' }));
+      expect(dialog).toHaveClass('fullscreen-panel-open');
       act(() => vi.advanceTimersByTime(5000));
       expect(dialog).not.toHaveClass('controls-hidden');
+      expect(mocks.controller.refreshBounds).toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('closes a windowed options panel when entering fullscreen', async () => {
+    const user = userEvent.setup();
+    const view = mount();
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalled());
+    await user.click(screen.getByRole('button', { name: 'Sources' }));
+    expect(screen.getByRole('complementary', { name: 'Available sources' })).toBeVisible();
+    mocks.controller.state = { ...initialState, fullscreen: true };
+    view.rerender(<WatchFlow {...view.props} />);
+    await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument());
+    expect(screen.getByRole('dialog')).toHaveClass('fullscreen-controls-visible');
   });
 
   it('opens sources without autoplay when Quick Watch is off and allows retry after load failure', async () => {

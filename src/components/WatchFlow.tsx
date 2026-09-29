@@ -258,6 +258,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
   const toggleTracks = () => { setTracksVisible(!tracksVisible); setManualVisible(false); };
   const toggleSources = () => { setManualVisible(!manualVisible); setTracksVisible(false); };
   const panelOpen = manualVisible || tracksVisible;
+  const previousFullscreen = useRef(video.state.fullscreen);
   const revealControls = useCallback(() => {
     setControlsVisible(true);
     if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
@@ -270,8 +271,15 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
     return () => { if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current); };
   }, [revealControls]);
   useEffect(() => {
-    window.dispatchEvent(new Event('resize'));
-  }, [controlsVisible, panelOpen, video.state.fullscreen]);
+    if (video.state.fullscreen && !previousFullscreen.current) {
+      setManualVisible(false);
+      setTracksVisible(false);
+    }
+    previousFullscreen.current = video.state.fullscreen;
+  }, [video.state.fullscreen]);
+  useEffect(() => {
+    video.refreshBounds();
+  }, [controlsVisible, panelOpen, video.refreshBounds, video.state.fullscreen]);
   const closePanel = () => {
     (tracksVisible ? tracksButtonRef : sourcesButtonRef).current?.focus();
     setManualVisible(false);
@@ -287,8 +295,15 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
     else if (panelOpen) closePanel();
     else close();
   };
+  const fullscreenPresentation = video.state.fullscreen
+    ? panelOpen
+      ? ' fullscreen-panel-open'
+      : controlsVisible
+        ? ' fullscreen-controls-visible'
+        : ' fullscreen-idle'
+    : '';
   return (
-    <Modal label={`${pt ? 'Assistindo' : 'Watching'} · ${title.name}`} onClose={close} onCancel={cancel} className={`watch-modal${video.state.fullscreen ? ' player-is-fullscreen' : ''}${video.state.fullscreen && !controlsVisible ? ' controls-hidden' : ''}`}
+    <Modal label={`${pt ? 'Assistindo' : 'Watching'} · ${title.name}`} onClose={close} onCancel={cancel} className={`watch-modal${video.state.fullscreen ? ' player-is-fullscreen' : ''}${video.state.fullscreen && !controlsVisible ? ' controls-hidden' : ''}${fullscreenPresentation}`}
       onPointerMove={(event) => {
         controlsHovered.current = event.target instanceof Element && Boolean(event.target.closest('.cinema-dock, .cinema-header, .cinema-panel'));
         revealControls();

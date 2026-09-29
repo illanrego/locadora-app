@@ -91,11 +91,15 @@ describe('native subtitle coordination', () => {
     const host = document.createElement('div');
     host.style.position = 'relative';
     const viewport = document.createElement('div');
-    viewport.getBoundingClientRect = () => ({ left: 10, top: 60, right: 810, bottom: 510, width: 800, height: 450, x: 10, y: 60, toJSON() {} });
+    let rectangle = { left: 10, top: 60, right: 810, bottom: 510, width: 800, height: 450, x: 10, y: 60, toJSON() {} };
+    viewport.getBoundingClientRect = () => rectangle;
     Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: host });
     Object.defineProperty(result.current.viewportRef, 'current', { configurable: true, value: viewport });
     await act(async () => { await result.current.load({ url: 'https://media.example.invalid/video' }); });
     await waitFor(() => expect(mocks.bounds).toHaveBeenCalledWith(expect.objectContaining({ x: 10, y: 60, width: 800, height: 450, visible: true })));
+    rectangle = { left: 0, top: 0, right: 1024, bottom: 720, width: 1024, height: 720, x: 0, y: 0, toJSON() {} };
+    act(() => result.current.refreshBounds());
+    await waitFor(() => expect(mocks.bounds).toHaveBeenCalledWith(expect.objectContaining({ x: 0, y: 0, width: 1024, height: 720, visible: true })));
     act(() => result.current.unload());
     await waitFor(() => expect(mocks.bounds).toHaveBeenLastCalledWith(expect.objectContaining({ visible: false })));
   });
