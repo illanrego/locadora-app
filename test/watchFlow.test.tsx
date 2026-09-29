@@ -111,6 +111,37 @@ describe('cinema player interactions', () => {
     }
   });
 
+  it('does not carry windowed control hover into fullscreen auto-hide', async () => {
+    const view = mount();
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalled());
+    fireEvent.pointerMove(screen.getByRole('button', { name: 'Fullscreen' }));
+    vi.useFakeTimers();
+    try {
+      mocks.controller.state = { ...initialState, fullscreen: true };
+      view.rerender(<WatchFlow {...view.props} />);
+      act(() => vi.advanceTimersByTime(3000));
+      expect(screen.getByRole('dialog')).toHaveClass('fullscreen-idle');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restarts fullscreen auto-hide when the pointer leaves the player', async () => {
+    const view = mount();
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalled());
+    mocks.controller.state = { ...initialState, fullscreen: true };
+    view.rerender(<WatchFlow {...view.props} />);
+    vi.useFakeTimers();
+    try {
+      fireEvent.pointerMove(screen.getByRole('button', { name: 'Exit fullscreen' }));
+      fireEvent.pointerLeave(screen.getByRole('dialog'));
+      act(() => vi.advanceTimersByTime(3000));
+      expect(screen.getByRole('dialog')).toHaveClass('fullscreen-idle');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('closes a windowed options panel when entering fullscreen', async () => {
     const user = userEvent.setup();
     const view = mount();

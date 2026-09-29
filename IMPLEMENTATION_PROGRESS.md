@@ -1,10 +1,37 @@
 # Implementation progress
 
 Last updated: 2026-09-29
-Current milestone: deterministic fullscreen video and option-panel geometry
-Status: implementation, automated checks and native rebuild passed; user visual acceptance pending
+Current milestone: preserve native fullscreen state and restore control auto-hide
+Status: regression checks and native rebuild passed; user visual acceptance pending
 
 ## Resume checkpoint
+
+2026-09-29 fullscreen follow-up after user reported continuing bugs:
+- The preceding geometry refresh did not address source loading resetting
+  React's fullscreen flag while GTK remained fullscreen. `useStremioVideo.load`
+  now preserves the window's state across source selection, failures and retry.
+  Native renderer release also leaves the window state intact so Escape remains
+  available after renderer replacement.
+- Entering fullscreen could retain the hover flag from its windowed button,
+  preventing idle auto-hide and permanently reserving control space. Reset that
+  flag before scheduling the fullscreen idle timer. Leaving the player also
+  clears hover and restarts the timer. Keyboard focus and open panels continue
+  to retain controls.
+- Pin the watch dialog explicitly to the viewport with fixed positioning,
+  zero inset and zero margin. GTK's GLArea now queues a redraw on resize even
+  when playback is paused/buffering and no new mpv frame arrives.
+- Added three interaction regressions; each failed before the changes and
+  passed afterward. `npm test -- test/watchFlow.test.tsx
+  test/useStremioVideo.test.tsx test/playerPresentation.test.ts`: 24 passed.
+  `npm run check`: 124 tests across 32 files, typecheck and production build
+  passed. `cargo test --manifest-path src-tauri/Cargo.toml
+  embedded_surface::tests`: 2 passed; `cargo fmt --manifest-path
+  src-tauri/Cargo.toml --check`: passed. `cargo clippy --manifest-path
+  src-tauri/Cargo.toml --all-targets -- -D warnings`: passed.
+  `npm run tauri -- build --no-bundle`: passed (optimized build 2m09s),
+  refreshing `src-tauri/target/release/wills-locadora-player` used by `locadora`.
+  Existing bundle-size advisory remains. `git diff --check`: passed.
+  No GUI/browser/manual playback validation performed.
 
 2026-09-29 fullscreen geometry correction:
 - User reported that the fullscreen picture retained windowed-player space and
@@ -352,9 +379,11 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: obtain user acceptance that idle fullscreen fills the display, the
-compact controls reveal/hide correctly, and Sources/Audio & subtitles remain a
-right-side drawer rather than moving below the movie. Also recheck opening a
+Next task: obtain user acceptance in the rebuilt app of entering fullscreen,
+waiting for controls to hide, switching source while fullscreen, opening and
+closing the subtitle/source drawer, and resizing paused video. Confirm the
+movie fills its available viewport and Escape restores windowed playback.
+Also recheck opening a
 saved, favorite or rented title from Carteirinha/Salvos. Preserve the windowed
 video geometry fix. After playback acceptance remove temporary probe
 scaffolding, then resume peer-transfer/Range coverage.

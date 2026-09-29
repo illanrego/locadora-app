@@ -171,6 +171,9 @@ pub fn install(window: &WebviewWindow) -> Result<(), String> {
     area.set_required_version(3, 2);
     area.set_has_alpha(false);
     area.set_auto_render(false);
+    // With auto-render disabled, paused/buffering playback has no new mpv
+    // frames to trigger a redraw after fullscreen or panel resizing.
+    area.connect_resize(|area, _, _| area.queue_render());
     area.set_can_focus(false);
     area.set_hexpand(true);
     area.set_vexpand(true);
@@ -385,7 +388,8 @@ pub fn release() {
     SURFACE.with(|surface| {
         if let Some(surface) = surface.borrow_mut().as_mut() {
             surface.release();
-            surface.fullscreen = false;
+            // Renderer replacement does not change the window manager state.
+            // Keep Escape working until the actual window-state event arrives.
         }
     });
 }

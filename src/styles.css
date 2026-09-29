@@ -280,7 +280,7 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .danger-zone p, .configuration-status { color: var(--muted); font-size: .72rem; line-height: 1.5; }
 .danger-zone button { border-color: #ff7c66; background: #7c251d; }
 .configuration-status { min-height: 1.2em; }
-.watch-modal { width: 100vw; max-width: none; height: 100dvh; max-height: none; padding: 0; overflow: hidden; color: #eef2f8; background: #0b1422; border: 0; border-radius: 0; box-shadow: none; color-scheme: dark; }
+.watch-modal { position: fixed; inset: 0; margin: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none; padding: 0; overflow: hidden; color: #eef2f8; background: #0b1422; border: 0; border-radius: 0; box-shadow: none; color-scheme: dark; }
 .watch-modal[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
 .watch-modal::backdrop { background: #000; }
 .watch-modal button { display: inline-flex; align-items: center; justify-content: center; gap: .55rem; min-height: 40px; padding: .6rem .8rem; border: 1px solid #34465e; border-radius: 7px; box-shadow: none; color: #eef2f8; background: #19283c; font-family: inherit; font-size: .8rem; font-weight: 500; line-height: 1.25; letter-spacing: 0; text-transform: none; transition: background .15s, border-color .15s; }

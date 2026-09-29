@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode, type DOMAttributes } from 'react';
 
-interface ModalProps extends Pick<DOMAttributes<HTMLDialogElement>, 'onPointerMove' | 'onKeyDown' | 'onFocusCapture' | 'onBlurCapture'> {
+interface ModalProps extends Pick<DOMAttributes<HTMLDialogElement>, 'onPointerMove' | 'onPointerLeave' | 'onKeyDown' | 'onFocusCapture' | 'onBlurCapture'> {
   label: string;
   onClose: () => void;
   children: ReactNode;

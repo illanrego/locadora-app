@@ -24,7 +24,10 @@ vi.mock('../src/platform/nativeBridge', () => ({
   setNativeVideoBounds: mocks.bounds,
   setNativePlayerFullscreen: mocks.fullscreen,
   reportSurfaceProbe: mocks.probe,
-  onNativePlayerFullscreenChanged: async () => () => undefined,
+  onNativePlayerFullscreenChanged: async (listener: (fullscreen: boolean) => void) => {
+    mocks.listeners.set('native-fullscreen', listener as (...args: unknown[]) => void);
+    return () => mocks.listeners.delete('native-fullscreen');
+  },
   onNativePlayerRenderError: async () => () => undefined,
 }));
 import { useStremioVideo } from '../src/media/useStremioVideo';
@@ -34,6 +37,24 @@ beforeEach(() => { vi.clearAllMocks(); mocks.listeners.clear(); });
 afterEach(cleanup);
 
 describe('native subtitle coordination', () => {
+  it('preserves native fullscreen across source changes, failures and retry until the window exits', async () => {
+    const { result } = renderHook(() => useStremioVideo('0.35.1'));
+    Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });
+    act(() => mocks.listeners.get('native-fullscreen')?.(true));
+    await act(async () => { await result.current.load({ url: 'https://media.example.invalid/first' }); });
+    expect(result.current.state.fullscreen).toBe(true);
+    mocks.ensure.mockRejectedValueOnce(new Error('Streaming port is busy'));
+    await act(async () => {
+      await expect(result.current.load({ infoHash: 'a'.repeat(40), fileIdx: 0, announce: [] })).rejects.toThrow('busy');
+    });
+    expect(result.current.state.fullscreen).toBe(true);
+    await act(async () => { await result.current.load({ url: 'https://media.example.invalid/retry' }); });
+    expect(result.current.state.fullscreen).toBe(true);
+    expect(mocks.fullscreen).not.toHaveBeenCalled();
+    act(() => mocks.listeners.get('native-fullscreen')?.(false));
+    expect(result.current.state.fullscreen).toBe(false);
+  });
+
   it('starts the bundled engine before loading torrents and surfaces startup failure', async () => {
     const { result } = renderHook(() => useStremioVideo('0.35.1'));
     Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });

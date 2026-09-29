@@ -299,7 +299,9 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     const generation = ++loadGeneration.current;
     subtitleGeneration.current += 1;
     selectedExtra.current = null;
-    setState({ ...INITIAL_STATE, buffering: true, extraSubtitlesTracks: extraTracks.current });
+    // Fullscreen belongs to the native window, not the source being loaded.
+    setState((current) => ({ ...INITIAL_STATE, fullscreen: current.fullscreen,
+      buffering: true, extraSubtitlesTracks: extraTracks.current }));
     const video = videoRef.current;
     const transport = transportRef.current;
     const containerElement = containerRef.current;

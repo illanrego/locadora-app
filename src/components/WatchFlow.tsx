@@ -267,16 +267,19 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
     }
   }, [video.state.fullscreen, video.state.paused, canControl, panelOpen]);
   useEffect(() => {
-    revealControls();
-    return () => { if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current); };
-  }, [revealControls]);
-  useEffect(() => {
+    // Moving the native window changes which control is beneath the pointer
+    // without necessarily producing a WebView pointermove event.
+    if (video.state.fullscreen !== previousFullscreen.current) controlsHovered.current = false;
     if (video.state.fullscreen && !previousFullscreen.current) {
       setManualVisible(false);
       setTracksVisible(false);
     }
     previousFullscreen.current = video.state.fullscreen;
   }, [video.state.fullscreen]);
+  useEffect(() => {
+    revealControls();
+    return () => { if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current); };
+  }, [revealControls]);
   useEffect(() => {
     video.refreshBounds();
   }, [controlsVisible, panelOpen, video.refreshBounds, video.state.fullscreen]);
@@ -307,7 +310,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
       onPointerMove={(event) => {
         controlsHovered.current = event.target instanceof Element && Boolean(event.target.closest('.cinema-dock, .cinema-header, .cinema-panel'));
         revealControls();
-      }} onKeyDown={revealControls}
+      }} onPointerLeave={() => { controlsHovered.current = false; revealControls(); }} onKeyDown={revealControls}
       onFocusCapture={(event) => { controlsFocused.current = event.target !== event.currentTarget && event.target instanceof Element && event.target.matches(':focus-visible'); revealControls(); }}
       onBlurCapture={(event) => {
         if (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget)) controlsFocused.current = false;
