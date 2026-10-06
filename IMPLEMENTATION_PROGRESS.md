@@ -2,9 +2,26 @@
 
 Last updated: 2026-10-06
 Current milestone: finish native fullscreen composition and shared account rental limits
-Status: automated checks and release rebuild passed; user visual acceptance and manual production migration/deployment pending
+Status: release rebuilt and web/Worker deployed; migration confirmed by user; signed-in and visual acceptance pending
 
 ## Resume checkpoint
+
+2026-10-06 deployment follow-up:
+- User confirmed manually applying the rental-limit SQL migration, then authorized
+  Worker/web deployment. No production SQL was executed by the agent.
+- Deployed only committed web revision `2d7493b` from isolated worktree
+  `/tmp/locadora-rental-release`, preserving unrelated uncommitted web/TV work.
+  `npx wrangler deploy` from its `workers/locadora-data` succeeded; version
+  `18f7a0a3-1692-415f-b21c-d6cd595f2d84`.
+- `git push origin main` published `2d7493b`; GitHub Pages run `37479738583`
+  completed successfully. Isolated release checks: `node --test
+  test/locadora-data-worker.test.mjs test/app-core.test.js` passed 65 tests;
+  `npm run build:pages` passed.
+- Live HTTP verification: website HTML and app.js return 200 and include the
+  rental selector, `/v1/rental-limit` save handler, and three-title previews.
+  Unauthenticated PUT `/v1/rental-limit` returns 401 Authentication required.
+  No account state was changed; signed-in save and fullscreen visual acceptance
+  remain user checks. Desktop release remains the successfully rebuilt version.
 
 2026-10-06 fullscreen and membership changes:
 - Completed the previously staged native composition correction: black base ->
@@ -441,14 +458,12 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: after the user applies
-`../locadora/supabase/migrations/20261006_member_rental_limit.sql` manually,
-deploy the reviewed member Worker and web UI when authorized, then verify the
-shared preference. User acceptance also remains for rebuilt fullscreen: enter/
-exit, source/subtitle drawers, idle controls, source changes and paused resize.
-Do not launch GUI/manual tests without the user's request. Production deployment,
-real playback with Stremio closed, clean-machine installation, Flatpak delivery,
-and final public-distribution license/source audit remain outstanding.
+Next task: obtain user acceptance of the deployed shared rental preference
+(save on web, reopen desktop Carteirinha, verify the chosen limit) and rebuilt
+fullscreen (enter/exit, source/subtitle drawers, idle controls, source changes,
+paused resize). Do not launch GUI/manual tests without the user's request.
+After acceptance remove temporary player probes and resume peer-transfer/Range
+coverage. Clean-machine installation, Flatpak and distribution audit remain open.
 
 2026-09-28 delivery checkpoint (artifacts built 2026-09-27 11:15 -0300):
 - Commits: `8037ff9` pins/stages the engine; `dece2af` implements its lifecycle,
