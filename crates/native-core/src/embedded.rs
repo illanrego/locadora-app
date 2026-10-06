@@ -67,6 +67,10 @@ impl EmbeddedMpv {
             ("msg-level", "all=no"),
             ("idle", "yes"),
             ("vo", "libmpv"),
+            // render() disables mpv's target-time wait because GTK must not
+            // block. Remove its early-render headroom too (render.h contract),
+            // otherwise GTK presents frames before their audio-clock deadline.
+            ("video-timing-offset", "0"),
             ("force-window", "no"),
             ("osc", "no"),
             ("input-default-bindings", "no"),
@@ -189,5 +193,44 @@ impl Drop for MpvRenderContext {
         unsafe {
             mpv_render_context_free(self.context);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[link(name = "mpv")]
+    unsafe extern "C" {
+        fn mpv_get_property(
+            handle: *mut c_void,
+            name: *const c_char,
+            format: c_int,
+            data: *mut c_void,
+        ) -> c_int;
+    }
+
+    #[test]
+    fn nonblocking_renderer_disables_early_frame_presentation() {
+        let root = std::env::temp_dir().join(format!("wlp-timing-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let owner = EmbeddedMpv::new(&root.join("mpv.sock")).unwrap();
+        let mut offset = f64::NAN;
+        // Query the initialized player, not just the option construction.
+        let result = unsafe {
+            mpv_get_property(
+                owner.0,
+                c"video-timing-offset".as_ptr(),
+                5,
+                (&mut offset as *mut f64).cast(),
+            )
+        };
+        assert_eq!(result, 0);
+        assert_eq!(
+            offset, 0.0,
+            "GTK presents immediately; mpv must not submit early"
+        );
+        drop(owner);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
