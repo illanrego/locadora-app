@@ -238,6 +238,26 @@ and will run its production SQL migration manually.
 Carteirinha previews show three watch-later and three favorite titles, with
 explicit navigation to complete lists. Playback remains independent.
 
+### D-021 — Desktop 2D presentation becomes the web styling reference
+
+Accepted 2026-10-06. Bring the desktop navy header, bright brand colors, labelled
+header actions and shelf spacing to web normal mode. Keep immersive scenes and
+web provider/member contracts independent. Remove desktop shelf search and web
+header search; retain the separate web Counter catalogue search.
+
+### D-022 — Nonblocking GTK video timing
+
+Embedded mpv rendering disables target-time blocking to keep GTK responsive.
+Pair that with `video-timing-offset=0`, as required by mpv's render API when the
+caller does not wait for the target time itself. This fixes premature frame
+presentation, not a verified diagnosis of every source-dependent audio/video
+hiccup. Playback acceptance and any source-specific cache/decoder diagnosis
+remain separate from the option regression test.
+
+Reference: [mpv render API timing contract](https://github.com/mpv-player/mpv/blob/master/include/mpv/render.h),
+`MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME`; also checked against installed
+`/usr/include/mpv/render.h`.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

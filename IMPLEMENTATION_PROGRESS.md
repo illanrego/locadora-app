@@ -1,10 +1,49 @@
 # Implementation progress
 
 Last updated: 2026-10-06
-Current milestone: finish native fullscreen composition and shared account rental limits
-Status: release rebuilt and web/Worker deployed; migration confirmed by user; signed-in and visual acceptance pending
+Current milestone: investigate source-dependent playback hiccups (separate from completed 2D UI work)
+Status: UI published; timing correction checked and rebuilt; source-specific diagnosis unconfirmed
 
 ## Resume checkpoint
+
+2026-10-06 completed 2D UI milestone:
+- User prefers desktop normal-mode colors/layout for the web. Web commit
+  `b03d490` adds scoped `public/normal-mode.css`, navy/brighter brand palette,
+  labelled header actions, header Cesta/immersive button and app shelf spacing.
+  Immersive/Counter scene CSS is unchanged. Removed web header catalogue search;
+  its separate Counter search remains. Desktop shelf filtering/search input,
+  query state and dead translation/CSS entries are removed.
+- Desktop UI commit `67ebd31`; web commit `b03d490` pushed and GitHub Pages
+  run `37549045891` succeeded. Live HTTP 200 HTML references normal-mode.css,
+  omits header search, and CSS serves desktop navy #172c49. Release worktree
+  web layout tests: 44 passed; production build passed.
+
+2026-10-06 separate playback-hiccup investigation:
+- User explicitly clarified that playback hiccups are an independent issue.
+  Timing correction committed separately as `352d318`.
+- User reports short source-dependent video/audio interruptions. No live
+  player socket accepted a diagnostic connection; there is no failing-source
+  sample. Asked whether the buffering indicator accompanies interruptions;
+  no answer yet. Do not claim a confirmed source-specific diagnosis.
+- Found an independent native timing defect: `render()` passes
+  MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME=0 but initialization retained mpv's
+  early-video offset. Installed `/usr/include/mpv/render.h` and upstream render.h
+  explicitly require honoring the target time or setting video-timing-offset=0.
+  Embedded player now sets the latter, preserving nonblocking GTK rendering and
+  audio-master defaults. A real-libmpv regression reads back the initialized
+  option. A separate no-media libmpv ABI probe confirmed the previous default
+  is 0.05 seconds (50 ms); the regression confirms the corrected value is zero.
+  No speculative cache/decoder/audio-buffer changes were made.
+- Checks: `npm run typecheck` passed; `npm test -- --maxWorkers=4
+  --testTimeout=15000`: 133 passed/33 files. Web `npm test`: 275 passed;
+  `npm run build:pages` passed. `cargo test --manifest-path
+  crates/native-core/Cargo.toml nonblocking_renderer_disables_early_frame_presentation`
+  passed; `cargo test --manifest-path crates/native-core/Cargo.toml --
+  --test-threads=1` passed 19 tests. `cargo test --manifest-path
+  src-tauri/Cargo.toml`: 26 passed, 2 opt-in ignored. Strict Tauri Clippy and both
+  Cargo fmt checks passed. `npm run tauri -- build --no-bundle` passed, optimized
+  build 2m27s; release executable refreshed with both independent commits.
+  Existing bundle-size advisory remains. No browser/GUI/manual checks performed.
 
 2026-10-06 deployment follow-up:
 - User confirmed manually applying the rental-limit SQL migration, then authorized
@@ -458,12 +497,13 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: obtain user acceptance of the deployed shared rental preference
-(save on web, reopen desktop Carteirinha, verify the chosen limit) and rebuilt
-fullscreen (enter/exit, source/subtitle drawers, idle controls, source changes,
-paused resize). Do not launch GUI/manual tests without the user's request.
-After acceptance remove temporary player probes and resume peer-transfer/Range
-coverage. Clean-machine installation, Flatpak and distribution audit remain open.
+Next task: user retest the previously hiccuping source in the rebuilt desktop;
+if interruptions remain, collect only allowlisted numeric cache/frame-drop/A-V
+sync properties from a live player session to distinguish network starvation
+from decode/render scheduling. Do not log descriptors or launch GUI tests without
+request. Obtain 2D styling and fullscreen visual acceptance as part of this retest.
+Signed-in rental-preference acceptance, clean-machine installation, Flatpak and
+distribution audit remain outstanding.
 
 2026-09-28 delivery checkpoint (artifacts built 2026-09-27 11:15 -0300):
 - Commits: `8037ff9` pins/stages the engine; `dece2af` implements its lifecycle,
