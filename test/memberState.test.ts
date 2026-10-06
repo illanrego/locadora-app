@@ -17,7 +17,7 @@ describe('Locadora member-state normalization', () => {
       historyHasMore: true,
     });
 
-    expect(state.profile).toEqual({ userId: 'user-1', username: 'will', createdAt: '2025-01-02T00:00:00Z' });
+    expect(state.profile).toEqual({ userId: 'user-1', username: 'will', createdAt: '2025-01-02T00:00:00Z', rentalLimit: 3 });
     expect(state.activeRental?.items[0].name).toBe('Tape One');
     expect(state.collections.watchLater[0].canonicalKey).toBe('series:22');
     expect(state.history[0].watchedStatus).toBe('watched');
@@ -52,4 +52,14 @@ describe('Locadora member-state normalization', () => {
     expect(page.hasMore).toBe(true);
     expect(JSON.stringify(page)).not.toContain('must-not-pass');
   });
+});
+
+it('retains all active rentals even after the account lowers its limit', () => {
+  const state = normalizeMemberState({ profile: { userId: 'user', username: 'will', rentalLimit: 1 },
+    activeRental: { id: 'rental', items: Array.from({ length: 10 }, (_, i) => ({ tmdbId: i + 1, type: 'movie', name: `Tape ${i}` })) } });
+  expect(state.profile?.rentalLimit).toBe(1);
+  expect(state.activeRental?.items).toHaveLength(10);
+  for (const rentalLimit of [0, 11, 2.5, '10', null]) {
+    expect(normalizeMemberState({ profile: { userId: 'user', username: 'will', rentalLimit } }).profile?.rentalLimit).toBe(3);
+  }
 });

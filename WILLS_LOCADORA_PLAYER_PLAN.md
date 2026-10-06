@@ -51,7 +51,8 @@ Locadora/TMDB discovery
 ### Locadora domain
 
 - Preserve separate Locadora membership and data.
-- Preserve the rental ritual and its three-active-title server rule.
+- Preserve the rental ritual with an account-selected 1–10 active-title limit
+  (default 3), enforced by the server; see D-020.
 - Preserve `watched`, `not_watched`, and `unknown` returns.
 - Preserve Assistir depois, Favoritos, reviews, and donations.
 - Playback must not automatically return a rental or mark it watched.

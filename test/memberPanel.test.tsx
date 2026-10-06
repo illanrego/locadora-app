@@ -10,6 +10,7 @@ const native = vi.hoisted(() => ({
   signInMember: vi.fn(),
   signUpMember: vi.fn(),
   updateMemberProfile: vi.fn(),
+  updateMemberRentalLimit: vi.fn(),
   signOutMember: vi.fn(),
   returnMemberRental: vi.fn(),
   fetchMemberState: vi.fn(),
@@ -43,8 +44,11 @@ describe('Locadora member panel', () => {
     render(<MemberPanel locale="pt-BR" onInspect={inspect} />);
     await user.click(await screen.findByRole('button', { name: 'Inspecionar Rented tape' }));
     expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ identity: expect.objectContaining({ canonicalKey: 'movie:tmdb:1' }) }));
+    expect(screen.queryByRole('button', { name: 'Inspecionar Later 4' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Abrir Assistir depois (6)' }));
     await user.click(screen.getByRole('button', { name: 'Inspecionar Later 6' }));
     expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Later 6' }));
+    await user.click(screen.getByRole('button', { name: 'Voltar à Carteirinha' }));
     await user.click(screen.getByRole('button', { name: 'Inspecionar Favorite tape' }));
     expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Favorite tape' }));
     screen.getByRole('button', { name: 'Inspecionar Returned tape' }).focus();
@@ -125,4 +129,23 @@ describe('Locadora member panel', () => {
     expect(screen.getAllByText('First Tape')).toHaveLength(1);
     expect(screen.queryByRole('button', { name: 'Mais histórico' })).not.toBeInTheDocument();
   });
+});
+
+it('saves the account rental limit and keeps the confirmed value on failure', async () => {
+  native.readMemberSession.mockResolvedValue({ configured: true, signedIn: true, user: { id: 'user-1' } });
+  native.fetchMemberState.mockResolvedValue({ profile: { userId: 'user-1', username: 'will', rentalLimit: 3 } });
+  const user = userEvent.setup();
+  render(<MemberPanel locale="en-US" onInspect={vi.fn()} />);
+  const select = await screen.findByLabelText('Simultaneous rental limit');
+  expect(screen.getAllByRole('option')).toHaveLength(10);
+  native.updateMemberRentalLimit.mockResolvedValue({ rentalLimit: 10 });
+  native.fetchMemberState.mockResolvedValue({ profile: { userId: 'user-1', username: 'will', rentalLimit: 10 } });
+  await user.selectOptions(select, '10');
+  await screen.findByText('Rental limit saved.');
+  expect(native.updateMemberRentalLimit).toHaveBeenCalledWith(10);
+  expect(select).toHaveValue('10');
+  native.updateMemberRentalLimit.mockRejectedValue(new Error('Offline'));
+  await user.selectOptions(select, '1');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Offline');
+  expect(select).toHaveValue('10');
 });

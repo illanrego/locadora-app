@@ -37,7 +37,7 @@ describe('accessible Locadora shelf', () => {
     const dialog = screen.getByRole('dialog', { name: /Agent 327/i });
     expect(within(dialog).getByRole('button', { name: 'Assistir — integração em desenvolvimento' })).toBeDisabled();
     await user.click(within(dialog).getByRole('button', { name: 'Colocar na Cesta' }));
-    expect(screen.getByLabelText('1 / 3')).toBeInTheDocument();
+    expect(screen.getByLabelText('1 / 10')).toBeInTheDocument();
   });
 
   it('keeps Cesta anonymous until Balcão asks for a member session', async () => {
@@ -158,7 +158,7 @@ describe('accessible Locadora shelf', () => {
     await user.click(within(saved).getByRole('button', { name: /Inspecionar Agent 327/i }));
     inspection = screen.getByRole('dialog', { name: /Agent 327/i });
     await user.click(within(inspection).getByRole('button', { name: 'Colocar na Cesta' }));
-    expect(screen.getByLabelText('1 / 3')).toBeInTheDocument();
+    expect(screen.getByLabelText('1 / 10')).toBeInTheDocument();
   });
 
   it('exposes the immersive toggle in the header and keeps the 2D shelf usable', async () => {
@@ -173,6 +173,6 @@ describe('accessible Locadora shelf', () => {
     await user.click(screen.getByRole('button', { name: 'Me pague um café' }));
     const dialog = screen.getByRole('dialog', { name: 'Me pague um café' });
     expect(within(dialog).getByText('A LOCADORA É GRÁTIS')).toBeInTheDocument();
-    expect(screen.getByLabelText('0 / 3')).toBeInTheDocument();
+    expect(screen.getByLabelText('0 / 10')).toBeInTheDocument();
   });
 });

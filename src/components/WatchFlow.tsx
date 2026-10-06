@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import type { DiscoveryTitle } from '../domain/content';
 import type { Locale } from '../locadora/catalog';
 import { resolveTitleMedia, type MediaResolution } from '../media/resolutionService';
@@ -53,6 +53,10 @@ function explanation(resolution: MediaResolution | null, locale: Locale): string
 
 export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClose }: WatchFlowProps) {
   const video = useStremioVideo(mpvVersion);
+  useLayoutEffect(() => {
+    document.documentElement.classList.add('player-open');
+    return () => document.documentElement.classList.remove('player-open');
+  }, []);
   const [resolution, setResolution] = useState<MediaResolution | null>(null);
   const [resolutionFilter, setResolutionFilter] = useState<ResolutionFilter>('all');
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -306,7 +310,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
         : ' fullscreen-idle'
     : '';
   return (
-    <Modal label={`${pt ? 'Assistindo' : 'Watching'} · ${title.name}`} onClose={close} onCancel={cancel} className={`watch-modal${video.state.fullscreen ? ' player-is-fullscreen' : ''}${video.state.fullscreen && !controlsVisible ? ' controls-hidden' : ''}${fullscreenPresentation}`}
+    <Modal label={`${pt ? 'Assistindo' : 'Watching'} · ${title.name}`} onClose={close} onCancel={cancel} className={`watch-modal${video.state.loaded ? ' has-video' : ''}${video.state.fullscreen ? ' player-is-fullscreen' : ''}${video.state.fullscreen && !controlsVisible ? ' controls-hidden' : ''}${fullscreenPresentation}`}
       onPointerMove={(event) => {
         controlsHovered.current = event.target instanceof Element && Boolean(event.target.closest('.cinema-dock, .cinema-header, .cinema-panel'));
         revealControls();
@@ -326,7 +330,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
           <div ref={video.containerRef} className="stremio-video-surface"
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
             aria-label={pt ? `Vídeo de ${title.name}` : `${title.name} video`}
-            onDoubleClick={() => { if (canControl) video.setFullscreen(true); }}>
+            onDoubleClick={() => { if (canControl) video.setFullscreen(!video.state.fullscreen); }}>
             <div className={`cinema-placeholder${!video.state.loaded || video.state.buffering ? ' is-loading' : ''}`} aria-hidden="true">
               <strong className="brand-logo">WILL'S LOCADORA</strong>
               <span>{phaseLabels[phase][pt ? 0 : 1]}</span>

@@ -28,6 +28,7 @@ pub fn run() {
             commands::member_sign_in,
             commands::member_sign_up,
             commands::member_update_profile,
+            commands::member_update_rental_limit,
             commands::member_update_collection,
             commands::member_create_rental,
             commands::member_return_rental,

@@ -1,10 +1,72 @@
 # Implementation progress
 
-Last updated: 2026-09-29
-Current milestone: preserve native fullscreen state and restore control auto-hide
-Status: regression checks and native rebuild passed; user visual acceptance pending
+Last updated: 2026-10-06
+Current milestone: finish native fullscreen composition and shared account rental limits
+Status: automated checks and release rebuild passed; user visual acceptance and manual production migration/deployment pending
 
 ## Resume checkpoint
+
+2026-10-06 fullscreen and membership changes:
+- Completed the previously staged native composition correction: black base ->
+  native GLArea -> transparent WebView; fullscreen uses the full native viewport
+  independently of controls/drawers, with mode-tagged windowed bounds on exit.
+  This correction had not previously reached the release executable.
+- Carteirinha now previews at most three watch-later/favorite entries. Dedicated
+  list views retain every normalized entry and tape inspection actions.
+- Account rental limits are integers 1–10, default 3. The desktop uses the
+  confirmed profile value, refreshes it at checkout, permits up to ten staged
+  tapes, and retains ten active records even after a limit reduction. Added
+  fixed native `member_update_rental_limit` -> PUT `/v1/rental-limit`.
+- User explicitly expanded scope to the web/backend checkout, including its
+  account UI. Changes there preserve unrelated uncommitted work. Web and desktop
+  share `profile.rentalLimit`; SQL locks the profile during rental creation.
+- Migration: `../locadora/supabase/migrations/20261006_member_rental_limit.sql`.
+  User applies production migrations manually in the SQL editor; do not apply it
+  remotely. Production migration and web/Worker deployment remain pending.
+- Checks: `npm run typecheck` passed; `npm test -- --maxWorkers=4
+  --testTimeout=15000` passed 134 tests/33 files. `cargo test --manifest-path
+  src-tauri/Cargo.toml` passed 26 tests, 2 opt-in ignored after rerunning with
+  local socket access (sandbox denied engine/mpv control sockets).
+  `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`
+  passed; `cargo fmt --manifest-path src-tauri/Cargo.toml` applied formatting;
+  diff whitespace checks passed. Web `npm test`: 276 passed; web
+  `npm run build:pages`: passed. New SQL migration and `test/member-rental-limit.sql`
+  passed in an isolated temporary PostgreSQL 18 database after the core schema.
+  Final web Worker check `node --test test/locadora-data-worker.test.mjs`:
+  39 passed. `cargo fmt --manifest-path src-tauri/Cargo.toml --check` passed.
+  `npm run tauri -- build --no-bundle` passed (optimized build 1m26s), refreshing
+  `src-tauri/target/release/wills-locadora-player`; existing chunk-size advisory
+  remains. Web changes committed as `2d7493b`, preserving all prior web/TV work.
+  No browser/GUI/manual playback acceptance was performed.
+
+2026-09-29 native composition correction after repeated fullscreen failures:
+- Previous geometry and state fixes did not resolve the rendering boundary:
+  GLArea painted above the WebView, requiring asynchronous bounds reports to
+  keep every HTML control clear of the movie. Replaced that arrangement with
+  an opaque black GTK base, native video, and the transparent WebView on top.
+  Source/subtitle menus and controls can now paint above the picture.
+- React owns transparency only while Watch is mounted. The catalogue is hidden
+  beneath playback, loading artwork clears when video loads, and normal page
+  backgrounds return on close. Renamed the Stremio shim capability to
+  `appOwnsVideoBackground`; it still blocks upstream ancestor mutation.
+- Fullscreen uses the complete native surface at all times. The compact dock
+  and bounded right drawer overlay it without resizing the picture. Windowed
+  playback retains its measured frame. Mode-tagged bounds reject a fullscreen
+  rectangle on exit; native window state ignores stale windowed bounds on
+  entry. Double-click now toggles fullscreen in both directions.
+- Regression coverage includes viewport geometry during stale/zero reports,
+  repeated native transitions and scaling, actual CSS transparency/stacking,
+  player mount/unmount cleanup and double-click exit.
+- Checks: `npm run typecheck` passed; `cargo test --manifest-path
+  src-tauri/Cargo.toml` passed (26 tests, 2 opt-in ignored); `cargo clippy
+  --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` and
+  `cargo fmt --manifest-path src-tauri/Cargo.toml --check` passed.
+  `npm run check` stopped at a 5-second timeout in the saved-title UI test
+  (127 passed); `npm test -- --maxWorkers=4` stopped at the same timeout in
+  the immersive catalogue test (127 passed). Both failures were timing limits,
+  with no failed assertions. `npm test -- --maxWorkers=4 --testTimeout=15000`
+  passed all 128 tests across 33 files. `git diff --check` passed.
+  Native release rebuild pending. No GUI/manual playback verification performed.
 
 2026-09-29 fullscreen follow-up after user reported continuing bugs:
 - The preceding geometry refresh did not address source loading resetting
@@ -379,15 +441,12 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: obtain user acceptance in the rebuilt app of entering fullscreen,
-waiting for controls to hide, switching source while fullscreen, opening and
-closing the subtitle/source drawer, and resizing paused video. Confirm the
-movie fills its available viewport and Escape restores windowed playback.
-Also recheck opening a
-saved, favorite or rented title from Carteirinha/Salvos. Preserve the windowed
-video geometry fix. After playback acceptance remove temporary probe
-scaffolding, then resume peer-transfer/Range coverage.
-Do not launch GUI/manual tests without the user's request. User acceptance of
+Next task: after the user applies
+`../locadora/supabase/migrations/20261006_member_rental_limit.sql` manually,
+deploy the reviewed member Worker and web UI when authorized, then verify the
+shared preference. User acceptance also remains for rebuilt fullscreen: enter/
+exit, source/subtitle drawers, idle controls, source changes and paused resize.
+Do not launch GUI/manual tests without the user's request. Production deployment,
 real playback with Stremio closed, clean-machine installation, Flatpak delivery,
 and final public-distribution license/source audit remain outstanding.
 

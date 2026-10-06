@@ -55,3 +55,26 @@ describe('Balcão checkout', () => {
     expect(native.createMemberRental).toHaveBeenCalledWith([expect.objectContaining({ name: FIXTURE_TITLES[1].name })]);
   });
 });
+
+it.each([1, 3, 10])('enforces the current account limit of %s at checkout', async (rentalLimit) => {
+  native.readMemberSession.mockResolvedValue({ signedIn: true });
+  native.fetchMemberState.mockResolvedValue({ profile: { userId: 'user', username: 'will', rentalLimit },
+    activeRental: { id: 'rental', items: Array.from({ length: rentalLimit }, (_, i) => ({ tmdbId: i + 500, type: 'movie', name: `Rented ${i}` })) } });
+  const user = userEvent.setup();
+  render(<BasketPanel locale="en-US" basket={[FIXTURE_TITLES[0]]} onRemove={vi.fn()} onComplete={vi.fn()} onOpenAccount={vi.fn()} />);
+  await user.click(screen.getByRole('button', { name: /^Rent/ }));
+  expect(await screen.findByRole('status')).toHaveTextContent(`Your limit is ${rentalLimit}`);
+  expect(native.createMemberRental).not.toHaveBeenCalled();
+});
+
+it('allows a fourth rental when the member has chosen ten', async () => {
+  native.readMemberSession.mockResolvedValue({ signedIn: true });
+  native.fetchMemberState.mockResolvedValue({ profile: { userId: 'user', username: 'will', rentalLimit: 10 },
+    activeRental: { id: 'rental', items: Array.from({ length: 3 }, (_, i) => ({ tmdbId: i + 500, type: 'movie', name: `Rented ${i}` })) } });
+  native.createMemberRental.mockResolvedValue({});
+  const user = userEvent.setup();
+  render(<BasketPanel locale="en-US" basket={[FIXTURE_TITLES[0]]} onRemove={vi.fn()} onComplete={vi.fn()} onOpenAccount={vi.fn()} />);
+  await user.click(screen.getByRole('button', { name: /^Rent/ }));
+  expect(await screen.findByText('Rental confirmed. Enjoy the show!')).toBeInTheDocument();
+  expect(native.createMemberRental).toHaveBeenCalledOnce();
+});

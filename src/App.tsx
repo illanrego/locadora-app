@@ -120,7 +120,7 @@ export default function App() {
   const toggleBasket = (title: DiscoveryTitle) => {
     setBasket((current) => current.some((item) => item.identity.canonicalKey === title.identity.canonicalKey)
       ? current.filter((item) => item.identity.canonicalKey !== title.identity.canonicalKey)
-      : current.length < 3 ? [...current, title] : current);
+      : current.length < 10 ? [...current, title] : current);
   };
   const setSavedTitle = async (title: DiscoveryTitle, collection: SavedCollection, enabled: boolean): Promise<boolean> => {
     setSaved((current) => {
@@ -234,7 +234,7 @@ export default function App() {
             {immersiveEnabled && <button type="button" aria-expanded={immersiveFiltersOpen} onClick={() => setImmersiveFiltersOpen((value) => !value)}>{locale === 'pt-BR' ? 'Buscar fitas' : 'Find tapes'}</button>}
             <button type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}>{t.settings}</button>
             <button type="button" className="basket-button" onClick={() => setPanel('basket')}>
-              {t.basket}<span aria-label={`${basket.length} / 3`}>{basket.length}</span>
+              {t.basket}<span aria-label={`${basket.length} / 10`}>{basket.length}</span>
             </button>
           </nav>
         </div>
@@ -406,7 +406,7 @@ export default function App() {
           title={selected}
           locale={locale}
           isInBasket={inBasket(selected)}
-          basketFull={basket.length >= 3}
+          basketFull={basket.length >= 10}
           canWatch={Boolean(nativeCapabilities?.mpv.available)}
           savedForLater={hasLocalSavedTitle(saved, selected, 'watch_later')}
           favorite={hasLocalSavedTitle(saved, selected, 'favorite')}

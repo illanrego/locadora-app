@@ -32,7 +32,7 @@ function nativePropertyValue(property: string, value: unknown): unknown {
 }
 
 export class StremioShellTransport {
-  readonly capabilities = { nativeAssSubtitles: false, nativeVideoOverlay: true };
+  readonly capabilities = { nativeAssSubtitles: false, appOwnsVideoBackground: true };
 
   private readonly listeners = new Map<ShellEvent, Set<ShellListener>>();
   private queue: Promise<void> = Promise.resolve();

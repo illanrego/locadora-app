@@ -136,10 +136,20 @@ Automatic synchronization remains a feasibility proposal only.
 Linux playback uses the installed libmpv client and OpenGL render APIs inside a
 GTK GLArea layered into Tauri's existing main window. React reports the bounded
 video-frame geometry; the native widget draws only there and leaves Locadora's
-controls in the WebView. Fullscreen follows the app-owned video-frame rectangle in the expanded window.
-Pointer input passes through to activity-sensitive WebView controls; visible
-controls reserve space beside the native picture and hide after three idle
-seconds. Escape restores the windowed Locadora layout. Source resolution remains owned by official Stremio
+controls in the WebView. As of the 2026-09-29 fullscreen correction, the GTK
+stack is an opaque black base, native video, then a transparent WebView. React
+owns scoped transparency only while Watch is mounted, hiding the catalogue
+beneath it and restoring normal backgrounds on close. Stremio's ancestor
+background mutation stays bypassed via `appOwnsVideoBackground`.
+
+Fullscreen uses the complete native window regardless of control/panel
+visibility. The compact strip and right-side drawer paint above the picture;
+they do not resize it. Windowed playback still follows the app-owned frame.
+Bounds reports identify their presentation mode; a fullscreen report cannot
+be reused after restoring the window. Native window state overrides stale
+windowed measurements on entry. Controls retain activity auto-hide and
+keyboard/panel retention. Escape restores the windowed Locadora layout.
+Source resolution remains owned by official Stremio
 Video, while existing IPC continues to own bounded controls, events, buffering
 and subtitle delivery. No second mpv process or top-level playback window is
 created in embedded mode.
@@ -212,7 +222,21 @@ web checkout read-only. Desktop catalogue identities and cached native artwork
 remain authoritative. Maintain accessible controls and automatic 2D fallback.
 Fullscreen uses a compact neutral transport strip without the windowed title
 header or routine buffer status. Activity auto-hide and secondary player panels
-remain; GTK stacking still requires reserving visible space for the strip.
+remain. The 2026-09-29 D-015 composition correction supersedes the earlier
+space-reservation workaround: fullscreen controls now paint above native video.
+
+### D-020 — Shared account rental limit and compact membership previews
+
+Accepted 2026-10-06. User chooses 1–10 simultaneous active titles in desktop or
+web Carteirinha, default 3. This supersedes the fixed three-title rule. The member
+profile is authoritative; SQL serializes renting against profile updates and
+enforces the chosen limit. Lowering it never returns existing rentals. Desktop
+and web retain all active entries and block additional rentals when at/over the
+limit. The user authorized changes to the web/backend repository for this work
+and will run its production SQL migration manually.
+
+Carteirinha previews show three watch-later and three favorite titles, with
+explicit navigation to complete lists. Playback remains independent.
 
 ## Non-negotiable boundaries
 

@@ -11,6 +11,7 @@ import {
   returnMemberRental,
   type MemberSessionStatus,
   updateMemberProfile,
+  updateMemberRentalLimit,
 } from '../platform/nativeBridge';
 import type { Locale } from '../locadora/catalog';
 import { TitleReviews } from './TitleReviews';
@@ -66,6 +67,7 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
   const [historyBusy, setHistoryBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [collection, setCollection] = useState<'watchLater' | 'favorites' | null>(null);
   const pt = locale === 'pt-BR';
 
   async function loadState() {
@@ -155,6 +157,21 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
       await loadState();
     } catch (cause) {
       setError(messageFrom(cause, pt ? 'Não foi possível salvar seu nome público.' : 'Could not save your public username.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveRentalLimit(value: number) {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await updateMemberRentalLimit(value);
+      await loadState();
+      setNotice(pt ? 'Limite de aluguéis salvo.' : 'Rental limit saved.');
+    } catch (cause) {
+      setError(messageFrom(cause, pt ? 'Não foi possível salvar o limite.' : 'Could not save the limit.'));
     } finally {
       setBusy(false);
     }
@@ -255,6 +272,12 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
     ...(member?.collections.favorites ?? []).map((item) => item.canonicalKey),
   ]).size;
 
+  if (collection && member) return <section className="member-section">
+    <button type="button" onClick={() => setCollection(null)}>{pt ? 'Voltar à Carteirinha' : 'Back to membership'}</button>
+    <h3>{collection === 'watchLater' ? (pt ? 'Salvas para depois' : 'Saved for later') : (pt ? 'Favoritas' : 'Favorites')}</h3>
+    <TapeList onInspect={onInspect} items={member.collections[collection]} locale={locale} empty={pt ? 'Nenhuma fita nesta lista.' : 'No tapes in this list.'} />
+  </section>;
+
   return (
     <div className="member-overview">
       <div className="membership-card">
@@ -275,8 +298,13 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
         </form>
       ) : (
         <>
+          <label htmlFor="member-rental-limit">{pt ? 'Limite de aluguéis simultâneos' : 'Simultaneous rental limit'}</label>
+          <select id="member-rental-limit" value={member.profile.rentalLimit} disabled={busy} onChange={(event) => void saveRentalLimit(Number(event.target.value))}>
+            {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+          </select>
+          <p className="member-privacy">{pt ? 'Vale para o aplicativo e o site. Reduzir o limite não devolve suas fitas atuais.' : 'Applies to the app and website. Lowering the limit does not return existing rentals.'}</p>
           <dl className="member-counts">
-            <div><dt>{pt ? 'Ativas' : 'Active'}</dt><dd>{member.activeRental?.items.length ?? 0}/3</dd></div>
+            <div><dt>{pt ? 'Ativas' : 'Active'}</dt><dd>{member.activeRental?.items.length ?? 0}/{member.profile.rentalLimit}</dd></div>
             <div><dt>{pt ? 'Salvas' : 'Saved'}</dt><dd>{savedCount}</dd></div>
             <div><dt>{pt ? 'Devolvidas' : 'Returned'}</dt><dd>{member.history.length}{member.historyHasMore ? '+' : ''}</dd></div>
           </dl>
@@ -306,11 +334,13 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
           )}
           <section className="member-section">
             <h3>{pt ? 'Salvas para depois' : 'Saved for later'}</h3>
-            <TapeList onInspect={onInspect} items={member.collections.watchLater} locale={locale} empty={pt ? 'Nenhuma fita salva.' : 'No saved tapes.'} />
+            <TapeList onInspect={onInspect} items={member.collections.watchLater.slice(0, 3)} locale={locale} empty={pt ? 'Nenhuma fita salva.' : 'No saved tapes.'} />
+            <button type="button" onClick={() => setCollection('watchLater')}>{pt ? 'Abrir Assistir depois' : 'Open Watch later'} ({member.collections.watchLater.length})</button>
           </section>
           <section className="member-section">
             <h3>{pt ? 'Favoritas' : 'Favorites'}</h3>
-            <TapeList onInspect={onInspect} items={member.collections.favorites} locale={locale} empty={pt ? 'Nenhuma fita favorita.' : 'No favorite tapes.'} />
+            <TapeList onInspect={onInspect} items={member.collections.favorites.slice(0, 3)} locale={locale} empty={pt ? 'Nenhuma fita favorita.' : 'No favorite tapes.'} />
+            <button type="button" onClick={() => setCollection('favorites')}>{pt ? 'Abrir Favoritas' : 'Open Favorites'} ({member.collections.favorites.length})</button>
           </section>
           <section className="member-section">
             <h3>{pt ? 'Últimas devoluções' : 'Recent returns'}</h3>

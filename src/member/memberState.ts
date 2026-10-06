@@ -17,6 +17,7 @@ export interface MemberProfile {
   userId: string;
   username: string;
   createdAt: string | null;
+  rentalLimit: number;
 }
 
 export interface MemberState {
@@ -98,11 +99,12 @@ export function normalizeMemberState(value: unknown): MemberState {
     userId,
     username,
     createdAt: optionalDate(profileValue?.createdAt),
+    rentalLimit: normalizeRentalLimit(profileValue?.rentalLimit),
   } : null;
 
   const rentalValue = record(state.activeRental);
   const rentalId = boundedString(rentalValue?.id, 180);
-  const rentalItems = normalizeTitles(rentalValue?.items, 3);
+  const rentalItems = normalizeTitles(rentalValue?.items, 10);
   const activeRental = rentalId && rentalItems.length ? { id: rentalId, items: rentalItems } : null;
   const collectionsValue = record(state.collections);
 
@@ -134,4 +136,8 @@ export function memberDiscoveryTitle(title: MemberTitle): DiscoveryTitle | null 
     name: title.name,
     year: title.year,
   });
+}
+
+export function normalizeRentalLimit(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 10 ? value : 3;
 }

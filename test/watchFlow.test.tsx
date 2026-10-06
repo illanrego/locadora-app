@@ -60,6 +60,26 @@ function mount(quickWatchEnabled = true, locale: 'pt-BR' | 'en-US' = 'en-US') {
 }
 
 describe('cinema player interactions', () => {
+  it('scopes native video transparency to the player lifetime', async () => {
+    const view = mount();
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalled());
+    expect(document.documentElement).toHaveClass('player-open');
+    expect(screen.getByRole('dialog')).toHaveClass('has-video');
+    view.unmount();
+    expect(document.documentElement).not.toHaveClass('player-open');
+  });
+
+  it('toggles fullscreen in both directions by double-clicking the picture', async () => {
+    const view = mount();
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalled());
+    fireEvent.doubleClick(screen.getByLabelText('Synthetic screening video'));
+    expect(mocks.controller.setFullscreen).toHaveBeenLastCalledWith(true);
+    mocks.controller.state = { ...initialState, fullscreen: true };
+    view.rerender(<WatchFlow {...view.props} />);
+    fireEvent.doubleClick(screen.getByLabelText('Synthetic screening video'));
+    expect(mocks.controller.setFullscreen).toHaveBeenLastCalledWith(false);
+  });
+
   it('keeps successful playback uncluttered and switches sources through a secondary panel', async () => {
     const user = userEvent.setup();
     mount();

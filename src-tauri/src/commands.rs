@@ -377,8 +377,8 @@ fn validate_member_collection(update: &MemberCollectionUpdate) -> Result<(), Str
 }
 
 fn validate_member_rental(request: &MemberRentalRequest) -> Result<(), String> {
-    if request.titles.is_empty() || request.titles.len() > 3 {
-        return Err("Choose one to three distinct titles".into());
+    if request.titles.is_empty() || request.titles.len() > 10 {
+        return Err("Choose one to ten distinct titles".into());
     }
     let mut identities = HashSet::new();
     for title in &request.titles {
@@ -391,7 +391,7 @@ fn validate_member_rental(request: &MemberRentalRequest) -> Result<(), String> {
                 .is_some_and(|year| !(1870..=2100).contains(&year))
             || !identities.insert((title.content_type.as_str(), title.tmdb_id))
         {
-            return Err("Choose one to three distinct titles".into());
+            return Err("Choose one to ten distinct titles".into());
         }
     }
     Ok(())
@@ -909,6 +909,34 @@ pub async fn member_update_profile(update: MemberProfileUpdate) -> Result<Value,
     let body = serde_json::json!({ "username": username });
     let response = fetch_bounded_https_json_request(
         &format!("{MEMBER_API_BASE}/v1/profile"),
+        JsonRequestMethod::Put,
+        Some(&body),
+        Some(&token),
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if matches!(response.status, 401 | 403) {
+        delete_member_token()?;
+        return Err("Member session expired. Sign in again".into());
+    }
+    if !(200..300).contains(&response.status) {
+        return Err(member_service_error(response.status));
+    }
+    if let Some(refreshed_token) = response.refreshed_token {
+        store_member_token(&refreshed_token)?;
+    }
+    Ok(response.body)
+}
+
+#[tauri::command]
+pub async fn member_update_rental_limit(rental_limit: u8) -> Result<Value, String> {
+    if !(1..=10).contains(&rental_limit) {
+        return Err("Rental limit must be between 1 and 10".into());
+    }
+    let token = load_member_token()?.ok_or("Sign in to use your personal Locadora")?;
+    let body = serde_json::json!({ "rentalLimit": rental_limit });
+    let response = fetch_bounded_https_json_request(
+        &format!("{MEMBER_API_BASE}/v1/rental-limit"),
         JsonRequestMethod::Put,
         Some(&body),
         Some(&token),
@@ -1693,7 +1721,7 @@ mod tests {
     }
 
     #[test]
-    fn member_rentals_are_bounded_to_three_distinct_canonical_titles() {
+    fn member_rentals_are_bounded_to_ten_distinct_canonical_titles() {
         let title = || MemberRentalTitle {
             tmdb_id: 603,
             content_type: "movie".into(),
@@ -1715,7 +1743,18 @@ mod tests {
         assert!(validate_member_rental(&MemberRentalRequest { titles: vec![] }).is_err());
         assert!(
             validate_member_rental(&MemberRentalRequest {
-                titles: (0..4)
+                titles: (0..10)
+                    .map(|index| MemberRentalTitle {
+                        tmdb_id: 600 + index,
+                        ..title()
+                    })
+                    .collect(),
+            })
+            .is_ok()
+        );
+        assert!(
+            validate_member_rental(&MemberRentalRequest {
+                titles: (0..11)
                     .map(|index| MemberRentalTitle {
                         tmdb_id: 600 + index,
                         ..title()

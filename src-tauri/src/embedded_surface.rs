@@ -34,6 +34,7 @@ pub struct VideoBounds {
     viewport_width: f64,
     viewport_height: f64,
     visible: bool,
+    fullscreen: bool,
 }
 
 impl VideoBounds {
@@ -81,6 +82,20 @@ impl VideoBounds {
             .round()
             .clamp(0.0, f64::from(height - top)) as i32;
         [left, top, right, bottom]
+    }
+
+    fn presentation_margins(&self, width: i32, height: i32, fullscreen: bool) -> Option<[i32; 4]> {
+        if fullscreen {
+            // Native window state owns fullscreen dimensions, even while the
+            // WebView is still reporting its previous windowed layout.
+            Some([0; 4])
+        } else if self.fullscreen {
+            // Never stretch a fullscreen report into the restored window.
+            // Wait for its new windowed frame instead of cropping the movie.
+            None
+        } else {
+            Some(self.margins(width, height))
+        }
     }
 }
 
@@ -130,12 +145,17 @@ impl Surface {
     fn layout(&self) {
         let usable = self.usable_bounds();
         let margins = if let Some(bounds) = usable {
-            bounds.margins(
+            bounds.presentation_margins(
                 self.overlay.allocated_width().max(1),
                 self.overlay.allocated_height().max(1),
+                self.fullscreen,
             )
         } else {
-            [0; 4]
+            None
+        };
+        let Some(margins) = margins else {
+            self.area.hide();
+            return;
         };
         self.area.set_margin_start(margins[0]);
         self.area.set_margin_top(margins[1]);
@@ -166,7 +186,15 @@ pub fn install(window: &WebviewWindow) -> Result<(), String> {
         content.pack_start(&child, true, true, 0);
     }
     let overlay = gtk::Overlay::new();
-    overlay.add(&content);
+    // Keep an opaque black native base, then video, then a transparent WebView.
+    // The WebView must be last so menus always paint above native playback.
+    let background = gtk::DrawingArea::new();
+    background.connect_draw(|_, context| {
+        context.set_source_rgb(0.0, 0.0, 0.0);
+        let _ = context.paint();
+        glib::Propagation::Stop
+    });
+    overlay.add(&background);
     let area = gtk::GLArea::new();
     area.set_required_version(3, 2);
     area.set_has_alpha(false);
@@ -179,9 +207,17 @@ pub fn install(window: &WebviewWindow) -> Result<(), String> {
     area.set_vexpand(true);
     area.set_no_show_all(true);
     overlay.add_overlay(&area);
-    // Mouse and keyboard input stay with the React surface and its controls.
     overlay.set_overlay_pass_through(&area, true);
+    content.set_halign(gtk::Align::Fill);
+    content.set_valign(gtk::Align::Fill);
+    overlay.add_overlay(&content);
+    overlay.set_overlay_pass_through(&content, false);
+    let webview: &tauri::Webview = window.as_ref();
+    webview
+        .set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)))
+        .map_err(|_| "Could not prepare player composition")?;
     vbox.pack_start(&overlay, true, true, 0);
+    background.show();
     content.show_all();
     overlay.show();
 
@@ -408,11 +444,43 @@ mod tests {
             viewport_width: 1000.0,
             viewport_height: 600.0,
             visible: true,
+            fullscreen: false,
         };
         assert_eq!(bounds.margins(2000, 1200), [200, 100, 600, 500]);
         assert!(bounds.validate().is_ok());
         bounds.x = f64::NAN;
         assert!(bounds.validate().is_err());
+    }
+
+    #[test]
+    fn fullscreen_transitions_do_not_reuse_geometry_from_the_other_mode() {
+        let mut bounds = VideoBounds {
+            x: 0.0,
+            y: 60.0,
+            width: 960.0,
+            height: 620.0,
+            viewport_width: 1280.0,
+            viewport_height: 800.0,
+            visible: true,
+            fullscreen: false,
+        };
+        // Entering fullscreen ignores the old header, dock and source drawer.
+        assert_eq!(bounds.presentation_margins(1920, 1080, true), Some([0; 4]));
+        bounds.fullscreen = true;
+        assert_eq!(bounds.presentation_margins(1920, 1080, true), Some([0; 4]));
+        // Exiting must not squeeze the fullscreen movie under restored chrome.
+        assert_eq!(bounds.presentation_margins(1280, 800, false), None);
+        bounds.fullscreen = false;
+        assert_eq!(
+            bounds.presentation_margins(1280, 800, false),
+            Some([0, 60, 320, 120])
+        );
+        // Another enter/exit cycle uses the same rules, including HiDPI sizing.
+        assert_eq!(bounds.presentation_margins(3840, 2160, true), Some([0; 4]));
+        assert_eq!(
+            bounds.presentation_margins(2560, 1600, false),
+            Some([0, 120, 640, 240])
+        );
     }
 
     #[test]

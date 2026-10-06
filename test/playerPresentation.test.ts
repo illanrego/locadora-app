@@ -5,18 +5,32 @@ import { preserveOverlayBackgrounds } from '../tools/shellOverlayShim';
 import { visibleVideoBounds } from '../src/media/videoBounds';
 
 describe('native video presentation', () => {
-  it('guards the actual upstream ancestor-background mutation for native overlays only', () => {
+  it('leaves background ownership with React for composited native playback', () => {
     const result = preserveOverlayBackgrounds(shell);
     const start = result.indexOf('function setBackground(visible)');
     const end = result.indexOf('// Preserve loading', start);
     const factory = new Function('options', 'window', `${result.slice(start, end)}; return setBackground;`);
     const parent = { style: { background: '#123' }, parentElement: null };
     const container = { style: { background: '#000' }, parentElement: parent };
-    factory({ containerElement: container, shellTransport: { capabilities: { nativeVideoOverlay: true } } }, {})(false);
+    factory({ containerElement: container, shellTransport: { capabilities: { appOwnsVideoBackground: true } } }, {})(false);
     expect(container.style.background).toBe('#000');
     expect(parent.style.background).toBe('#123');
     factory({ containerElement: container }, {})(false);
     expect(parent.style.background).toBe('transparent');
+  });
+  it('keeps fullscreen video at the entire viewport through stale measurements and menu changes', () => {
+    for (const rect of [
+      { left: 0, top: 60, right: 960, bottom: 680 },
+      { left: 0, top: 0, right: 1600, bottom: 1000 },
+      { left: 0, top: 0, right: 0, bottom: 0 },
+    ]) {
+      expect(visibleVideoBounds(rect, 1920, 1080, true, true)).toEqual({
+        x: 0, y: 0, width: 1920, height: 1080, viewportWidth: 1920,
+        viewportHeight: 1080, visible: true, fullscreen: true,
+      });
+    }
+    expect(visibleVideoBounds({ left: 0, top: 60, right: 960, bottom: 680 }, 1280, 800, true, false))
+      .toMatchObject({ width: 960, height: 620, y: 60, fullscreen: false });
   });
   it('keeps a partially clipped or fractionally overflowing video visible', () => {
     const bounds = visibleVideoBounds({ left: -0.1, top: 50, right: 1000.1, bottom: 650 }, 1000, 600, true);

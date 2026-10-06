@@ -4,8 +4,8 @@ export function preserveOverlayBackgrounds(source: string): string {
   const marker = 'function setBackground(visible) {';
   if (!source.includes(marker)) throw new Error('Stremio ShellVideo background contract changed');
   return source.replace(marker, `${marker}
-        // Locadora paints native video ABOVE the WebView, not behind it.
-        if (options.shellTransport && options.shellTransport.capabilities && options.shellTransport.capabilities.nativeVideoOverlay) return;`);
+        // React owns scoped transparency and restores it when playback closes.
+        if (options.shellTransport && options.shellTransport.capabilities && options.shellTransport.capabilities.appOwnsVideoBackground) return;`);
 }
 
 export function shellOverlayShim(): Plugin {

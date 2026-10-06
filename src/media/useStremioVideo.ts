@@ -155,7 +155,9 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
       const element = viewportRef.current ?? containerRef.current;
       if (!element) return;
       const bounds = element.getBoundingClientRect();
-      const next = visibleVideoBounds(bounds, window.innerWidth, window.innerHeight, nativeSurfaceVisible.current);
+      const fullscreen = Boolean(element.closest('.player-is-fullscreen'));
+      const next = visibleVideoBounds(bounds, window.innerWidth, window.innerHeight, nativeSurfaceVisible.current, fullscreen);
+      if (lastGood?.fullscreen !== fullscreen) lastGood = null;
       if (probes < 12) {
         probes += 1;
         const style = window.getComputedStyle(element);
@@ -235,7 +237,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
       disposed = true;
       eventListeners.forEach((unlisten) => unlisten());
       nativeSurfaceVisible.current = false;
-      void setNativeVideoBounds({ x: 0, y: 0, width: 0, height: 0, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight, visible: false });
+      void setNativeVideoBounds({ x: 0, y: 0, width: 0, height: 0, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight, visible: false, fullscreen: false });
     };
   }, []);
 

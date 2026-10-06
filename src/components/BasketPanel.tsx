@@ -59,8 +59,8 @@ export function BasketPanel({ locale, basket, onRemove, onComplete, onOpenAccoun
         setStatus(pt ? 'Conclua seu nome público antes de alugar.' : 'Finish your public username before renting.');
         return;
       }
-      if ((before.activeRental?.items.length ?? 0) + selected.length > 3) {
-        setStatus(pt ? 'Devolva uma fita antes: são no máximo 3 aluguéis ativos.' : 'Return a tape first: at most 3 rentals can be active.');
+      if ((before.activeRental?.items.length ?? 0) + selected.length > before.profile.rentalLimit) {
+        setStatus(pt ? `Seu limite é ${before.profile.rentalLimit}. Devolva fitas ou ajuste o limite na Carteirinha.` : `Your limit is ${before.profile.rentalLimit}. Return tapes or adjust the limit in Membership.`);
         return;
       }
       const titles = selected.map((title) => ({

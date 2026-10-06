@@ -77,6 +77,11 @@ export async function updateMemberProfile(username: string): Promise<unknown> {
   return invoke('member_update_profile', { update: { username } });
 }
 
+export async function updateMemberRentalLimit(rentalLimit: number): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Locadora accounts are available in the desktop app');
+  return invoke('member_update_rental_limit', { rentalLimit });
+}
+
 export async function updateMemberCollection(request: {
   collection: 'watch_later' | 'favorite';
   enabled: boolean;
@@ -171,6 +176,7 @@ export interface NativeVideoBounds {
   viewportWidth: number;
   viewportHeight: number;
   visible: boolean;
+  fullscreen: boolean;
 }
 
 export async function setNativeVideoBounds(request: NativeVideoBounds): Promise<void> {
