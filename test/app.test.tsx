@@ -80,15 +80,6 @@ describe('accessible Locadora shelf', () => {
     expect(document.documentElement.lang).toBe('en-US');
   });
 
-  it('filters the current shelf by title without losing keyboard buttons', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    const search = screen.getByRole('searchbox', { name: 'Pesquisar na estante' });
-    await user.type(search, 'train');
-    expect(await screen.findByRole('button', { name: /The Great Train Robbery/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Agent 327/i })).not.toBeInTheDocument();
-  });
-
   it('opens the year choices in the app-rendered picker', async () => {
     const user = userEvent.setup();
     render(<App />);

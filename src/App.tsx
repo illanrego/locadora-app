@@ -35,7 +35,6 @@ export default function App() {
   const [stand, setStand] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
-  const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<DiscoveryTitle | null>(null);
   const [basket, setBasket] = useState<DiscoveryTitle[]>([]);
   const [saved, setSaved] = useState(readLocalSavedCollections);
@@ -85,15 +84,7 @@ export default function App() {
     return () => controller.abort();
   }, [fetchPage]);
 
-  const visiblePages = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase(locale);
-    return pages.map((page) => ({
-      ...page,
-      titles: normalized
-        ? page.titles.filter((title) => title.name.toLocaleLowerCase(locale).includes(normalized))
-        : page.titles,
-    }));
-  }, [locale, pages, query]);
+  const visiblePages = pages;
   const visibleTitles = useMemo(() => visiblePages.flatMap((page) => page.titles), [visiblePages]);
 
   const immersiveTitles = visiblePages[Math.min(immersiveStand, Math.max(0, visiblePages.length - 1))]?.titles ?? [];
@@ -108,7 +99,6 @@ export default function App() {
   };
   const configureImmersive = (index: number, nextYear: number) => {
     setGenreIndex(index);
-    setQuery('');
     setYearDraft(clampYear(nextYear));
     setYear(clampYear(nextYear));
     setImmersiveStand(0);
@@ -148,7 +138,6 @@ export default function App() {
   };
   const chooseGenre = (index: number) => {
     setGenreIndex(index);
-    setQuery('');
   };
   const applyYear = () => setYear(clampYear(yearDraft));
   const inspectTitle = useCallback((title: DiscoveryTitle) => {
@@ -282,10 +271,6 @@ export default function App() {
             <button type="button" onClick={() => setYearDraft((value) => clampYear(value + 1))} aria-label={locale === 'pt-BR' ? 'Próximo ano' : 'Next year'}>+</button>
             <button type="submit">{t.go}</button>
           </form>
-          <label className="search-control">
-            <span>{t.search}</span>
-            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={locale === 'pt-BR' ? 'Nome da fita…' : 'Tape name…'} />
-          </label>
         </div>
 
         {settingsOpen && (
