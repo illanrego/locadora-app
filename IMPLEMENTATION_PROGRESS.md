@@ -2,9 +2,33 @@
 
 Last updated: 2026-10-06
 Current milestone: investigate source-dependent playback hiccups (separate from completed 2D UI work)
-Status: UI published; timing correction checked and rebuilt; source-specific diagnosis unconfirmed
+Status: buffering reserve checked and release rebuilt; source playback retest pending
 
 ## Resume checkpoint
+
+2026-10-06 network-buffering follow-up:
+- User suspects connection speed and requests buffering comparable to Stremio.
+  Existing mpv policy resumed after only five seconds. Shared native policy now
+  targets 15 seconds before starting/resuming, 120 seconds read-ahead with
+  explicit cache-secs, and 256 MiB forward / 32 MiB backward ceilings. mpv owns
+  cache pauses; user pause is not overridden. See D-023 for limits/tradeoff.
+- Added a localized recovery overlay for already-loaded video/fullscreen;
+  it clears on recovery or user pause. No member-state or web changes.
+- Compared official Stremio shell defaults and the bundled Go engine's adaptive
+  torrent read-ahead (8–64 MiB); these engines differ. No failing-source trace
+  was captured and no universal root-cause or live playback claim is made.
+- `npm run check -- --maxWorkers=4` passed (typecheck, 134 tests/33 files,
+  production build; the flag applied to the build script, tests used defaults).
+  `cargo test --manifest-path crates/native-core/Cargo.toml -- --test-threads=1`
+  passed 19 tests, including live-libmpv reads of the new cache settings.
+  `cargo clippy --manifest-path crates/native-core/Cargo.toml --all-targets --
+  -D warnings` passed; core Cargo fmt and `git diff --check` passed.
+  UI regression covers fullscreen buffering, recovery and manual pause.
+  `cargo test --manifest-path src-tauri/Cargo.toml` passed 26 tests (2 opt-in
+  ignored). Both Cargo fmt checks passed. `npm run tauri -- build --no-bundle`
+  passed (optimized native build 1m50s); refreshed
+  `src-tauri/target/release/wills-locadora-player`. Existing bundle-size advisory
+  remains. No GUI/browser testing performed.
 
 2026-10-06 completed 2D UI milestone:
 - User prefers desktop normal-mode colors/layout for the web. Web commit

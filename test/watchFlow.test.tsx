@@ -69,6 +69,20 @@ describe('cinema player interactions', () => {
     expect(document.documentElement).not.toHaveClass('player-open');
   });
 
+  it('shows a recovery message during a fullscreen stall and clears it on resume or user pause', async () => {
+    const view = mount();
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalled());
+    mocks.controller.state = { ...initialState, fullscreen: true, buffering: true };
+    view.rerender(<WatchFlow {...view.props} />);
+    expect(screen.getByText('Waiting for more video before continuing.')).toBeInTheDocument();
+    mocks.controller.state = { ...initialState, fullscreen: true };
+    view.rerender(<WatchFlow {...view.props} />);
+    expect(screen.queryByText('Waiting for more video before continuing.')).not.toBeInTheDocument();
+    mocks.controller.state = { ...initialState, fullscreen: true, buffering: true, paused: true };
+    view.rerender(<WatchFlow {...view.props} />);
+    expect(screen.queryByText('Waiting for more video before continuing.')).not.toBeInTheDocument();
+  });
+
   it('toggles fullscreen in both directions by double-clicking the picture', async () => {
     const view = mount();
     await waitFor(() => expect(mocks.controller.load).toHaveBeenCalled());

@@ -76,15 +76,11 @@ impl EmbeddedMpv {
             ("input-default-bindings", "no"),
             ("input-vo-keyboard", "no"),
             ("hwdec", "auto"),
-            ("cache", "yes"),
-            ("cache-pause", "yes"),
-            ("cache-pause-initial", "yes"),
-            ("cache-pause-wait", "5"),
-            ("demuxer-readahead-secs", "60"),
-            ("demuxer-max-bytes", "134217728"),
-            ("demuxer-max-back-bytes", "33554432"),
             ("input-ipc-server", socket),
-        ] {
+        ]
+        .into_iter()
+        .chain(crate::buffering::OPTIONS.iter().copied())
+        {
             let name = CString::new(name).map_err(|_| PlayerError::CommandFailed)?;
             let value = CString::new(value).map_err(|_| PlayerError::CommandFailed)?;
             if unsafe { mpv_set_option_string(handle, name.as_ptr(), value.as_ptr()) } < 0 {
@@ -230,6 +226,30 @@ mod tests {
             offset, 0.0,
             "GTK presents immediately; mpv must not submit early"
         );
+        // Verify the running libmpv accepts the shared buffering policy.
+        for (name, expected) in [
+            ("cache-pause-wait", 15.0),
+            ("cache-secs", 120.0),
+            ("demuxer-readahead-secs", 120.0),
+            ("demuxer-max-bytes", 268435456.0),
+            ("demuxer-max-back-bytes", 33554432.0),
+        ] {
+            let property = CString::new(name).unwrap();
+            let mut value = f64::NAN;
+            assert_eq!(
+                unsafe {
+                    mpv_get_property(
+                        owner.0,
+                        property.as_ptr(),
+                        5,
+                        (&mut value as *mut f64).cast(),
+                    )
+                },
+                0,
+                "property {name}"
+            );
+            assert_eq!(value, expected, "property {name}");
+        }
         drop(owner);
         std::fs::remove_dir_all(root).unwrap();
     }

@@ -201,15 +201,13 @@ fn mpv_arguments(socket_path: &Path, video_output: VideoOutput) -> Vec<String> {
         "--no-terminal".into(),
         "--really-quiet".into(),
         "--msg-level=all=no".into(),
-        "--cache=yes".into(),
-        "--cache-pause=yes".into(),
-        "--cache-pause-initial=yes".into(),
-        "--cache-pause-wait=5".into(),
-        "--demuxer-readahead-secs=60".into(),
-        "--demuxer-max-bytes=134217728".into(),
-        "--demuxer-max-back-bytes=33554432".into(),
         format!("--input-ipc-server={}", socket_path.display()),
     ];
+    args.extend(
+        crate::buffering::OPTIONS
+            .iter()
+            .map(|(name, value)| format!("--{name}={value}")),
+    );
     match video_output {
         VideoOutput::Embedded => unreachable!("embedded playback uses libmpv, not a child window"),
         VideoOutput::Window => args.push("--force-window=yes".into()),

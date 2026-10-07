@@ -336,6 +336,10 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
               <span>{phaseLabels[phase][pt ? 0 : 1]}</span>
             </div>
           </div>
+          {video.state.loaded && phase === 'buffering' && <div className="cinema-rebuffer" role="status">
+            <strong>{pt ? 'Carregando buffer…' : 'Buffering…'}</strong>
+            <span>{pt ? 'Aguardando mais vídeo para continuar.' : 'Waiting for more video before continuing.'}</span>
+          </div>}
         </div>
         {panelOpen && <aside className="cinema-panel" id="cinema-options" aria-label={tracksVisible ? (pt ? 'Áudio e legendas' : 'Audio and subtitles') : (pt ? 'Fontes disponíveis' : 'Available sources')}>
           <div className="cinema-panel-heading"><h3>{tracksVisible ? (pt ? 'Áudio e legendas' : 'Audio & subtitles') : (pt ? 'Escolha uma fonte' : 'Choose a source')}</h3>

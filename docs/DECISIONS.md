@@ -258,6 +258,25 @@ Reference: [mpv render API timing contract](https://github.com/mpv-player/mpv/bl
 `MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME`; also checked against installed
 `/usr/include/mpv/render.h`.
 
+### D-023 — Network buffering reserve
+
+Accepted 2026-10-06 after the user requested resilience to uneven internet.
+Supersedes D-014's five-second resume and 128 MiB forward-cache policy.
+Use one native policy for embedded and diagnostic child playback: automatic
+initial/underrun cache pauses, 15-second resume target, explicit 120-second
+cache/read-ahead target, 256 MiB forward and 32 MiB backward ceilings. EOF or
+reaching the byte ceiling may resume earlier, as defined by mpv. Explicit
+`cache-secs` avoids its default overriding `demuxer-readahead-secs`. This is
+bounded RAM buffering, not persistent media storage. mpv owns recovery so user
+pause remains independent; do not add frontend timers that force play.
+Show a localized recovery overlay over loaded video, including fullscreen;
+remove it when recovery completes or the user pauses. Engine settings remain
+unchanged: the bundled compatible Go engine is not identical to desktop
+Stremio's engine. This mitigates brief starvation; it does not establish the
+reported source's root cause or guarantee playback below sustained bitrate.
+
+Reference: [mpv cache options](https://mpv.io/manual/stable/#cache).
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,
