@@ -20,6 +20,9 @@ Status: implemented, automated checks passed and optimized desktop rebuilt; owne
   `/v1/credit-stand` with `job=`, `type=all`, `ignoreStoreYear=true`, and
   `providers=`. Returning to the aisle restores the genre shelf. Empty results
   expose `Ver todos os streamings`, re-requesting the same unfiltered stand.
+- A follow-up parity pass puts the person label and relevance/year/rating sort
+  control on the immersive plaque as well as the 2D browse controls. Applying
+  the plaque draft with Ir returns to the aisle, matching the web behavior.
 - The desktop has no streaming-provider browse preference; no provider state is
   written by this flow. Sort is a local browse preference (`relevance`, `year`,
   `rating`) applied by Ir and sent to both shelf sources; changing browse
@@ -39,6 +42,13 @@ Status: implemented, automated checks passed and optimized desktop rebuilt; owne
   passed. `npm run tauri -- build --no-bundle` passed, refreshing
   `src-tauri/target/release/wills-locadora-player`. No
   GUI/browser, live Worker response, or playback verification was performed.
+- Follow-up static checks: `npm run typecheck` passed; `npm test --
+  test/immersiveAdapter.test.tsx test/immersiveScene.test.ts` passed 2 tests/2
+  files. Final `npm run check` passed typecheck, 139 tests/35 files (0 failed),
+  and Vite production build with the existing large-chunk advisory. Final
+  `npm run tauri -- build --no-bundle` passed (optimized native build 1m26s)
+  and refreshed `src-tauri/target/release/wills-locadora-player`. No
+  GUI/browser or live Worker response was exercised.
 
 2026-10-06 network-buffering follow-up:
 - User suspects connection speed and requests buffering comparable to Stremio.

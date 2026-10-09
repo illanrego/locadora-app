@@ -22,9 +22,12 @@ export function createImmersiveShelf(options: {
   theme: ImmersiveTheme;
   onSelect(title: SceneTitle): void;
   onBoundary(direction: string): void;
-  onConfigure(draft: { genre: string; year: number }): void;
+  onConfigure(draft: { genre: string; year: number; sort: 'relevance' | 'year' | 'rating' }): void;
   plaqueOptions: {
     genres: string[]; genreLabel: string; yearLabel: string;
     go: string; allProviders: string; allYears: string;
+    sort: 'relevance' | 'year' | 'rating'; sortLabel: string;
+    sortChoices: Array<['relevance' | 'year' | 'rating', string]>;
+    standLabel?: string;
   };
 }): ShelfScene;

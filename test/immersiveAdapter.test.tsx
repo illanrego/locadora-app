@@ -21,11 +21,14 @@ it('keeps original identities, pauses playback competition and ignores artwork a
   const title = normalizeDiscoveryTitle({ id: 1, name: 'Synthetic', type: 'movie', posterUrl: 'https://image.tmdb.org/t/p/w500/synthetic.jpg' })!;
   const inspect = vi.fn();
   const failed = vi.fn();
-  const props = { titles: [title], genre: GENRES[0], year: 1999, locale: 'en-US' as const, stand: 0,
+  const props = { titles: [title], genre: GENRES[0], year: 1999, locale: 'en-US' as const, stand: 0, sort: 'rating' as const, standLabel: 'Stand: Synthetic person',
     onInspect: inspect, onFailure: failed, onReady: vi.fn(), onConfigure: vi.fn(), onNavigate: vi.fn() };
   const view = render(<ImmersiveShelf {...props} />);
   const options = mocks.create.mock.calls[0][0];
   expect(options.titles[0].posterUrl).toBe('');
+  expect(options.plaqueOptions).toMatchObject({ sort: 'rating', standLabel: 'Stand: Synthetic person' });
+  options.onConfigure({ genre: GENRES[0].label['en-US'], year: 2000, sort: 'year' });
+  expect(props.onConfigure).toHaveBeenCalledWith(0, 2000, 'year');
   options.onSelect(options.titles[0]);
   expect(inspect).toHaveBeenCalledWith(title);
   view.rerender(<ImmersiveShelf {...props} paused />);

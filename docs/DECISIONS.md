@@ -289,9 +289,10 @@ window disabled (`ignoreStoreYear=true`). The desktop has no provider
 preference, so it sends `providers=` from the first request. The empty-stand
 action repeats the unfiltered request without changing any saved preference.
 The same stand pages feed both the 2D and immersive shelves, with 2D remaining
-the required fallback. Sorting is a local browse preference applied by Ir and
-sent to aisle and person-stand requests; changing browse filters returns to the
-aisle. Public metadata calls use fixed native routes to the existing Locadora
+the required fallback. The immersive plaque shows the person stand label and
+offers the same sort choices as the 2D browse controls. Sorting is a local
+browse preference applied by Ir and sent to aisle and person-stand requests;
+changing browse filters returns to the aisle. Public metadata calls use fixed native routes to the existing Locadora
 Worker origin; no member or media state participates.
 
 ## Non-negotiable boundaries

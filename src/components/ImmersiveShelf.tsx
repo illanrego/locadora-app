@@ -3,6 +3,7 @@ import type { DiscoveryTitle } from '../domain/content';
 import { GENRES, type GenreDefinition, type Locale } from '../locadora/catalog';
 import { DEFAULT_IMMERSIVE_THEME, IMMERSIVE_THEMES } from '../locadora/immersive';
 import { resolveArtwork } from '../locadora/artworkCache';
+import type { ShelfSort } from '../locadora/discovery';
 import { createImmersiveShelf, type ShelfScene, type SceneTitle } from '../locadora/web-scene/immersive-shelf.mjs';
 
 interface ImmersiveShelfProps {
@@ -11,15 +12,17 @@ interface ImmersiveShelfProps {
   year: number;
   locale: Locale;
   stand: number;
+  sort: ShelfSort;
+  standLabel?: string;
   paused?: boolean;
   onInspect: (title: DiscoveryTitle) => void;
   onReady: () => void;
   onFailure: () => void;
-  onConfigure: (genreIndex: number, year: number) => void;
+  onConfigure: (genreIndex: number, year: number, sort: ShelfSort) => void;
   onNavigate: (direction: number) => void;
 }
 
-export default function ImmersiveShelf({ titles, genre, year, locale, stand, paused = false, onInspect, onReady, onFailure, onConfigure, onNavigate }: ImmersiveShelfProps) {
+export default function ImmersiveShelf({ titles, genre, year, locale, stand, sort, standLabel, paused = false, onInspect, onReady, onFailure, onConfigure, onNavigate }: ImmersiveShelfProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<ShelfScene | null>(null);
   const callbacks = useRef({ onInspect, onReady, onFailure, onConfigure, onNavigate });
@@ -56,12 +59,18 @@ export default function ImmersiveShelf({ titles, genre, year, locale, stand, pau
         onBoundary: (direction) => callbacks.current.onNavigate(direction === 'left' || direction === 'up' ? -1 : 1),
         onConfigure: (draft) => {
           const index = GENRES.findIndex((item) => item.label[locale] === draft.genre);
-          if (index >= 0) callbacks.current.onConfigure(index, draft.year);
+          if (index >= 0) callbacks.current.onConfigure(index, draft.year, draft.sort);
         },
         plaqueOptions: {
           genres: GENRES.map((item) => item.label[locale]),
           genreLabel: locale === 'pt-BR' ? 'Gênero' : 'Genre', yearLabel: locale === 'pt-BR' ? 'Ano' : 'Year',
           go: locale === 'pt-BR' ? 'IR' : 'GO', allProviders: '', allYears: '',
+          sort, sortLabel: locale === 'pt-BR' ? 'Ordenar por' : 'Sort by', standLabel,
+          sortChoices: [
+            ['relevance', locale === 'pt-BR' ? 'Relevância' : 'Relevance'],
+            ['year', locale === 'pt-BR' ? 'Ano' : 'Year'],
+            ['rating', locale === 'pt-BR' ? 'Avaliação' : 'Rating'],
+          ],
         },
       });
       sceneRef.current = scene;
@@ -92,7 +101,7 @@ export default function ImmersiveShelf({ titles, genre, year, locale, stand, pau
       urls.forEach((url) => URL.revokeObjectURL(url));
       host.replaceChildren();
     };
-  }, [genre, locale, stand, titles, year]);
+  }, [genre, locale, sort, stand, standLabel, titles, year]);
 
   return <>
     <div ref={hostRef} className="immersive-stage" id="immersive-shelf" />

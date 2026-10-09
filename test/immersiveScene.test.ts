@@ -30,7 +30,7 @@ it('constructs the web room, selects its tapes by keyboard and disposes its canv
   const item = { ...title, id: title.identity.canonicalKey, type: title.identity.type, posterUrl: '' };
   const scene = createImmersiveShelf({ container: host, titles: [item], genre: 'Action', year: 1999, type: 'movie', stand: 0,
     theme: DEFAULT_IMMERSIVE_THEME, onSelect: selected, onBoundary: vi.fn(), onConfigure: vi.fn(),
-    plaqueOptions: { genres: ['Action'], genreLabel: 'Genre', yearLabel: 'Year', go: 'Go', allYears: '', allProviders: '' } });
+    plaqueOptions: { genres: ['Action'], genreLabel: 'Genre', yearLabel: 'Year', go: 'Go', allYears: '', allProviders: '', sort: 'relevance', sortLabel: 'Sort by', sortChoices: [['relevance', 'Relevance'], ['year', 'Year'], ['rating', 'Rating']] } });
   frames.shift()!(100);
   expect(render).toHaveBeenCalled();
   host.querySelector('canvas')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));

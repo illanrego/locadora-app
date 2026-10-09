@@ -113,11 +113,14 @@ export default function App() {
       void fetchPage(pages.length).then((loaded) => { if (loaded) setImmersiveStand(next); });
     }
   };
-  const configureImmersive = (index: number, nextYear: number) => {
+  const configureImmersive = (index: number, nextYear: number, nextSort: ShelfSort) => {
     setCreditStand(null);
     setGenreIndex(index);
     setYearDraft(clampYear(nextYear));
     setYear(clampYear(nextYear));
+    setSortDraft(nextSort);
+    setSort(nextSort);
+    try { window.localStorage.setItem('locadora.sort', nextSort); } catch { /* Browsing still works without persistence. */ }
     setImmersiveStand(0);
   };
 
@@ -363,7 +366,8 @@ export default function App() {
       {immersiveEnabled ? <main className="immersive-room" id="top" aria-label={locale === 'pt-BR' ? 'Locadora imersiva' : 'Immersive store'}>
         {creditStand && <div className="credit-stand-heading"><strong>{locale === 'pt-BR' ? 'Estante' : 'Stand'}: {creditStand.name} · {creditStand.department}</strong><button type="button" onClick={backToAisle}>{locale === 'pt-BR' ? 'Voltar ao corredor' : 'Back to aisle'}</button></div>}
         {pages.length > 0 && <Suspense fallback={<p className="immersive-loading">{t.loading}</p>}>
-          <ImmersiveShelf titles={immersiveTitles} genre={genre} year={year} locale={locale} stand={immersiveStand}
+          <ImmersiveShelf titles={immersiveTitles} genre={genre} year={year} locale={locale} stand={immersiveStand} sort={sort}
+            standLabel={creditStand ? `${locale === 'pt-BR' ? 'Estante' : 'Stand'}: ${creditStand.name}` : undefined}
             paused={watchTitle !== null || selected !== null || panel !== null || mediaSettingsOpen || donationOpen}
             onInspect={inspectTitle} onReady={immersiveStarted} onFailure={immersiveFailed}
             onConfigure={configureImmersive} onNavigate={navigateImmersive} />
