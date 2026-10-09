@@ -29,6 +29,10 @@ Status: implemented, automated checks passed and optimized desktop rebuilt; owne
   filters leaves the person stand. Person and stand requests use fixed native
   Worker-origin commands and the existing browser public-API path. No member,
   player, add-on or web-repository file was changed. See D-024.
+- Owner layout fix after the port: the browse sort field stretched across the
+  whole grid column and pushed the row, so "Ordenar por" now shares the desktop
+  row with genre and year, its select sized to the longest option (full width
+  again only under 900px).
 - Checks: `npm run typecheck` passed; `npm test -- test/creditStands.test.tsx`
   initially found one incorrect legacy-name test expectation (the names are
   separate rows), corrected before the full run. `npm test --

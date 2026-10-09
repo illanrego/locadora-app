@@ -317,7 +317,7 @@ export default function App() {
             <button type="button" onClick={() => setYearDraft((value) => clampYear(value + 1))} aria-label={locale === 'pt-BR' ? 'Próximo ano' : 'Next year'}>+</button>
             <button type="submit">{t.go}</button>
           </form>
-          <label>
+          <label className="sort-picker">
             <span>{locale === 'pt-BR' ? 'Ordenar por' : 'Sort by'}</span>
             <select value={sortDraft} onChange={(event) => setSortDraft(event.target.value as ShelfSort)}>
               <option value="relevance">{locale === 'pt-BR' ? 'Relevância' : 'Relevance'}</option>

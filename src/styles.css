@@ -64,13 +64,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .basket-button { display: inline-flex; align-items: center; gap: .45rem; }
 .basket-button span { display: grid; min-width: 24px; aspect-ratio: 1; place-items: center; color: var(--cream); background: var(--red); border-radius: 50%; }
 
-.browse-controls { display: grid; grid-template-columns: minmax(190px, 1fr) auto; align-items: end; gap: 1rem; padding: .85rem clamp(1rem, 4vw, 3.5rem); background: var(--blue-deep); border-top: 1px solid #ffffff1f; }
+.browse-controls { display: grid; grid-template-columns: minmax(190px, 1fr) auto auto; align-items: end; gap: 1rem; padding: .85rem clamp(1rem, 4vw, 3.5rem); background: var(--blue-deep); border-top: 1px solid #ffffff1f; }
 .browse-controls label, .year-machine { display: grid; gap: .35rem; }
 .browse-controls label > span, .year-machine > span, .settings-drawer legend, .language-setting > span { color: var(--yellow); font: 800 .6rem/1 "Courier New", monospace; letter-spacing: .12em; text-transform: uppercase; }
 .browse-controls select, .browse-controls input { min-height: 40px; width: 100%; border: 2px solid #3f526b; border-radius: 0; color: var(--cream); background: #101a28; }
 .browse-controls select { padding: .55rem .65rem; }
 .browse-controls .genre-picker { color: var(--blue); background: var(--paper); border-color: #f8e8bc; font-weight: 800; }
 .browse-controls .genre-picker option { color: var(--blue); background: var(--paper); }
+/* The sort field hugs its longest option instead of stretching across the whole column. */
+.browse-controls .sort-picker { width: max-content; max-width: 100%; }
+.browse-controls .sort-picker select { width: auto; max-width: 100%; }
 .year-machine { grid-template-columns: 34px 92px 34px 44px; }
 .year-machine > span { grid-column: 1 / -1; }
 .year-machine > button, .year-picker-trigger { min-height: 40px; padding: .45rem; }
@@ -403,6 +406,8 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   .masthead { align-items: flex-start; }
   .header-actions { max-width: 300px; }
   .browse-controls { grid-template-columns: 1fr 1fr; }
+  .browse-controls .sort-picker { width: auto; }
+  .browse-controls .sort-picker select { width: 100%; }
   .settings-drawer { align-items: stretch; flex-wrap: wrap; justify-content: flex-start; }
   .title-modal { grid-template-columns: minmax(190px, .7fr) 1fr; }
   .tape-member-actions { top: auto; bottom: .75rem; left: 50%; transform: translateX(-50%); }
