@@ -97,7 +97,7 @@ async function write(store: Store, key: string, value: unknown): Promise<void> {
 }
 
 function shelfKey(query: ShelfQuery): string {
-  return JSON.stringify({ genres: [...query.genres].sort(), year: query.year, type: query.type, stand: query.stand, locale: query.locale });
+  return JSON.stringify({ genres: [...query.genres].sort(), year: query.year, type: query.type, stand: query.stand, locale: query.locale, sort: query.sort ?? 'relevance' });
 }
 
 export function readLocalShelf(query: ShelfQuery): Promise<ShelfPage | null> {

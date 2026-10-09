@@ -176,6 +176,34 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .tape-member-actions button:disabled, .tape-actions button:disabled { opacity: .58; cursor: not-allowed; }
 .tape-member-actions .tape-primary { background: var(--red); }
 .tape-actions .text-action { background: transparent; border-color: #ffffff40; box-shadow: none; }
+.tape-credit-panel { position: fixed; z-index: 5; left: .75rem; bottom: 1rem; width: min(300px, 32vw); max-height: min(52vh, 480px); overflow: auto; padding: .45rem; color: var(--cream); background: #101827ee; border: 1px solid #f6ebcc66; font: 700 .68rem/1.4 "Courier New", monospace; }
+.tape-credit-panel summary { color: var(--yellow); cursor: pointer; }
+.tape-credit-panel[open] { padding: .75rem; }
+.tape-credit-row { display: grid; gap: .25rem; padding: .5rem 0; border-bottom: 1px solid #ffffff27; }
+.tape-credit-row strong { color: var(--yellow); text-transform: uppercase; }
+.tape-credit-row span { display: flex; flex-wrap: wrap; gap: .3rem; }
+.tape-credit-row button, .credit-more { padding: .2rem .3rem; color: var(--cream); background: transparent; border: 1px solid #f6ebcc44; cursor: pointer; font: inherit; text-align: left; }
+.tape-credit-row button:hover, .credit-more:hover { color: var(--ink); background: var(--yellow); }
+.credit-more { margin-top: .5rem; }
+.credit-deep { margin-top: .5rem; }
+.person-modal { width: min(760px, calc(100vw - 2rem)); padding: 1.25rem; }
+.person-header { display: flex; gap: 1rem; align-items: center; }
+.person-header img, .person-placeholder { width: 90px; height: 120px; flex: none; object-fit: cover; background: #243e61; }
+.person-placeholder { display: grid; place-items: center; color: var(--yellow); font-size: 2rem; }
+.person-header h2 { margin: .2rem 0; font: 900 clamp(1.8rem, 5vw, 3rem)/1 Impact, "Arial Narrow", sans-serif; }
+.person-header p { margin: .2rem 0; color: var(--muted); }
+.person-close { margin-left: auto; align-self: start; min-width: 40px; min-height: 40px; }
+.person-roles, .person-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.person-roles button[aria-pressed="true"] { color: var(--ink); background: var(--yellow); }
+.person-roles button span { color: var(--cyan); }
+.person-roles button[aria-pressed="true"] span { color: var(--blue-deep); }
+.person-titles { display: grid; gap: .4rem; max-height: 38vh; overflow: auto; margin: .5rem 0; padding: 0; list-style: none; }
+.person-titles li button { display: flex; width: 100%; align-items: center; gap: .7rem; text-align: left; }
+.person-titles img { width: 38px; height: 56px; object-fit: cover; }
+.person-titles span { display: grid; gap: .2rem; }
+.person-titles small { color: var(--muted); }
+.back-to-aisle, .credit-stand-heading button { color: var(--cream); background: #243e61; border: 1px solid var(--yellow); padding: .5rem .7rem; cursor: pointer; }
+.credit-stand-heading { position: absolute; z-index: 4; left: 50%; bottom: 1rem; display: flex; align-items: center; gap: .75rem; max-width: calc(100% - 2rem); padding: .5rem; color: var(--cream); background: #101827ee; transform: translateX(-50%); }
 .inspection-copy { padding: clamp(1.4rem, 4vw, 3.5rem); }
 .eyebrow { margin: 0 0 .45rem; color: var(--yellow); font: 800 .64rem/1.4 "Courier New", monospace; letter-spacing: .12em; text-transform: uppercase; }
 .inspection-copy h2, .panel-header h2 { margin: 0 0 .6rem; font: 900 clamp(2.2rem, 6vw, 4.2rem)/.9 Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; letter-spacing: .03em; text-transform: uppercase; }
@@ -410,6 +438,7 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   .title-modal { display: block; }
   .tape-member-actions { bottom: .5rem; }
   .tape-actions { bottom: 3.8rem; }
+  .tape-credit-panel { left: .5rem; bottom: auto; top: 1rem; width: min(240px, 60vw); max-height: 35vh; }
   .inspection-art { min-height: 260px; border: 0; border-bottom: 8px solid #080b10; }
   .inspection-copy { padding: 1.3rem; }
   .basket-list li { align-items: stretch; flex-direction: column; }

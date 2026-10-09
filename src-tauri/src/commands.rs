@@ -75,6 +75,7 @@ pub struct PublicShelfRequest {
     year: u16,
     content_type: String,
     stand: u8,
+    sort: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,6 +83,24 @@ pub struct PublicShelfRequest {
 pub struct PublicTitleRequest {
     content_type: String,
     tmdb_id: u32,
+    locale: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicPersonRequest {
+    person_id: String,
+    locale: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicCreditStandRequest {
+    person_id: String,
+    department: String,
+    year: u16,
+    stand: u8,
+    sort: String,
     locale: String,
 }
 
@@ -1500,6 +1519,7 @@ pub async fn fetch_public_shelf(request: PublicShelfRequest) -> Result<Value, St
         || !(1920..=2200).contains(&request.year)
         || !matches!(request.content_type.as_str(), "movie" | "series")
         || request.stand > 20
+        || !matches!(request.sort.as_str(), "relevance" | "year" | "rating")
     {
         return Err("Invalid public catalogue request".into());
     }
@@ -1510,8 +1530,8 @@ pub async fn fetch_public_shelf(request: PublicShelfRequest) -> Result<Value, St
         .collect::<Vec<_>>()
         .join("%2C");
     let url = format!(
-        "{PUBLIC_API_BASE}/shelf?genre={genres}&year={}&type={}&stand={}&providers=&ignoreStoreYear=false",
-        request.year, request.content_type, request.stand,
+        "{PUBLIC_API_BASE}/shelf?genre={genres}&year={}&type={}&stand={}&providers=&ignoreStoreYear=false&sort={}",
+        request.year, request.content_type, request.stand, request.sort,
     );
     fetch_bounded_https_json(&url)
         .await
@@ -1534,6 +1554,76 @@ fn public_title_url(request: &PublicTitleRequest) -> Result<String, String> {
 #[tauri::command]
 pub async fn fetch_public_title(request: PublicTitleRequest) -> Result<Value, String> {
     let url = public_title_url(&request)?;
+    fetch_bounded_https_json(&url)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+fn valid_public_person_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 16
+        && !id.starts_with('0')
+        && id.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn public_person_url(request: &PublicPersonRequest) -> Result<String, String> {
+    if !valid_public_person_id(&request.person_id)
+        || !matches!(request.locale.as_str(), "pt-BR" | "en-US")
+    {
+        return Err("Invalid public person request".into());
+    }
+    Ok(format!(
+        "{PUBLIC_API_BASE}/person?id={}&locale={}",
+        request.person_id, request.locale
+    ))
+}
+
+#[tauri::command]
+pub async fn fetch_public_person(request: PublicPersonRequest) -> Result<Value, String> {
+    let url = public_person_url(&request)?;
+    fetch_bounded_https_json(&url)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+fn public_credit_stand_url(request: &PublicCreditStandRequest) -> Result<String, String> {
+    const DEPARTMENTS: &[&str] = &[
+        "Acting",
+        "Directing",
+        "Writing",
+        "Camera",
+        "Editing",
+        "Visual Effects",
+        "Sound",
+        "Art",
+        "Production",
+        "Music",
+        "Costume & Make-Up",
+        "Lighting",
+    ];
+    if !valid_public_person_id(&request.person_id)
+        || !DEPARTMENTS.contains(&request.department.as_str())
+        || !(1920..=2200).contains(&request.year)
+        || request.stand > 20
+        || !matches!(request.sort.as_str(), "relevance" | "year" | "rating")
+        || !matches!(request.locale.as_str(), "pt-BR" | "en-US")
+    {
+        return Err("Invalid public credit stand request".into());
+    }
+    Ok(format!(
+        "{PUBLIC_API_BASE}/credit-stand?person={}&department={}&job=&type=all&year={}&ignoreStoreYear=true&providers=&stand={}&sort={}&locale={}",
+        request.person_id,
+        encode(&request.department),
+        request.year,
+        request.stand,
+        request.sort,
+        request.locale,
+    ))
+}
+
+#[tauri::command]
+pub async fn fetch_public_credit_stand(request: PublicCreditStandRequest) -> Result<Value, String> {
+    let url = public_credit_stand_url(&request)?;
     fetch_bounded_https_json(&url)
         .await
         .map_err(|error| error.to_string())
@@ -1601,6 +1691,46 @@ mod tests {
                 content_type: "movie&stand=1".into(),
                 tmdb_id: 603,
                 locale: "pt-BR".into(),
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn public_person_and_credit_stand_use_fixed_metadata_routes() {
+        assert_eq!(
+            public_person_url(&PublicPersonRequest {
+                person_id: "138".into(),
+                locale: "pt-BR".into()
+            })
+            .as_deref(),
+            Ok("https://locadora-api.willstartpage.workers.dev/v1/person?id=138&locale=pt-BR")
+        );
+        assert!(
+            public_person_url(&PublicPersonRequest {
+                person_id: "138&bad=1".into(),
+                locale: "pt-BR".into()
+            })
+            .is_err()
+        );
+        let request = PublicCreditStandRequest {
+            person_id: "138".into(),
+            department: "Writing".into(),
+            year: 1999,
+            stand: 0,
+            sort: "relevance".into(),
+            locale: "pt-BR".into(),
+        };
+        assert_eq!(
+            public_credit_stand_url(&request).as_deref(),
+            Ok(
+                "https://locadora-api.willstartpage.workers.dev/v1/credit-stand?person=138&department=Writing&job=&type=all&year=1999&ignoreStoreYear=true&providers=&stand=0&sort=relevance&locale=pt-BR"
+            )
+        );
+        assert!(
+            public_credit_stand_url(&PublicCreditStandRequest {
+                department: "Writing&providers=bad".into(),
+                ..request
             })
             .is_err()
         );

@@ -23,6 +23,8 @@ pub fn run() {
             streaming_engine::streaming_engine_request,
             commands::fetch_public_shelf,
             commands::fetch_public_title,
+            commands::fetch_public_person,
+            commands::fetch_public_credit_stand,
             commands::fetch_public_artwork,
             commands::member_session_status,
             commands::member_sign_in,

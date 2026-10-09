@@ -28,7 +28,23 @@ export interface DiscoveryTitle {
   director: string[];
   writer: string[];
   cast: string[];
+  credits?: TitleCredits | null;
   providers: string[];
+}
+
+export interface PersonCredit {
+  id: string;
+  name: string;
+  character?: string;
+  department?: string;
+  job?: string;
+}
+
+export interface TitleCredits {
+  director: PersonCredit[];
+  writer: PersonCredit[];
+  cast: PersonCredit[];
+  crew: PersonCredit[];
 }
 
 export interface PublicTitlePayload {
@@ -54,6 +70,7 @@ export interface PublicTitlePayload {
   director?: unknown;
   writer?: unknown;
   cast?: unknown;
+  credits?: unknown;
   availabilityBR?: { providers?: unknown };
 }
 
@@ -91,6 +108,32 @@ function boundedStringList(value: unknown, maxItems: number): string[] {
     .slice(0, maxItems);
 }
 
+function creditList(value: unknown, maxItems: number): PersonCredit[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, maxItems).flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const entry = item as Record<string, unknown>;
+    const id = boundedString(entry.id, 16);
+    const name = boundedString(entry.name, 120);
+    if (!id || !/^[1-9]\d{0,15}$/.test(id) || !name) return [];
+    const character = boundedString(entry.character, 120);
+    const department = boundedString(entry.department, 80);
+    const job = boundedString(entry.job, 80);
+    return [{ id, name, ...(character ? { character } : {}), ...(department ? { department } : {}), ...(job ? { job } : {}) }];
+  });
+}
+
+function normalizeCredits(value: unknown): TitleCredits | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const credits = value as Record<string, unknown>;
+  return {
+    director: creditList(credits.director, 4),
+    writer: creditList(credits.writer, 4),
+    cast: creditList(credits.cast, 10),
+    crew: creditList(credits.crew, 24),
+  };
+}
+
 function runtimeMinutes(value: unknown): number | null {
   const normalized = typeof value === 'string' ? Number(value.replace(/\s*min(?:utes?)?$/i, '')) : Number(value);
   return Number.isSafeInteger(normalized) && normalized > 0 && normalized <= 1_200 ? normalized : null;
@@ -126,6 +169,7 @@ export function normalizeDiscoveryTitle(payload: PublicTitlePayload): DiscoveryT
     director: boundedStringList(payload.director, 4),
     writer: boundedStringList(payload.writer, 4),
     cast: boundedStringList(payload.cast, 10),
+    credits: normalizeCredits(payload.credits),
     providers: boundedStringList(payload.availabilityBR?.providers, 8),
   };
 }

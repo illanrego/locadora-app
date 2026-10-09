@@ -1,13 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { externalId, type ContentType, type DiscoveryTitle } from './domain/content';
 import { GENRES, copy, type Locale } from './locadora/catalog';
-import { loadShelf, loadTitleDetails, type ShelfPage } from './locadora/discovery';
+import { loadCreditStand, loadShelf, loadTitleDetails, type ShelfPage, type ShelfSort } from './locadora/discovery';
+import type { CreditStandSelection } from './locadora/creditStands';
 import { SidePanel } from './components/SidePanel';
 import { MediaSettings } from './components/MediaSettings';
 import { TitleInspection } from './components/TitleInspection';
 import { VhsTape } from './components/VhsTape';
 import { WatchFlow } from './components/WatchFlow';
 import { DonationPanel } from './components/DonationPanel';
+import { PersonView } from './components/PersonView';
 import { readMemberSession, readNativeCapabilities, updateMemberCollection, type NativeCapabilities } from './platform/nativeBridge';
 import { readQuickWatchEnabled, writeQuickWatchEnabled } from './media/quickWatchPreference';
 import { readImmersiveEnabled, writeImmersiveEnabled } from './locadora/immersive';
@@ -15,6 +17,13 @@ import { hasLocalSavedTitle, readLocalSavedCollections, setLocalSavedTitle, writ
 import './styles.css';
 
 const ImmersiveShelf = lazy(() => import('./components/ImmersiveShelf'));
+
+function readShelfSort(): ShelfSort {
+  try {
+    const value = window.localStorage.getItem('locadora.sort');
+    return value === 'year' || value === 'rating' ? value : 'relevance';
+  } catch { return 'relevance'; }
+}
 
 type Panel = 'basket' | 'saved' | 'account' | null;
 
@@ -31,6 +40,10 @@ export default function App() {
   const [year, setYear] = useState(1999);
   const [yearPickerOpen, setYearPickerOpen] = useState(false);
   const [type, setType] = useState<ContentType>('movie');
+  const [sort, setSort] = useState<ShelfSort>(readShelfSort);
+  const [sortDraft, setSortDraft] = useState<ShelfSort>(sort);
+  const [creditStand, setCreditStand] = useState<CreditStandSelection | null>(null);
+  const [personCredit, setPersonCredit] = useState<CreditStandSelection | null>(null);
   const [pages, setPages] = useState<ShelfPage[]>([]);
   const [stand, setStand] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -61,7 +74,9 @@ export default function App() {
     setStatus('loading');
     setError('');
     try {
-      const page = await loadShelf({ genres: genre.apiGenres, year, type, stand: nextStand, locale }, signal);
+      const page = creditStand
+        ? await loadCreditStand({ credit: creditStand, year, stand: nextStand, sort, locale }, signal)
+        : await loadShelf({ genres: genre.apiGenres, year, type, stand: nextStand, sort, locale }, signal);
       if (request !== shelfRequestRef.current) return;
       // Each API page is one physical stand. Additional pages stay separate in
       // the DOM so the store grows downward without becoming one giant rack.
@@ -75,11 +90,12 @@ export default function App() {
       setStatus('error');
       setError(cause instanceof Error ? cause.message : (locale === 'pt-BR' ? 'Não foi possível abrir a estante.' : 'Could not open the shelf.'));
     }
-  }, [genre.apiGenres, locale, type, year]);
+  }, [creditStand, genre.apiGenres, locale, sort, type, year]);
 
   useEffect(() => {
     const controller = new AbortController();
     setImmersiveStand(0);
+    setPages([]);
     void fetchPage(0, controller.signal);
     return () => controller.abort();
   }, [fetchPage]);
@@ -98,6 +114,7 @@ export default function App() {
     }
   };
   const configureImmersive = (index: number, nextYear: number) => {
+    setCreditStand(null);
     setGenreIndex(index);
     setYearDraft(clampYear(nextYear));
     setYear(clampYear(nextYear));
@@ -137,9 +154,15 @@ export default function App() {
     }
   };
   const chooseGenre = (index: number) => {
+    setCreditStand(null);
     setGenreIndex(index);
   };
-  const applyYear = () => setYear(clampYear(yearDraft));
+  const applyYear = () => {
+    setCreditStand(null);
+    setYear(clampYear(yearDraft));
+    setSort(sortDraft);
+    try { window.localStorage.setItem('locadora.sort', sortDraft); } catch { /* Browsing still works without persistence. */ }
+  };
   const inspectTitle = useCallback((title: DiscoveryTitle) => {
     const request = ++inspectionRequestRef.current;
     setSelected(title);
@@ -154,6 +177,26 @@ export default function App() {
     inspectionRequestRef.current += 1;
     setSelected(null);
   }, []);
+  const resetShelf = () => {
+    shelfRequestRef.current += 1;
+    setPages([]);
+    setStand(0);
+    setImmersiveStand(0);
+    setStatus('loading');
+  };
+  const openCredit = (credit: CreditStandSelection) => {
+    closeInspection();
+    setPersonCredit(credit);
+  };
+  const viewCreditStand = (credit: CreditStandSelection) => {
+    setPersonCredit(null);
+    resetShelf();
+    setCreditStand(credit);
+  };
+  const backToAisle = () => {
+    resetShelf();
+    setCreditStand(null);
+  };
   const toggleImmersive = () => {
     setImmersiveEnabled((enabled) => {
       const next = !enabled;
@@ -271,14 +314,22 @@ export default function App() {
             <button type="button" onClick={() => setYearDraft((value) => clampYear(value + 1))} aria-label={locale === 'pt-BR' ? 'Próximo ano' : 'Next year'}>+</button>
             <button type="submit">{t.go}</button>
           </form>
+          <label>
+            <span>{locale === 'pt-BR' ? 'Ordenar por' : 'Sort by'}</span>
+            <select value={sortDraft} onChange={(event) => setSortDraft(event.target.value as ShelfSort)}>
+              <option value="relevance">{locale === 'pt-BR' ? 'Relevância' : 'Relevance'}</option>
+              <option value="year">{locale === 'pt-BR' ? 'Ano' : 'Year'}</option>
+              <option value="rating">{locale === 'pt-BR' ? 'Avaliação' : 'Rating'}</option>
+            </select>
+          </label>
         </div>
 
         {settingsOpen && (
           <section className="settings-drawer" aria-label={t.settings}>
             <fieldset>
               <legend>{t.type}</legend>
-              <button type="button" aria-pressed={type === 'movie'} onClick={() => setType('movie')}>{t.movies}</button>
-              <button type="button" aria-pressed={type === 'series'} onClick={() => setType('series')}>{t.series}</button>
+              <button type="button" aria-pressed={type === 'movie'} onClick={() => { setCreditStand(null); setType('movie'); }}>{t.movies}</button>
+              <button type="button" aria-pressed={type === 'series'} onClick={() => { setCreditStand(null); setType('series'); }}>{t.series}</button>
             </fieldset>
             <div className="language-setting">
               <span>{locale === 'pt-BR' ? 'Idioma' : 'Language'}</span>
@@ -310,6 +361,7 @@ export default function App() {
       </header>
 
       {immersiveEnabled ? <main className="immersive-room" id="top" aria-label={locale === 'pt-BR' ? 'Locadora imersiva' : 'Immersive store'}>
+        {creditStand && <div className="credit-stand-heading"><strong>{locale === 'pt-BR' ? 'Estante' : 'Stand'}: {creditStand.name} · {creditStand.department}</strong><button type="button" onClick={backToAisle}>{locale === 'pt-BR' ? 'Voltar ao corredor' : 'Back to aisle'}</button></div>}
         {pages.length > 0 && <Suspense fallback={<p className="immersive-loading">{t.loading}</p>}>
           <ImmersiveShelf titles={immersiveTitles} genre={genre} year={year} locale={locale} stand={immersiveStand}
             paused={watchTitle !== null || selected !== null || panel !== null || mediaSettingsOpen || donationOpen}
@@ -318,7 +370,7 @@ export default function App() {
         </Suspense>}
         {(status === 'loading' || (!immersiveReady && status !== 'error')) && <p className="immersive-loading" role="status">{t.loading}</p>}
         {status === 'error' && <p className="immersive-error" role="alert">{error} <button type="button" onClick={() => void fetchPage(pages.length)}>{t.retry}</button></p>}
-        {!immersiveTitles.length && status === 'ready' && <p className="immersive-loading" role="status">{t.empty}</p>}
+        {!immersiveTitles.length && status === 'ready' && <div className="immersive-loading" role="status"><p>{creditStand ? (locale === 'pt-BR' ? 'Esta estante voltou vazia.' : 'This stand came back empty.') : t.empty}</p>{creditStand && <button type="button" onClick={() => void fetchPage(0)}>{locale === 'pt-BR' ? 'Ver todos os streamings' : 'See all streaming services'}</button>}</div>}
         <button className="immersive-stand-button immersive-previous-stand" type="button" disabled={immersiveStand === 0 || status === 'loading'} onClick={() => navigateImmersive(-1)} aria-label={locale === 'pt-BR' ? 'Estante anterior' : 'Previous stand'}>‹</button>
         <button className="immersive-stand-button immersive-next-stand" type="button" disabled={status === 'loading' || (immersiveStand >= pages.length - 1 && !hasNextStand)} onClick={() => navigateImmersive(1)} aria-label={locale === 'pt-BR' ? 'Próxima estante' : 'Next stand'}>›</button>
       </main> : <main id="top">
@@ -327,9 +379,10 @@ export default function App() {
           <div className="fluorescent" aria-hidden="true" />
           <header className="shelf-heading">
             <div>
-              <p>{t.aisle} {String(genreIndex + 1).padStart(2, '0')} · {year - 19}–{year} · <span className={`source-badge source-${source}`}>{source === 'fixture' ? t.demo : t.live}</span></p>
-              <h1 id="shelf-title">{genre.label[locale]}</h1>
+              <p>{creditStand ? (locale === 'pt-BR' ? 'Créditos' : 'Credits') : `${t.aisle} ${String(genreIndex + 1).padStart(2, '0')} · ${year - 19}–${year}`} · {sort === 'relevance' ? (locale === 'pt-BR' ? 'Relevância' : 'Relevance') : sort === 'year' ? (locale === 'pt-BR' ? 'Ano' : 'Year') : (locale === 'pt-BR' ? 'Avaliação' : 'Rating')} · <span className={`source-badge source-${source}`}>{source === 'fixture' ? t.demo : t.live}</span></p>
+              <h1 id="shelf-title">{creditStand ? `${locale === 'pt-BR' ? 'Estante' : 'Stand'}: ${creditStand.name}` : genre.label[locale]}</h1>
             </div>
+            {creditStand && <button type="button" className="back-to-aisle" onClick={backToAisle}>{locale === 'pt-BR' ? 'Voltar ao corredor' : 'Back to aisle'}</button>}
             <p className="shelf-status" role="status" aria-live="polite">
               {status === 'loading' ? t.loading : status === 'error' ? error : `${visibleTitles.length} ${t.tapesFound}`}
             </p>
@@ -340,7 +393,7 @@ export default function App() {
           {status === 'error' && !pages.length ? (
             <div className="empty-state">
               <span className="empty-tape" aria-hidden="true" />
-              <h2>{t.empty}</h2>
+              <h2>{creditStand ? (locale === 'pt-BR' ? 'Esta estante voltou vazia.' : 'This stand came back empty.') : t.empty}</h2>
               <p>{error}</p>
               <button type="button" onClick={() => void fetchPage(stand)}>{t.retry}</button>
             </div>
@@ -377,7 +430,7 @@ export default function App() {
           {hasNextStand && status !== 'loading' && (
             <button className="load-more" type="button" onClick={() => void fetchPage(stand + 1)}>{t.loadMore}</button>
           )}
-          {!visibleTitles.length && status === 'ready' && <p className="search-empty">{t.empty}</p>}
+              {!visibleTitles.length && status === 'ready' && <div className="search-empty"><p>{creditStand ? (locale === 'pt-BR' ? 'Esta estante voltou vazia.' : 'This stand came back empty.') : t.empty}</p>{creditStand && <button type="button" onClick={() => void fetchPage(0)}>{locale === 'pt-BR' ? 'Ver todos os streamings' : 'See all streaming services'}</button>}</div>}
         </section>
       </main>}
 
@@ -398,9 +451,12 @@ export default function App() {
           onToggleBasket={() => toggleBasket(selected)}
           onToggleSaved={(collection) => void setSavedTitle(selected, collection, !hasLocalSavedTitle(saved, selected, collection))}
           onWatch={() => { setWatchTitle(selected); closeInspection(); }}
+          onCreditPerson={openCredit}
           onClose={closeInspection}
         />
       )}
+      {personCredit && <PersonView key={`${personCredit.id}:${personCredit.department}`} credit={personCredit} year={year} sort={sort} locale={locale}
+        onViewAsStand={viewCreditStand} onInspect={(title) => { setPersonCredit(null); inspectTitle(title); }} onClose={() => setPersonCredit(null)} />}
       {panel && <SidePanel
         kind={panel}
         locale={locale}

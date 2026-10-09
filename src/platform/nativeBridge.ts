@@ -144,6 +144,7 @@ export async function fetchNativePublicShelf(request: {
   year: number;
   contentType: ContentType;
   stand: number;
+  sort: 'relevance' | 'year' | 'rating';
 }): Promise<unknown> {
   if (!isNativeShell()) throw new Error('Native catalogue transport is unavailable');
   return invoke('fetch_public_shelf', { request });
@@ -156,6 +157,23 @@ export async function fetchNativePublicTitle(request: {
 }): Promise<unknown> {
   if (!isNativeShell()) throw new Error('Native catalogue transport is unavailable');
   return invoke('fetch_public_title', { request });
+}
+
+export async function fetchNativePublicPerson(request: { personId: string; locale: 'pt-BR' | 'en-US' }): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Native catalogue transport is unavailable');
+  return invoke('fetch_public_person', { request });
+}
+
+export async function fetchNativeCreditStand(request: {
+  personId: string;
+  department: string;
+  year: number;
+  stand: number;
+  sort: 'relevance' | 'year' | 'rating';
+  locale: 'pt-BR' | 'en-US';
+}): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Native catalogue transport is unavailable');
+  return invoke('fetch_public_credit_stand', { request });
 }
 
 export async function fetchNativePublicArtwork(url: string): Promise<string> {

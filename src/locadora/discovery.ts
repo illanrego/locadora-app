@@ -1,7 +1,10 @@
 import { externalId, normalizeDiscoveryTitle, type ContentType, type DiscoveryTitle, type PublicTitlePayload } from '../domain/content';
-import { fetchNativePublicShelf, fetchNativePublicTitle, isNativeShell } from '../platform/nativeBridge';
+import { fetchNativeCreditStand, fetchNativePublicPerson, fetchNativePublicShelf, fetchNativePublicTitle, isNativeShell } from '../platform/nativeBridge';
 import { FIXTURE_TITLES } from './fixture';
 import { cacheShelf, cacheTitle, readLocalShelf, readLocalTitle } from './localCache';
+import { DEPARTMENTS, normalizePerson, validPersonId, type CreditStandSelection, type PersonProfile } from './creditStands';
+
+export type ShelfSort = 'relevance' | 'year' | 'rating';
 
 export interface ShelfQuery {
   genres: string[];
@@ -9,6 +12,7 @@ export interface ShelfQuery {
   type: ContentType;
   stand: number;
   locale: 'pt-BR' | 'en-US';
+  sort?: ShelfSort;
 }
 
 export interface ShelfPage {
@@ -16,6 +20,16 @@ export interface ShelfPage {
   hasNextStand: boolean;
   source: 'fixture' | 'public-api';
 }
+
+export interface CreditStandQuery {
+  credit: CreditStandSelection;
+  year: number;
+  stand: number;
+  sort: ShelfSort;
+  locale: ShelfQuery['locale'];
+}
+
+const DEFAULT_PUBLIC_API = 'https://locadora-api.willstartpage.workers.dev/v1';
 
 function fixtureShelf(query: ShelfQuery): ShelfPage {
   const matchingType = FIXTURE_TITLES.filter((title) => title.identity.type === query.type);
@@ -37,6 +51,59 @@ function endpoint(): string | null {
   }
 }
 
+function creditEndpoint(): string {
+  return endpoint() ?? DEFAULT_PUBLIC_API;
+}
+
+export async function loadPerson(personId: string, locale: ShelfQuery['locale'], signal?: AbortSignal): Promise<PersonProfile> {
+  if (!validPersonId(personId)) throw new Error(locale === 'pt-BR' ? 'Pessoa inválida.' : 'Invalid person.');
+  let body: unknown;
+  if (isNativeShell()) {
+    try { body = await fetchNativePublicPerson({ personId, locale }); }
+    catch { throw new Error(locale === 'pt-BR' ? 'Não foi possível abrir esta pessoa.' : 'Could not open this person.'); }
+  }
+  else {
+    const url = new URL(`${creditEndpoint()}/person`);
+    url.search = new URLSearchParams({ id: personId, locale }).toString();
+    const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
+    if (!response.ok) throw new Error(locale === 'pt-BR' ? 'Não foi possível abrir esta pessoa.' : 'Could not open this person.');
+    body = await response.json();
+  }
+  const profile = normalizePerson(body);
+  if (!profile || profile.id !== personId) throw new Error(locale === 'pt-BR' ? 'Dados da pessoa inválidos.' : 'Invalid person data.');
+  return profile;
+}
+
+export async function loadCreditStand(query: CreditStandQuery, signal?: AbortSignal): Promise<ShelfPage> {
+  const { credit, year, stand, sort, locale } = query;
+  if (!validPersonId(credit.id) || !DEPARTMENTS.includes(credit.department as typeof DEPARTMENTS[number])
+    || !Number.isInteger(year) || year < 1920 || year > 2200 || !Number.isInteger(stand) || stand < 0 || stand > 20) {
+    throw new Error(locale === 'pt-BR' ? 'Estante de créditos inválida.' : 'Invalid credit stand.');
+  }
+  let body: unknown;
+  if (isNativeShell()) {
+    try { body = await fetchNativeCreditStand({ personId: credit.id, department: credit.department, year, stand, sort, locale }); }
+    catch { throw new Error(locale === 'pt-BR' ? 'Não foi possível abrir a estante da pessoa.' : 'Could not open the person stand.'); }
+  }
+  else {
+    const url = new URL(`${creditEndpoint()}/credit-stand`);
+    url.search = new URLSearchParams({
+      person: credit.id, department: credit.department, job: '', type: 'all', year: String(year),
+      ignoreStoreYear: 'true', providers: '', stand: String(stand), sort, locale,
+    }).toString();
+    const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
+    if (!response.ok) throw new Error(locale === 'pt-BR' ? 'Não foi possível abrir a estante da pessoa.' : 'Could not open the person stand.');
+    body = await response.json();
+  }
+  const record = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
+  if (!Array.isArray(record.titles)) throw new Error(locale === 'pt-BR' ? 'A estante respondeu em um formato inválido.' : 'The stand returned an invalid response.');
+  return {
+    titles: record.titles.slice(0, 40).map((value) => normalizeDiscoveryTitle(value as PublicTitlePayload)).filter((title): title is DiscoveryTitle => title !== null),
+    hasNextStand: record.hasNextStand === true,
+    source: 'public-api',
+  };
+}
+
 function publicTitlePayload(body: unknown): PublicTitlePayload | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
   const record = body as Record<string, unknown>;
@@ -56,6 +123,7 @@ export async function loadShelf(query: ShelfQuery, signal?: AbortSignal): Promis
       year: query.year,
       contentType: query.type,
       stand: query.stand,
+      sort: query.sort ?? 'relevance',
     }) as { titles?: PublicTitlePayload[]; hasNextStand?: boolean };
     if (!Array.isArray(body.titles)) throw new Error(query.locale === 'pt-BR' ? 'O acervo respondeu em um formato inválido.' : 'The catalogue returned an invalid response.');
     const page: ShelfPage = {
@@ -75,6 +143,7 @@ export async function loadShelf(query: ShelfQuery, signal?: AbortSignal): Promis
     stand: String(query.stand),
     providers: '',
     ignoreStoreYear: 'false',
+    sort: query.sort ?? 'relevance',
   }).toString();
   const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
   if (!response.ok) throw new Error(query.locale === 'pt-BR' ? 'O acervo público está indisponível.' : 'The public catalogue is unavailable.');

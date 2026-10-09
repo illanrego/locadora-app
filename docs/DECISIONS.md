@@ -277,6 +277,23 @@ reported source's root cause or guarantee playback below sustained bitrate.
 
 Reference: [mpv cache options](https://mpv.io/manual/stable/#cache).
 
+### D-024 — Desktop person stands
+
+Accepted 2026-10-09 by the owner priority change. Person stands are now the
+active desktop catalogue milestone; the source-dependent network-buffering
+investigation is paused pending the owner's playback retest. Clickable title
+credits use TMDB person ids; cached title records without ids retain plain
+names. Person roles aggregate job counts by department, and a stand filters
+only by department (`job=`), always requests `type=all`, and keeps the year
+window disabled (`ignoreStoreYear=true`). The desktop has no provider
+preference, so it sends `providers=` from the first request. The empty-stand
+action repeats the unfiltered request without changing any saved preference.
+The same stand pages feed both the 2D and immersive shelves, with 2D remaining
+the required fallback. Sorting is a local browse preference applied by Ir and
+sent to aisle and person-stand requests; changing browse filters returns to the
+aisle. Public metadata calls use fixed native routes to the existing Locadora
+Worker origin; no member or media state participates.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

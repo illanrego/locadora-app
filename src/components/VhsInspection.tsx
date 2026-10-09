@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import type { DiscoveryTitle } from '../domain/content';
+import type { DiscoveryTitle, PersonCredit } from '../domain/content';
 import { externalId } from '../domain/content';
 import { copy, type Locale } from '../locadora/catalog';
 
@@ -41,7 +41,10 @@ interface VhsInspectionProps {
   title: DiscoveryTitle;
   locale: Locale;
   onInspectClose: () => void;
+  onCreditPerson: (entry: PersonCredit, department: string) => void;
 }
+
+interface CreditRegion { x: number; y: number; width: number; height: number; entry: PersonCredit; department: string }
 
 function paintBackdrop(context: CanvasRenderingContext2D, accent: string): void {
   context.fillStyle = '#080d17';
@@ -191,7 +194,8 @@ function drawBack(
   accent: string,
   poster: HTMLImageElement | null,
   backdrop: HTMLImageElement | null,
-): void {
+): CreditRegion[] {
+  const regions: CreditRegion[] = [];
   const t = copy[locale];
   const pt = locale === 'pt-BR';
   paintBackdrop(context, accent);
@@ -285,19 +289,35 @@ function drawBack(
     1005,
   );
 
-  const credits: Array<[string, string]> = [
-    [pt ? 'DIREÇÃO' : 'DIRECTED BY', title.director.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED')],
-    [pt ? 'ROTEIRO' : 'WRITTEN BY', title.writer.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED')],
-    [pt ? 'ELENCO' : 'STARRING', title.cast.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED')],
+  const credits: Array<[string, string, PersonCredit[] | undefined, string]> = [
+    [pt ? 'DIREÇÃO' : 'DIRECTED BY', title.director.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED'), title.credits?.director, 'Directing'],
+    [pt ? 'ROTEIRO' : 'WRITTEN BY', title.writer.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED'), title.credits?.writer, 'Writing'],
+    [pt ? 'ELENCO' : 'STARRING', title.cast.join(' · ') || (pt ? 'NÃO INFORMADO' : 'NOT LISTED'), title.credits?.cast, 'Acting'],
   ];
   let creditY = 1060;
-  for (const [label, value] of credits) {
+  for (const [label, value, entries, department] of credits) {
     context.fillStyle = '#ffd447';
     context.font = '900 20px "Arial Narrow", Arial, sans-serif';
     context.fillText(label, 72, creditY);
     context.fillStyle = '#eadcae';
     context.font = '700 20px Arial, sans-serif';
-    wrapText(context, value, 250, creditY, TEX_W - 322, 26, 2);
+    if (!entries?.length) wrapText(context, value, 250, creditY, TEX_W - 322, 26, 2);
+    else {
+      let x = 250;
+      let y = creditY;
+      for (const entry of entries) {
+        const name = ellipsize(context, entry.name, TEX_W - 322);
+        const width = context.measureText(name).width;
+        if (x + width > TEX_W - 72) { x = 250; y += 26; }
+        if (y > creditY + 26) break;
+        context.fillText(name, x, y);
+        context.strokeStyle = 'rgba(234,220,174,.6)';
+        context.lineWidth = 1;
+        context.beginPath(); context.moveTo(x, y + 3); context.lineTo(x + width, y + 3); context.stroke();
+        regions.push({ x, y: y - 20, width, height: 26, entry, department });
+        x += width + context.measureText(' · ').width;
+      }
+    }
     creditY += 70;
   }
 
@@ -310,11 +330,12 @@ function drawBack(
   ), 72, 1325);
   context.fillText(ellipsize(context, t.vhsFooter, TEX_W - 144), 72, 1480);
   context.restore();
+  return regions;
 }
 
 const ACCENT = '#e24730';
 
-export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionProps) {
+export function VhsInspection({ title, locale, onInspectClose, onCreditPerson }: VhsInspectionProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [flat, setFlat] = useState(false);
   const [focused, setFocused] = useState<'front' | 'back' | 'whole'>('whole');
@@ -323,6 +344,8 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
   const updateTitleRef = useRef<(next: DiscoveryTitle) => void>(() => undefined);
   const closeRef = useRef(onInspectClose);
   closeRef.current = onInspectClose;
+  const creditRef = useRef(onCreditPerson);
+  creditRef.current = onCreditPerson;
 
   const setFocusedState = useCallback((target: 'front' | 'back' | 'whole') => {
     setFocused(target);
@@ -448,8 +471,9 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
       let posterImage: HTMLImageElement | null = null;
       let backdropImage: HTMLImageElement | null = null;
       let currentTitle = title;
+      let creditRegions: CreditRegion[] = [];
       const redrawBack = () => {
-        drawBack(backContext, currentTitle, locale, ACCENT, posterImage, backdropImage);
+        creditRegions = drawBack(backContext, currentTitle, locale, ACCENT, posterImage, backdropImage);
         backTexture.needsUpdate = true;
       };
       updateTitleRef.current = (next) => {
@@ -528,6 +552,25 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
         raycaster.setFromCamera(pointer, camera);
         return raycaster.intersectObjects([shell, front, back], false).length > 0;
       };
+      const creditAt = (event: PointerEvent): CreditRegion | null => {
+        const bounds = canvas.getBoundingClientRect();
+        if (!bounds.width || !bounds.height) return null;
+        pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+        pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+        scene.updateMatrixWorld(true);
+        raycaster.setFromCamera(pointer, camera);
+        const hit = raycaster.intersectObject(back, false)[0];
+        if (!hit?.uv) return null;
+        const x = hit.uv.x * TEX_W;
+        const y = (1 - hit.uv.y) * TEX_H;
+        return creditRegions.find((item) => x >= item.x && x <= item.x + item.width && y >= item.y && y <= item.y + item.height) ?? null;
+      };
+      const hitCredit = (event: PointerEvent): boolean => {
+        const region = creditAt(event);
+        if (!region) return false;
+        creditRef.current(region.entry, region.department);
+        return true;
+      };
       const flipCase = () => {
         const nextTarget: 'front' | 'back' = Math.abs(targetY / Math.PI) % 2 < 1 ? 'back' : 'front';
         focusTarget(nextTarget);
@@ -545,7 +588,11 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
         canvas.setPointerCapture(event.pointerId);
       };
       const onPointerMove = (event: PointerEvent) => {
-        if (!dragging || event.pointerId !== pointerId) return;
+        if (!dragging) {
+          canvas.style.cursor = creditAt(event) ? 'pointer' : 'grab';
+          return;
+        }
+        if (event.pointerId !== pointerId) return;
         const dx = event.clientX - lastX;
         const dy = event.clientY - lastY;
         lastX = event.clientX;
@@ -564,6 +611,7 @@ export function VhsInspection({ title, locale, onInspectClose }: VhsInspectionPr
           targetY += velocity * 2.5;
           return;
         }
+        if (hitCredit(event)) return;
         // The surrounding stage is an exit target; only the physical case flips.
         if (!hitCase(event)) {
           closeRef.current();

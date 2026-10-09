@@ -1,10 +1,44 @@
 # Implementation progress
 
-Last updated: 2026-10-06
-Current milestone: investigate source-dependent playback hiccups (separate from completed 2D UI work)
-Status: buffering reserve checked and release rebuilt; source playback retest pending
+Last updated: 2026-10-09
+Current milestone: port person credit stands to the desktop catalogue
+Status: implemented, automated checks passed and optimized desktop rebuilt; owner visual/API acceptance pending
 
 ## Resume checkpoint
+
+2026-10-09 person-stand priority change and desktop port:
+- The owner made person stands the active work. The source-dependent network-
+  buffering investigation is paused with no new diagnosis; its previous
+  live-source retest remains pending. Starting `git status --short` was empty.
+- `/v1/title` credit ids normalize alongside legacy name arrays. The 3D tape
+  back draws clickable person names with hit regions; the inspector also has
+  keyboard-accessible credit chips and an on-demand crew panel. Old cached
+  title details without ids display plain names. `PersonView` opens the fixed
+  `/v1/person` route, groups returned job counts by department, and lists the
+  first stand of titles below its role controls. `Ver como estante` selects a
+  department stand; the existing 2D/immersive shelf paging path then requests
+  `/v1/credit-stand` with `job=`, `type=all`, `ignoreStoreYear=true`, and
+  `providers=`. Returning to the aisle restores the genre shelf. Empty results
+  expose `Ver todos os streamings`, re-requesting the same unfiltered stand.
+- The desktop has no streaming-provider browse preference; no provider state is
+  written by this flow. Sort is a local browse preference (`relevance`, `year`,
+  `rating`) applied by Ir and sent to both shelf sources; changing browse
+  filters leaves the person stand. Person and stand requests use fixed native
+  Worker-origin commands and the existing browser public-API path. No member,
+  player, add-on or web-repository file was changed. See D-024.
+- Checks: `npm run typecheck` passed; `npm test -- test/creditStands.test.tsx`
+  initially found one incorrect legacy-name test expectation (the names are
+  separate rows), corrected before the full run. `npm test --
+  test/appCreditStand.test.tsx test/creditStands.test.tsx` passed 5 tests/2
+  files. Final `npm run check` passed:
+  typecheck; Vitest 139 passed/35 files, 0 failed; Vite production build passed
+  with the existing large-chunk advisory. `cargo test --manifest-path
+  src-tauri/Cargo.toml` passed 27 tests, 2 opt-in ignored. `cargo clippy
+  --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`, `cargo
+  fmt --manifest-path src-tauri/Cargo.toml --check`, and `git diff --check`
+  passed. `npm run tauri -- build --no-bundle` passed, refreshing
+  `src-tauri/target/release/wills-locadora-player`. No
+  GUI/browser, live Worker response, or playback verification was performed.
 
 2026-10-06 network-buffering follow-up:
 - User suspects connection speed and requests buffering comparable to Stremio.
@@ -521,13 +555,13 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: user retest the previously hiccuping source in the rebuilt desktop;
-if interruptions remain, collect only allowlisted numeric cache/frame-drop/A-V
-sync properties from a live player session to distinguish network starvation
-from decode/render scheduling. Do not log descriptors or launch GUI tests without
-request. Obtain 2D styling and fullscreen visual acceptance as part of this retest.
-Signed-in rental-preference acceptance, clean-machine installation, Flatpak and
-distribution audit remain outstanding.
+Next task: owner visually verify the rebuilt desktop person flow using a live
+title with id-bearing credits: click a tape-back credit and the accessible
+credit list, switch department in the person view, open its stand, page it in
+2D, return to the aisle, and check 3D plus the 2D fallback. Report any
+Worker/API or visual mismatch for correction. The earlier failing-source
+playback retest, signed-in rental-preference acceptance, clean-machine
+installation, Flatpak and distribution audit remain pending after this task.
 
 2026-09-28 delivery checkpoint (artifacts built 2026-09-27 11:15 -0300):
 - Commits: `8037ff9` pins/stages the engine; `dece2af` implements its lifecycle,
