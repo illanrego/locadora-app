@@ -87,6 +87,12 @@ pub struct PublicTitleRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct PublicSearchRequest {
+    query: String,
+    locale: String,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicPersonRequest {
     person_id: String,
@@ -1559,6 +1565,28 @@ pub async fn fetch_public_title(request: PublicTitleRequest) -> Result<Value, St
         .map_err(|error| error.to_string())
 }
 
+fn public_search_url(request: &PublicSearchRequest) -> Result<String, String> {
+    let query = request.query.trim();
+    if !(2..=80).contains(&query.chars().count())
+        || !matches!(request.locale.as_str(), "pt-BR" | "en-US")
+    {
+        return Err("Invalid public search request".into());
+    }
+    Ok(format!(
+        "{PUBLIC_API_BASE}/search?q={}&locale={}",
+        encode(query),
+        request.locale
+    ))
+}
+
+#[tauri::command]
+pub async fn fetch_public_search(request: PublicSearchRequest) -> Result<Value, String> {
+    let url = public_search_url(&request)?;
+    fetch_bounded_https_json(&url)
+        .await
+        .map_err(|error| error.to_string())
+}
+
 fn valid_public_person_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 16
@@ -1691,6 +1719,36 @@ mod tests {
                 content_type: "movie&stand=1".into(),
                 tmdb_id: 603,
                 locale: "pt-BR".into(),
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn public_search_is_bounded_and_encoded() {
+        assert_eq!(
+            public_search_url(&PublicSearchRequest {
+                query: "  ação & drama  ".into(),
+                locale: "pt-BR".into()
+            })
+            .as_deref(),
+            Ok(
+                "https://locadora-api.willstartpage.workers.dev/v1/search?q=a%C3%A7%C3%A3o%20%26%20drama&locale=pt-BR"
+            )
+        );
+        for query in ["x".to_string(), "x".repeat(81)] {
+            assert!(
+                public_search_url(&PublicSearchRequest {
+                    query,
+                    locale: "pt-BR".into()
+                })
+                .is_err()
+            );
+        }
+        assert!(
+            public_search_url(&PublicSearchRequest {
+                query: "movie".into(),
+                locale: "other".into()
             })
             .is_err()
         );

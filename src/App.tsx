@@ -10,6 +10,7 @@ import { VhsTape } from './components/VhsTape';
 import { WatchFlow } from './components/WatchFlow';
 import { DonationPanel } from './components/DonationPanel';
 import { PersonView } from './components/PersonView';
+import { TitleSearch } from './components/TitleSearch';
 import { readMemberSession, readNativeCapabilities, updateMemberCollection, type NativeCapabilities } from './platform/nativeBridge';
 import { readQuickWatchEnabled, writeQuickWatchEnabled } from './media/quickWatchPreference';
 import { readImmersiveEnabled, writeImmersiveEnabled } from './locadora/immersive';
@@ -44,6 +45,7 @@ export default function App() {
   const [sortDraft, setSortDraft] = useState<ShelfSort>(sort);
   const [creditStand, setCreditStand] = useState<CreditStandSelection | null>(null);
   const [personCredit, setPersonCredit] = useState<CreditStandSelection | null>(null);
+  const [titleSearchOpen, setTitleSearchOpen] = useState(false);
   const [pages, setPages] = useState<ShelfPage[]>([]);
   const [stand, setStand] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -261,6 +263,7 @@ export default function App() {
             <span>{t.tagline}</span>
           </a>
           <nav className="header-actions" aria-label={locale === 'pt-BR' ? 'Ações da loja' : 'Store actions'}>
+            {!immersiveEnabled && <button type="button" onClick={() => setTitleSearchOpen(true)}>{locale === 'pt-BR' ? 'Buscar título' : 'Search titles'}</button>}
             <button type="button" onClick={() => setPanel('saved')}>{locale === 'pt-BR' ? 'Salvos' : 'Saved'}</button>
             <button type="button" onClick={() => setPanel('account')}>{t.account}</button>
             <button type="button" aria-pressed={immersiveEnabled} onClick={toggleImmersive}>
@@ -275,6 +278,7 @@ export default function App() {
         </div>
 
         <div className="browse-controls" hidden={immersiveEnabled && !immersiveFiltersOpen}>
+          {immersiveEnabled && <button type="button" className="browse-title-search" onClick={() => setTitleSearchOpen(true)}>{locale === 'pt-BR' ? 'Buscar título' : 'Search titles'}</button>}
           <label>
             <span>{t.genre}</span>
             <select className="genre-picker" value={genreIndex} onChange={(event) => chooseGenre(Number(event.target.value))}>
@@ -459,6 +463,7 @@ export default function App() {
           onClose={closeInspection}
         />
       )}
+      {titleSearchOpen && <TitleSearch locale={locale} onClose={() => setTitleSearchOpen(false)} onInspect={inspectTitle} />}
       {personCredit && <PersonView key={`${personCredit.id}:${personCredit.department}`} credit={personCredit} year={year} sort={sort} locale={locale}
         onViewAsStand={viewCreditStand} onInspect={(title) => { setPersonCredit(null); inspectTitle(title); }} onClose={() => setPersonCredit(null)} />}
       {panel && <SidePanel

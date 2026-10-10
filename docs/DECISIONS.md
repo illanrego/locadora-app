@@ -295,6 +295,18 @@ browse preference applied by Ir and sent to aisle and person-stand requests;
 changing browse filters returns to the aisle. Public metadata calls use fixed native routes to the existing Locadora
 Worker origin; no member or media state participates.
 
+### D-025 — Dialog-based desktop title search
+
+Accepted 2026-10-10 by the owner's title-search request. This supersedes only
+D-021's removal of desktop title search. Normal mode has a header action;
+immersive mode has the same action inside its existing "Buscar fitas" filter
+menu. Search opens a separate modal and never changes the active shelf filters,
+person stand, rentals or player state. Submit requests the fixed public Worker
+`/v1/search` route with a trimmed 2–80-character query and allowed locale.
+At most 12 validated TMDB titles are offered, and selection enters the
+existing inspection flow. Search results are transient rather than added to
+the local shelf cache; inspection still fetches its full title record.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

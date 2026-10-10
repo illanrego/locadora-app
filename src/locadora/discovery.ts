@@ -1,5 +1,6 @@
 import { externalId, normalizeDiscoveryTitle, type ContentType, type DiscoveryTitle, type PublicTitlePayload } from '../domain/content';
-import { fetchNativeCreditStand, fetchNativePublicPerson, fetchNativePublicShelf, fetchNativePublicTitle, isNativeShell } from '../platform/nativeBridge';
+import { fetchNativeCreditStand, fetchNativePublicPerson, fetchNativePublicSearch, fetchNativePublicShelf, fetchNativePublicTitle, isNativeShell } from '../platform/nativeBridge';
+import { normalizeTitleSearch } from './titleSearch';
 import { FIXTURE_TITLES } from './fixture';
 import { cacheShelf, cacheTitle, readLocalShelf, readLocalTitle } from './localCache';
 import { DEPARTMENTS, normalizePerson, validPersonId, type CreditStandSelection, type PersonProfile } from './creditStands';
@@ -53,6 +54,25 @@ function endpoint(): string | null {
 
 function creditEndpoint(): string {
   return endpoint() ?? DEFAULT_PUBLIC_API;
+}
+
+export async function searchTitles(query: string, locale: ShelfQuery['locale'], signal?: AbortSignal): Promise<DiscoveryTitle[]> {
+  const trimmed = query.trim();
+  const length = Array.from(trimmed).length;
+  if (length < 2 || length > 80) throw new Error(locale === 'pt-BR' ? 'Digite de 2 a 80 caracteres.' : 'Enter 2 to 80 characters.');
+  let body: unknown;
+  if (isNativeShell()) {
+    body = await fetchNativePublicSearch({ query: trimmed, locale });
+  } else {
+    const url = new URL(`${creditEndpoint()}/search`);
+    url.search = new URLSearchParams({ q: trimmed, locale }).toString();
+    const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
+    if (!response.ok) throw new Error(locale === 'pt-BR' ? 'Não foi possível buscar títulos.' : 'Could not search titles.');
+    body = await response.json();
+  }
+  const titles = normalizeTitleSearch(body);
+  if (!titles) throw new Error(locale === 'pt-BR' ? 'A busca respondeu em um formato inválido.' : 'Search returned an invalid response.');
+  return titles;
 }
 
 export async function loadPerson(personId: string, locale: ShelfQuery['locale'], signal?: AbortSignal): Promise<PersonProfile> {

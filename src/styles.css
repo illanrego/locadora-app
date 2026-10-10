@@ -65,6 +65,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .basket-button span { display: grid; min-width: 24px; aspect-ratio: 1; place-items: center; color: var(--cream); background: var(--red); border-radius: 50%; }
 
 .browse-controls { display: grid; grid-template-columns: minmax(190px, 1fr) auto auto; align-items: end; gap: 1rem; padding: .85rem clamp(1rem, 4vw, 3.5rem); background: var(--blue-deep); border-top: 1px solid #ffffff1f; }
+.browse-controls .browse-title-search { grid-column: 1 / -1; justify-self: start; }
 .browse-controls label, .year-machine { display: grid; gap: .35rem; }
 .browse-controls label > span, .year-machine > span, .settings-drawer legend, .language-setting > span { color: var(--yellow); font: 800 .6rem/1 "Courier New", monospace; letter-spacing: .12em; text-transform: uppercase; }
 .browse-controls select, .browse-controls input { min-height: 40px; width: 100%; border: 2px solid #3f526b; border-radius: 0; color: var(--cream); background: #101a28; }
@@ -190,6 +191,19 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .credit-more { margin-top: .5rem; }
 .credit-deep { margin-top: .5rem; }
 .person-modal { width: min(760px, calc(100vw - 2rem)); padding: 1.25rem; }
+.title-search-modal { width: min(720px, calc(100vw - 2rem)); padding: 1.25rem; }
+.title-search-header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.title-search-header h2 { margin: 0 0 1rem; font: 900 clamp(2rem, 6vw, 3rem)/1 Impact, "Arial Narrow", sans-serif; }
+.title-search-form label { display: block; margin-bottom: .4rem; color: var(--yellow); font: 800 .7rem "Courier New", monospace; }
+.title-search-form > div { display: flex; gap: .5rem; }
+.title-search-form input { min-width: 0; flex: 1; padding: .55rem; border: 2px solid var(--paper); color: var(--cream); background: #101a28; }
+.title-search-status { min-height: 1.5rem; color: var(--muted); }
+.title-search-results { display: grid; gap: .5rem; max-height: min(52vh, 480px); overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.title-search-results button { display: flex; align-items: center; gap: .75rem; width: 100%; text-align: left; }
+.title-search-results img, .title-search-placeholder { width: 48px; height: 72px; flex: none; object-fit: cover; background: #243e61; }
+.title-search-placeholder { display: grid; place-items: center; }
+.title-search-results button > span:last-child { display: grid; gap: .25rem; }
+.title-search-results small { color: var(--muted); }
 .person-header { display: flex; gap: 1rem; align-items: center; }
 .person-header img, .person-placeholder { width: 90px; height: 120px; flex: none; object-fit: cover; background: #243e61; }
 .person-placeholder { display: grid; place-items: center; color: var(--yellow); font-size: 2rem; }

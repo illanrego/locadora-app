@@ -1,10 +1,51 @@
 # Implementation progress
 
-Last updated: 2026-10-09
-Current milestone: port person credit stands to the desktop catalogue
-Status: implemented, automated checks passed and optimized desktop rebuilt; owner visual/API acceptance pending
+Last updated: 2026-10-10
+Current milestone: desktop title search in normal and immersive browsing
+Status: implementation and automated checks complete; optimized desktop rebuilt; owner visual/API acceptance pending
 
 ## Resume checkpoint
+
+2026-10-10 title search priority change:
+- The owner made a standalone title search the active task. Starting `git
+  status --short` was empty. Normal 2D has a header "Buscar título" action;
+  immersive mode has that action inside the existing "Buscar fitas" filter
+  collapsible. The same `TitleSearch` modal submits on Enter or button press,
+  reports loading/empty/error/result states, and hands selections to the
+  existing title inspection callback. Search does not change shelf filters,
+  rentals or playback.
+- `searchTitles` calls the fixed public `/v1/search` route with a trimmed
+  2–80-character query and `pt-BR`/`en-US` locale. The Tauri command accepts
+  only those fields, validates them before encoding, and uses the same fixed
+  Worker origin and bounded JSON transport as other public metadata calls.
+  The pure `normalizeTitleSearch` caps to 12, checks canonical TMDB ids/type,
+  bounds text and genres, accepts only TMDB HTTPS artwork, and returns
+  `DiscoveryTitle`s for inspection. Search does not cache transient results;
+  the inspector still loads full title details. See D-025.
+- Focused `npm test -- test/titleSearch.test.tsx` passed 4 tests. Focused
+  `npm test -- test/titleSearch.test.tsx test/app.test.tsx
+  test/appTitleSearchImmersive.test.tsx` passed 18 tests/3 files. The first
+  `npm run check` passed typecheck, 145 tests/37 files and Vite build with its
+  pre-existing large-chunk advisory. A follow-up Unicode count/status wording
+  edit is included in the final check now in progress.
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D
+  warnings` passed. `cargo fmt --manifest-path src-tauri/Cargo.toml` applied
+  formatting. The first `cargo test --manifest-path src-tauri/Cargo.toml`
+  passed 27 tests but the pre-existing bundled-engine lifecycle test could not
+  bind its loopback port in the sandbox (2 ignored). An outside-sandbox retry
+  of the exact command passed 28 tests, 0 failed, 2 opt-in ignored. No GUI,
+  browser, live Worker response, or playback verification was performed.
+- After the final Unicode count/status wording edit, `npm run check` passed
+  typecheck, Vitest 145 tests/37 files (0 failed), and Vite production build
+  (188 modules, 2.90s) with the existing large-chunk advisory. An overlapping
+  attempt while the native release build was compiling hit timeouts in
+  unrelated immersive/app/shelf tests and was stopped; the isolated rerun
+  passed. `cargo fmt --manifest-path src-tauri/Cargo.toml --check` and `git
+  diff --check` passed. The first optimized build passed (2m48s) before the
+  final UI wording edit. Final `npm run tauri -- build --no-bundle` passed
+  (optimized profile 1m55s), refreshing
+  `src-tauri/target/release/wills-locadora-player` with the final frontend.
+
 
 2026-10-09 person-stand priority change and desktop port:
 - The owner made person stands the active work. The source-dependent network-
@@ -569,13 +610,14 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: owner visually verify the rebuilt desktop person flow using a live
-title with id-bearing credits: click a tape-back credit and the accessible
-credit list, switch department in the person view, open its stand, page it in
-2D, return to the aisle, and check 3D plus the 2D fallback. Report any
-Worker/API or visual mismatch for correction. The earlier failing-source
-playback retest, signed-in rental-preference acceptance, clean-machine
-installation, Flatpak and distribution audit remain pending after this task.
+Next task: owner visually verify title search in the rebuilt desktop: open
+"Buscar título" in 2D, switch to 3D and open it from "Buscar fitas", search a
+live movie and series in both locales, inspect each result, and report any
+Worker/API or visual mismatch. Then continue the pending person-stand visual
+flow using a live title with id-bearing credits, including 2D/3D fallback.
+The earlier failing-source playback retest, signed-in rental-preference
+acceptance, clean-machine installation, Flatpak and distribution audit remain
+pending after this task.
 
 2026-09-28 delivery checkpoint (artifacts built 2026-09-27 11:15 -0300):
 - Commits: `8037ff9` pins/stages the engine; `dece2af` implements its lifecycle,

@@ -21,6 +21,12 @@ afterEach(() => cleanup());
 beforeEach(() => window.localStorage.clear());
 
 describe('accessible Locadora shelf', () => {
+  it('opens title search from the 2D header', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Buscar título' }));
+    expect(screen.getByRole('dialog', { name: 'Buscar título' })).toBeInTheDocument();
+  });
   it('renders the normal shelf without provider or Stremio catalogue controls', async () => {
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Ação e aventura' })).toBeInTheDocument();
