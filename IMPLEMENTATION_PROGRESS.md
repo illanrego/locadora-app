@@ -74,6 +74,11 @@ Status: implementation and automated checks complete; optimized desktop rebuilt;
   whole grid column and pushed the row, so "Ordenar por" now shares the desktop
   row with genre and year, its select sized to the longest option (full width
   again only under 900px).
+- Browse parity: the 3D plaque year field is now a dropdown like the genre (the
+  vendored `web-scene/immersive-shelf.mjs` updated in lockstep with the web
+  storefront commit `ece72e0`); it no longer opens a number input with spinners,
+  keeps the all-years shortcut and the arrow stepping, and drops the old
+  `input.select()` call a select element cannot honour.
 - Checks: `npm run typecheck` passed; `npm test -- test/creditStands.test.tsx`
   initially found one incorrect legacy-name test expectation (the names are
   separate rows), corrected before the full run. `npm test --

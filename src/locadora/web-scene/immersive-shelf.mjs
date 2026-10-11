@@ -108,11 +108,14 @@ export function createImmersiveShelf({ container, titles = [], genre, year, type
     closePlaqueEditor();
     const element = document.createElement('div');
     element.className = 'plaque-field-editor';
-    const input = document.createElement(field === 'year' ? 'input' : 'select');
+    const input = document.createElement('select');
     input.setAttribute('aria-label', plaqueOptions[field + 'Label'] || field);
     if (field === 'year') {
-      input.type = 'number'; input.min = '1920'; input.max = String(new Date().getFullYear()); input.step = '1';
-      input.inputMode = 'numeric'; input.required = true; input.value = draft.year;
+      // The year is a dropdown like the genre; the plaque arrows still step one year at a time.
+      for (let year = new Date().getFullYear(); year >= 1920; year -= 1) {
+        const option = document.createElement('option'); option.value = String(year); option.textContent = String(year); input.append(option);
+      }
+      input.required = true; input.value = String(draft.year);
     } else {
       const choices = field === 'sort' ? plaqueOptions.sortChoices : plaqueOptions.genres.map((value) => [value, value]);
       for (const [value, text] of choices) {
@@ -147,8 +150,7 @@ export function createImmersiveShelf({ container, titles = [], genre, year, type
     plaqueEditor = { element, field, save };
     positionPlaqueEditor();
     input.focus({ preventScroll: true });
-    if (field === 'year') input.select();
-    else { try { input.showPicker?.(); } catch { /* The focused native select still supports keyboard and touch. */ } }
+    try { input.showPicker?.(); } catch { /* The focused native select still supports keyboard and touch. */ }
   }
   function drawPlaque() {
     const context = signCanvas.canvas.getContext('2d');
