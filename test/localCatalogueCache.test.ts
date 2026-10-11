@@ -26,6 +26,23 @@ const query = {
   locale: 'pt-BR' as const,
 };
 
+function writeRawTitleRecord(key: string, value: unknown): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const opening = indexedDB.open('wills-locadora-catalogue', 1);
+    opening.onupgradeneeded = () => {
+      for (const name of ['shelves', 'titles']) opening.result.createObjectStore(name, { keyPath: 'key' }).createIndex('savedAt', 'savedAt');
+    };
+    opening.onsuccess = () => {
+      const db = opening.result;
+      const tx = db.transaction('titles', 'readwrite');
+      tx.objectStore('titles').put({ key, value, savedAt: Date.now() });
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => reject(tx.error);
+    };
+    opening.onerror = () => reject(opening.error);
+  });
+}
+
 describe('local catalogue cache', () => {
   it('restores a shelf page and its artwork URLs without a network request', async () => {
     const page = { titles: [title], hasNextStand: true, source: 'public-api' as const };
@@ -50,5 +67,18 @@ describe('local catalogue cache', () => {
 
     await cacheShelf(query, { titles: [title], hasNextStand: false, source: 'public-api' });
     expect(await readLocalTitle(title, 'pt-BR')).toEqual(complete);
+  });
+
+  it('ignores title records written by an earlier cache version', async () => {
+    // A tape inspected before the credits block existed was stored under the unversioned key; it must
+    // not be served now, otherwise its person names can never become clickable.
+    const legacyTitle = normalizeDiscoveryTitle({ id: 424242, type: 'movie', name: 'Legacy Tape', year: 1971, genres: ['Drama'] })!;
+    const legacy = { ...legacyTitle, director: ['Some Director'] };
+    await writeRawTitleRecord(`pt-BR:${legacyTitle.identity.canonicalKey}`, legacy);
+
+    expect(await readLocalTitle(legacyTitle, 'pt-BR')).toBeNull();
+
+    await cacheTitle(legacy, 'pt-BR');
+    expect(await readLocalTitle(legacyTitle, 'pt-BR')).toEqual(legacy);
   });
 });

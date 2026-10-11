@@ -3,6 +3,10 @@ import type { ShelfPage, ShelfQuery } from './discovery';
 
 type Store = 'shelves' | 'titles';
 const LIMITS: Record<Store, number> = { shelves: 96, titles: 4_000 };
+// Bump when the cached shape changes. Records written by an earlier build then simply stop matching
+// their key, so a tape cached before a feature (for example the credits block with person ids) is
+// re-fetched instead of being rendered without it. Dropped records are pruned by the store limit.
+const CACHE_VERSION = 2;
 const session: Record<Store, Map<string, unknown>> = { shelves: new Map(), titles: new Map() };
 let database: Promise<IDBDatabase | null> | undefined;
 
@@ -97,7 +101,7 @@ async function write(store: Store, key: string, value: unknown): Promise<void> {
 }
 
 function shelfKey(query: ShelfQuery): string {
-  return JSON.stringify({ genres: [...query.genres].sort(), year: query.year, type: query.type, stand: query.stand, locale: query.locale, sort: query.sort ?? 'relevance' });
+  return `${CACHE_VERSION}:${JSON.stringify({ genres: [...query.genres].sort(), year: query.year, type: query.type, stand: query.stand, locale: query.locale, sort: query.sort ?? 'relevance' })}`;
 }
 
 export function readLocalShelf(query: ShelfQuery): Promise<ShelfPage | null> {
@@ -109,9 +113,9 @@ export function cacheShelf(query: ShelfQuery, page: ShelfPage): Promise<void> {
 }
 
 export function readLocalTitle(title: DiscoveryTitle, locale: ShelfQuery['locale']): Promise<DiscoveryTitle | null> {
-  return read('titles', `${locale}:${title.identity.canonicalKey}`);
+  return read('titles', `${CACHE_VERSION}:${locale}:${title.identity.canonicalKey}`);
 }
 
 export function cacheTitle(title: DiscoveryTitle, locale: ShelfQuery['locale']): Promise<void> {
-  return write('titles', `${locale}:${title.identity.canonicalKey}`, title);
+  return write('titles', `${CACHE_VERSION}:${locale}:${title.identity.canonicalKey}`, title);
 }

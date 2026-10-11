@@ -79,6 +79,13 @@ Status: implementation and automated checks complete; optimized desktop rebuilt;
   storefront commit `ece72e0`); it no longer opens a number input with spinners,
   keeps the all-years shortcut and the arrow stepping, and drops the old
   `input.select()` call a select element cannot honour.
+- Cache: the catalogue cache keys are now versioned (`CACHE_VERSION` in
+  `src/locadora/localCache.ts`, bumped to 2). Title detail records written before
+  the credits block existed no longer match their key, so a tape inspected in an
+  older build is re-fetched on its next inspection instead of being served
+  without person ids - which is what made its credit names unclickable. The same
+  bump invalidates pre-series shelf pages. Stale rows are pruned by the existing
+  store limits.
 - Checks: `npm run typecheck` passed; `npm test -- test/creditStands.test.tsx`
   initially found one incorrect legacy-name test expectation (the names are
   separate rows), corrected before the full run. `npm test --
