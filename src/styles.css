@@ -197,6 +197,8 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .title-search-form label { display: block; margin-bottom: .4rem; color: var(--yellow); font: 800 .7rem "Courier New", monospace; }
 .title-search-form > div { display: flex; gap: .5rem; }
 .title-search-form input { min-width: 0; flex: 1; padding: .55rem; border: 2px solid var(--paper); color: var(--cream); background: #101a28; }
+.title-search-people { display: flex; align-items: center; gap: .4rem; margin-top: .5rem; color: var(--muted); font: 700 .78rem "Courier New", monospace; text-transform: none; cursor: pointer; }
+.title-search-people input { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; padding: 0; accent-color: var(--yellow); cursor: pointer; }
 .title-search-status { min-height: 1.5rem; color: var(--muted); }
 .title-search-results { display: grid; gap: .5rem; max-height: min(52vh, 480px); overflow-y: auto; margin: 0; padding: 0; list-style: none; }
 .title-search-results button { display: flex; align-items: center; gap: .75rem; width: 100%; text-align: left; }

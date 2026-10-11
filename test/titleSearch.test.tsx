@@ -50,7 +50,7 @@ describe('title search', () => {
     const inspect = vi.fn();
     const close = vi.fn();
     const user = userEvent.setup();
-    render(<TitleSearch locale="pt-BR" onInspect={inspect} onClose={close} />);
+    render(<TitleSearch locale="pt-BR" onInspect={inspect} onOpenPerson={vi.fn()} onClose={close} />);
     expect(screen.getByRole('dialog', { name: 'Buscar título' })).toBeInTheDocument();
     await user.type(screen.getByRole('searchbox'), 'matrix{Enter}');
     expect(await screen.findByRole('button', { name: 'Inspecionar The Matrix' })).toBeInTheDocument();
@@ -65,7 +65,7 @@ describe('title search', () => {
       .mockRejectedValueOnce(new Error('offline'));
     vi.stubGlobal('fetch', fetch);
     const user = userEvent.setup();
-    render(<TitleSearch locale="en-US" onInspect={vi.fn()} onClose={vi.fn()} />);
+    render(<TitleSearch locale="en-US" onInspect={vi.fn()} onOpenPerson={vi.fn()} onClose={vi.fn()} />);
     await user.type(screen.getByRole('searchbox'), 'none{Enter}');
     expect(await screen.findByText('No titles found.')).toBeInTheDocument();
     await user.clear(screen.getByRole('searchbox'));

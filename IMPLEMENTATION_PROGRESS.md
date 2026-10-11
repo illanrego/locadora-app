@@ -86,6 +86,15 @@ Status: implementation and automated checks complete; optimized desktop rebuilt;
   without person ids - which is what made its credit names unclickable. The same
   bump invalidates pre-series shelf pages. Stale rows are pruned by the existing
   store limits.
+- People search: the title-search panel gained a "Buscar pessoas" switch. With it
+  on the same input queries `/v1/person-search` through the new fixed native
+  `fetch_public_person_search` command, and the rows (portrait, name, department)
+  open the existing `PersonView`. The payload is parsed by
+  `src/locadora/personSearch.ts` under the same bounded rules as the title search
+  (numeric ids, bounded name, TMDB-only portrait, department from the credit-stand
+  allowlist with an `Acting` fallback, at most eight rows). The web storefront
+  shipped the same route first (commit `894e2e4` there), so both clients share one
+  contract.
 - Checks: `npm run typecheck` passed; `npm test -- test/creditStands.test.tsx`
   initially found one incorrect legacy-name test expectation (the names are
   separate rows), corrected before the full run. `npm test --

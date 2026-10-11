@@ -1,6 +1,7 @@
 import { externalId, normalizeDiscoveryTitle, type ContentType, type DiscoveryTitle, type PublicTitlePayload } from '../domain/content';
-import { fetchNativeCreditStand, fetchNativePublicPerson, fetchNativePublicSearch, fetchNativePublicShelf, fetchNativePublicTitle, isNativeShell } from '../platform/nativeBridge';
+import { fetchNativeCreditStand, fetchNativePublicPerson, fetchNativePublicPersonSearch, fetchNativePublicSearch, fetchNativePublicShelf, fetchNativePublicTitle, isNativeShell } from '../platform/nativeBridge';
 import { normalizeTitleSearch } from './titleSearch';
+import { normalizePersonSearch } from './personSearch';
 import { FIXTURE_TITLES } from './fixture';
 import { cacheShelf, cacheTitle, readLocalShelf, readLocalTitle } from './localCache';
 import { DEPARTMENTS, normalizePerson, validPersonId, type CreditStandSelection, type PersonProfile } from './creditStands';
@@ -73,6 +74,26 @@ export async function searchTitles(query: string, locale: ShelfQuery['locale'], 
   const titles = normalizeTitleSearch(body);
   if (!titles) throw new Error(locale === 'pt-BR' ? 'A busca respondeu em um formato inválido.' : 'Search returned an invalid response.');
   return titles;
+}
+
+export async function searchPeople(query: string, locale: ShelfQuery['locale'], signal?: AbortSignal): Promise<CreditStandSelection[]> {
+  const trimmed = query.trim();
+  const length = Array.from(trimmed).length;
+  if (length < 2 || length > 80) throw new Error(locale === 'pt-BR' ? 'Digite de 2 a 80 caracteres.' : 'Enter 2 to 80 characters.');
+  let body: unknown;
+  if (isNativeShell()) {
+    try { body = await fetchNativePublicPersonSearch({ query: trimmed, locale }); }
+    catch { throw new Error(locale === 'pt-BR' ? 'Não foi possível buscar pessoas.' : 'Could not search people.'); }
+  } else {
+    const url = new URL(`${creditEndpoint()}/person-search`);
+    url.search = new URLSearchParams({ q: trimmed, locale }).toString();
+    const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
+    if (!response.ok) throw new Error(locale === 'pt-BR' ? 'Não foi possível buscar pessoas.' : 'Could not search people.');
+    body = await response.json();
+  }
+  const people = normalizePersonSearch(body);
+  if (!people) throw new Error(locale === 'pt-BR' ? 'A busca respondeu em um formato inválido.' : 'Search returned an invalid response.');
+  return people;
 }
 
 export async function loadPerson(personId: string, locale: ShelfQuery['locale'], signal?: AbortSignal): Promise<PersonProfile> {

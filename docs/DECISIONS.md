@@ -307,6 +307,20 @@ At most 12 validated TMDB titles are offered, and selection enters the
 existing inspection flow. Search results are transient rather than added to
 the local shelf cache; inspection still fetches its full title record.
 
+### D-026 — Desktop people search
+
+Accepted 2026-10-11 by the owner's request. A people mode was added to the
+existing title search instead of a second search surface: one input, one switch,
+and the existing `PersonView` as the destination. The desktop requests the fixed
+public Worker `/v1/person-search` route through a deny-by-default native command
+(trimmed 2–80-character query, allowed locale), and parses the untrusted payload
+in `src/locadora/personSearch.ts` — numeric TMDB ids, a bounded name, a
+TMDB-image-only portrait, a department from the credit-stand allowlist with an
+`Acting` fallback, at most eight rows. Results are always a pick list, never an
+auto-jump: a `woody allen` query returns both "Woody Allen" and "Allen Woody",
+so the choice stays with the visitor. No member, rental or player state
+participates, and the web storefront ships the identical contract.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

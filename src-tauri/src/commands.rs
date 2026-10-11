@@ -93,6 +93,12 @@ pub struct PublicSearchRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct PublicPersonSearchRequest {
+    query: String,
+    locale: String,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicPersonRequest {
     person_id: String,
@@ -1587,6 +1593,28 @@ pub async fn fetch_public_search(request: PublicSearchRequest) -> Result<Value, 
         .map_err(|error| error.to_string())
 }
 
+fn public_person_search_url(request: &PublicPersonSearchRequest) -> Result<String, String> {
+    let query = request.query.trim();
+    if !(2..=80).contains(&query.chars().count())
+        || !matches!(request.locale.as_str(), "pt-BR" | "en-US")
+    {
+        return Err("Invalid public person search request".into());
+    }
+    Ok(format!(
+        "{PUBLIC_API_BASE}/person-search?q={}&locale={}",
+        encode(query),
+        request.locale
+    ))
+}
+
+#[tauri::command]
+pub async fn fetch_public_person_search(request: PublicPersonSearchRequest) -> Result<Value, String> {
+    let url = public_person_search_url(&request)?;
+    fetch_bounded_https_json(&url)
+        .await
+        .map_err(|error| error.to_string())
+}
+
 fn valid_public_person_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 16
@@ -1748,6 +1776,36 @@ mod tests {
         assert!(
             public_search_url(&PublicSearchRequest {
                 query: "movie".into(),
+                locale: "other".into()
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn public_person_search_is_bounded_and_encoded() {
+        assert_eq!(
+            public_person_search_url(&PublicPersonSearchRequest {
+                query: "  woody allen  ".into(),
+                locale: "pt-BR".into()
+            })
+            .as_deref(),
+            Ok(
+                "https://locadora-api.willstartpage.workers.dev/v1/person-search?q=woody%20allen&locale=pt-BR"
+            )
+        );
+        for query in ["".to_string(), "x".to_string(), "x".repeat(81)] {
+            assert!(
+                public_person_search_url(&PublicPersonSearchRequest {
+                    query,
+                    locale: "pt-BR".into()
+                })
+                .is_err()
+            );
+        }
+        assert!(
+            public_person_search_url(&PublicPersonSearchRequest {
+                query: "woody allen".into(),
                 locale: "other".into()
             })
             .is_err()

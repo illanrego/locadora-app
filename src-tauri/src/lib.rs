@@ -24,6 +24,7 @@ pub fn run() {
             commands::fetch_public_shelf,
             commands::fetch_public_title,
             commands::fetch_public_search,
+            commands::fetch_public_person_search,
             commands::fetch_public_person,
             commands::fetch_public_credit_stand,
             commands::fetch_public_artwork,

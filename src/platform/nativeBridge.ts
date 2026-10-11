@@ -164,6 +164,11 @@ export async function fetchNativePublicSearch(request: { query: string; locale: 
   return invoke('fetch_public_search', { request });
 }
 
+export async function fetchNativePublicPersonSearch(request: { query: string; locale: 'pt-BR' | 'en-US' }): Promise<unknown> {
+  if (!isNativeShell()) throw new Error('Native catalogue transport is unavailable');
+  return invoke('fetch_public_person_search', { request });
+}
+
 export async function fetchNativePublicPerson(request: { personId: string; locale: 'pt-BR' | 'en-US' }): Promise<unknown> {
   if (!isNativeShell()) throw new Error('Native catalogue transport is unavailable');
   return invoke('fetch_public_person', { request });

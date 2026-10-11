@@ -463,7 +463,7 @@ export default function App() {
           onClose={closeInspection}
         />
       )}
-      {titleSearchOpen && <TitleSearch locale={locale} onClose={() => setTitleSearchOpen(false)} onInspect={inspectTitle} />}
+      {titleSearchOpen && <TitleSearch locale={locale} onClose={() => setTitleSearchOpen(false)} onInspect={inspectTitle} onOpenPerson={openCredit} />}
       {personCredit && <PersonView key={`${personCredit.id}:${personCredit.department}`} credit={personCredit} year={year} sort={sort} locale={locale}
         onViewAsStand={viewCreditStand} onInspect={(title) => { setPersonCredit(null); inspectTitle(title); }} onClose={() => setPersonCredit(null)} />}
       {panel && <SidePanel
