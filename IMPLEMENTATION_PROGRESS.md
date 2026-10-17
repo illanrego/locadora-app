@@ -47,9 +47,9 @@ Status: diagnostics timeline and MARK implemented; optimized binary rebuilt; own
   --vo=null --ao=null`; listed properties and live values were confirmed for
   decode, pixel format, drops, delayed frames, cache, buffer, pause, time,
   estimated FPS, dimensions, format, codecs and audio bitrate. `video-bitrate`
-  stayed `(unavailable)` on generated MKV, MP4 and MPEG-TS probes; this field
-  remains explicit as `unavailable` pending a source that supplies it. The
-  null-output probe does not verify the embedded GLX decode choice.
+  stayed `(unavailable)` on short generated MKV, MP4 and MPEG-TS probes; a
+  subsequent 10-second CBR MPEG-PS probe returned real 745–776 kbps values.
+  The null-output probe does not verify the embedded GLX decode choice.
 - Mutation proof: mapping empty `hwdec-current` back to `unknown` failed
   `decode_method_and_unavailable_are_distinct` (exit 101); accepting arbitrary
   tokens failed `log_and_property_secrets_never_reach_file` on `token` (exit
