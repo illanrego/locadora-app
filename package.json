@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "postinstall": "node tools/patch-native-video-playability.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b --pretty false",
@@ -15,7 +16,7 @@
     "check:native-core": "cargo test --manifest-path crates/native-core/Cargo.toml",
     "check:native": "cargo test --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri",
-    "prepare:engine": "node tools/prepare-streaming-engine.mjs"
+    "prepare:engine": "node tools/prepare-streaming-engine.mjs && node tools/patch-native-video-playability.mjs"
   },
   "engines": {
     "node": ">=22.12"

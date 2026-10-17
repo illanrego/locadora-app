@@ -37,7 +37,7 @@ Packaging work must refresh this file from the final dependency graph.
 | Stremio official add-ons | Transitive Core data dependency | MIT | Version 2.1.2 through the pinned Core dependency. |
 | Stremio local-search | Transitive Core search dependency | MIT | Cargo locks the resolved official repository revision. |
 | Stremio add-on protocol | Compatible HTTP contract | Documentation/protocol | Requests and responses are now handled by official Stremio Core over the bounded native environment. |
-| Stremio Video 0.0.98 | Official frontend player abstraction and ShellVideo state model | MIT | Used beneath Locadora's React presentation through a narrow Tauri/mpv shell transport. |
+| Stremio Video 0.0.98 | Official frontend player abstraction and ShellVideo state model | MIT | Used beneath Locadora's React presentation through a narrow Tauri/mpv shell transport. A local build-time patch in `tools/patch-native-video-playability.mjs` lets only the native libmpv caller bypass HTML-video restrictions on embedded subtitles and multiple audio tracks; the original MIT notice remains in the installed package and generated inventory. |
 | Stremio libass-wasm 4.2.6 | HTML subtitle rendering used by Stremio Video | LGPL-2.1-or-later AND (FTL OR GPL-2.0-or-later) AND MIT AND MIT-Modern-Variant AND ISC AND NTP AND Zlib AND BSL-1.0 | Shipped as a transitive browser asset; preserve the generated license inventory and source/notice obligations. |
 | Stremio hls.js fork 1.5.5 canary | HLS playback support used by Stremio Video | Apache-2.0 | Transitive browser dependency. |
 | vtt.js 0.13.0 | WebVTT parsing used by Stremio Video | Apache-2.0 | Transitive browser dependency. |

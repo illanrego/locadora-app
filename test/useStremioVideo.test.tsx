@@ -71,6 +71,7 @@ describe('native subtitle coordination', () => {
         videoCodecs: expect.arrayContaining(['h264', 'hevc', 'av1']),
         audioCodecs: expect.arrayContaining(['aac', 'ac3', 'dts', 'flac', 'truehd']),
         maxAudioChannels: 8,
+        nativePlayer: true,
       }),
     }), expect.anything());
     const load = mocks.dispatch.mock.calls.find(([action]) => action.commandName === 'load')?.[0];

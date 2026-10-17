@@ -380,6 +380,9 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
           assSubtitlesStyling: true,
           streamingServerURL: serviceAvailable ? STREMIO_SERVICE_URL : null,
           ...capabilities,
+          // Exempts this shell's loads from the library's HTML-video subtitle
+          // and audio-track limits (applied by tools/patch-native-video-playability.mjs).
+          nativePlayer: true,
         },
       }, {
         containerElement,

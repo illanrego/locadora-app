@@ -395,12 +395,18 @@ timing and buffering policies unchanged.
 
 The upstream `withStreamingServer` predicate also forces HLS when a file has
 any embedded subtitle stream or two supported audio streams, even when libmpv
-can play both. Capability fields cannot override those two checks. The app's
-external subtitle resource pipeline uses native `sub-add`, while mpv discovers
-embedded tracks from the direct file. No dependency patch is authorized by the
-subtitle safety condition in this milestone, so those files remain an explicit
-coverage limit pending an owner-approved library adaptation. Real-stream
-playback and a 25-second direct-route timeline require the owner's retest.
+can play both. Capability fields cannot override those two checks. Its direct
+branch does not attach the HLS branch's subtitle tracks or embedded ASS source
+URLs, but the app already resolves external tracks independently and uses
+native `sub-add`; mpv discovers embedded tracks and fonts from the direct file
+and ShellVideo reports them through `track-list`. A minimal idempotent local
+patch to the installed MIT-licensed dependency therefore exempts only
+`nativePlayer: true` from the HTML-video subtitle/audio-track limits. Browser
+callers retain the original predicate, and format, codec, and channel checks
+remain mandatory for all callers. `postinstall` and `prepare:engine` apply the
+patch; a Vitest regression fails when it is missing or upstream changes its
+predicate. Public release notices record the adaptation. Real-stream playback
+and a 25-second direct-route timeline require the owner's retest.
 
 ## Non-negotiable boundaries
 
