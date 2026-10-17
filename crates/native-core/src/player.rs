@@ -1,5 +1,8 @@
 use crate::EmbeddedMpv;
-use crate::playback_diagnostics::{PROPERTIES as DIAGNOSTIC_PROPERTIES, PlaybackDiagnostics};
+use crate::playback_diagnostics::{
+    PROPERTIES as DIAGNOSTIC_PROPERTIES, PlaybackDiagnostics, SOURCE_PROPERTIES,
+    mark_without_diagnostics,
+};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -182,6 +185,7 @@ pub struct MpvSession {
     diagnostics: Option<PlaybackDiagnostics>,
     diagnostic_requests: std::collections::HashMap<u64, &'static str>,
     last_diagnostic_sample: Instant,
+    last_position: Option<f64>,
     session_dir: PathBuf,
     next_request_id: u64,
     subtitle_revision: u64,
@@ -492,6 +496,7 @@ impl MpvSession {
             },
             diagnostic_requests: std::collections::HashMap::new(),
             last_diagnostic_sample: Instant::now(),
+            last_position: None,
             session_dir,
             next_request_id: 1,
             subtitle_revision: 0,
@@ -664,7 +669,22 @@ impl MpvSession {
 
     pub fn drain_events(&mut self) -> Vec<PlayerEvent> {
         self.drain_diagnostics();
-        self.events.try_iter().take(100).collect()
+        let events: Vec<_> = self.events.try_iter().take(100).collect();
+        for event in &events {
+            if let PlayerEvent::Position(position) = event {
+                self.last_position = Some(*position);
+            }
+        }
+        events
+    }
+
+    pub fn mark_hiccup(&mut self) {
+        self.drain_diagnostics();
+        if let Some(diag) = &mut self.diagnostics {
+            diag.mark(self.last_position);
+        } else {
+            mark_without_diagnostics(self.last_position);
+        }
     }
 
     fn drain_diagnostics(&mut self) {
@@ -679,6 +699,7 @@ impl MpvSession {
                         diag.start(SESSION_COUNTER.fetch_add(1, Ordering::Relaxed));
                     }
                     self.last_diagnostic_sample = Instant::now() - Duration::from_secs(1);
+                    self.last_position = None;
                 }
                 Some("end-file" | "idle") => {
                     if let Some(diag) = &mut self.diagnostics {
@@ -692,10 +713,7 @@ impl MpvSession {
                 }
                 Some("property-change") => {
                     if let Some(diag) = &mut self.diagnostics {
-                        diag.sample(
-                            "paused-for-cache",
-                            message.get("data").unwrap_or(&Value::Null),
-                        );
+                        diag.cache_pause(message.get("data").unwrap_or(&Value::Null));
                     }
                 }
                 _ => {
@@ -703,7 +721,7 @@ impl MpvSession {
                         && let Some(name) = self.diagnostic_requests.remove(&id)
                         && let Some(diag) = &mut self.diagnostics
                     {
-                        diag.sample(name, message.get("data").unwrap_or(&Value::Null));
+                        diag.sample(name, &message);
                     }
                 }
             }
@@ -715,7 +733,10 @@ impl MpvSession {
             && self.last_diagnostic_sample.elapsed() >= Duration::from_secs(1)
         {
             self.last_diagnostic_sample = Instant::now();
-            for &name in DIAGNOSTIC_PROPERTIES {
+            if let Some(diag) = &mut self.diagnostics {
+                diag.tick();
+            }
+            for &name in DIAGNOSTIC_PROPERTIES.iter().chain(SOURCE_PROPERTIES.iter()) {
                 let id = self.next_request_id;
                 if self
                     .send_command(vec![json!("get_property"), json!(name)])
@@ -723,9 +744,6 @@ impl MpvSession {
                 {
                     self.diagnostic_requests.insert(id, name);
                 }
-            }
-            if let Some(diag) = &self.diagnostics {
-                diag.flush();
             }
         }
     }

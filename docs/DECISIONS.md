@@ -353,6 +353,27 @@ timing choice. Do not enable advanced control, change D-022's block/offset pair,
 or change `vd-lavc-dr` without the new evidence and a complete callback/swap
 implementation.
 
+### D-028 — Complete, redacted playback timeline
+
+Accepted 2026-10-17 after the owner's two-movie retest. The original 180-line
+ring retained only about 17 seconds. Its `hwdec-current` allowlist also mapped
+mpv's empty software value and direct interop backends to `unknown`, so the
+trace could not test D-027. Both movies showed full buffers and no cache pause
+in the retained window; the hiccuping source's eight output drops predated that
+window. The smooth source's one counted underrun came from initial cache fill.
+
+The opt-in trace now writes one compact sample line per second to a private,
+flushed, 2 MiB per-playback file. It records bounded decode method and pixel
+format, output/decoder/delayed frames, cache duration, buffer percentage,
+cache pause, position and estimated video-frame rate. Unsupported or null
+property replies say `unavailable`; a value rejected by the safe vocabulary
+says `unknown`. A source line records dimensions, video format and codec,
+video bitrate, audio codec and bitrate; it updates only when those safe facts
+change. Initial fill and later cache pauses have separate durations and only
+later pauses count as underruns. Classified mpv warnings stay redacted. The
+file retains source, MARK and summary lines even if old timeline lines must be
+evicted. The exact opt-in gate and D-027 decode policy remain unchanged.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

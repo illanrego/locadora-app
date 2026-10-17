@@ -2,9 +2,38 @@
 
 Last updated: 2026-10-17
 Current milestone: source-dependent playback hiccups and measurable decode policy
-Status: diagnostics and decode-policy packages committed; optimized binary rebuilt; owner playback retest pending
+Status: diagnostics timeline repaired; MARK package next; owner playback retest pending
 
 ## Resume checkpoint
+
+2026-10-17 playback diagnostics repair (Package 3):
+- Starting tree was clean at `e128b92`; the separate web checkout stayed read-only.
+  The two owner traces kept about 17 seconds, hid `hwdec-current` as `unknown`,
+  and counted the initial cache fill as an underrun. D-028 records the evidence.
+- The exact opt-in gate remains. One sample line per second now records decode
+  method, pixel format, output/decoder/delayed counts, cache and FPS. Property
+  errors and null data read `unavailable`; rejected values read `unknown`.
+  A safe source line adds dimensions, codec and bitrate fields. The 2 MiB
+  private file flushes during playback, retains marks/source/summaries through
+  timeline eviction, and rotates the newest 20 files. Initial fill and later
+  cache pauses have separate durations and counts.
+- Generated 320x180 H.264/AAC local clips were read with `mpv --no-config
+  --vo=null --ao=null`; listed properties and live values were confirmed for
+  decode, pixel format, drops, delayed frames, cache, buffer, pause, time,
+  estimated FPS, dimensions, format, codecs and audio bitrate. `video-bitrate`
+  stayed `(unavailable)` on generated MKV, MP4 and MPEG-TS probes; this field
+  remains explicit as `unavailable` pending a source that supplies it. The
+  null-output probe does not verify the embedded GLX decode choice.
+- Mutation proof: mapping empty `hwdec-current` back to `unknown` failed
+  `decode_method_and_unavailable_are_distinct` (exit 101); accepting arbitrary
+  tokens failed `log_and_property_secrets_never_reach_file` on `token` (exit
+  101). Both mutations were restored; the three diagnostics tests passed.
+- Checks: `npm run check` passed TypeScript, 152 Vitest tests/38 files and Vite
+  build (exit 0); `cargo test --manifest-path crates/native-core/Cargo.toml
+  -- --test-threads=1` passed 22 tests; `cargo test --manifest-path
+  src-tauri/Cargo.toml` passed 29 with 2 ignored; strict `cargo clippy
+  --all-targets -- -D warnings` and `cargo fmt --check` passed for both crates;
+  `git diff --check` passed. No app launch or visual/playback claim.
 
 2026-10-17 playback-hiccup priority change:
 - Owner moved the playback-hiccup investigation ahead of pending title-search
@@ -686,11 +715,10 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: owner runs the rebuilt binary with
-`LOCADORA_PLAYBACK_DIAGNOSTICS=1`, plays a source that hiccups, and pastes the
-`[locadora-video]` summary lines plus the diagnostics file from the app cache
-`diagnostics/` directory. Use those counters to distinguish presentation drops,
-decode drops, and cache pauses before changing renderer timing again.
+Next task: add the zero-argument hiccup MARK command to the running `MpvSession`,
+bind a free key in `WatchFlow.tsx`, verify its disabled-diagnostics stderr path,
+and rebuild the optimized no-bundle binary. Then the owner retests a hiccuping
+source and supplies the redacted timeline before any renderer timing change.
 
 2026-09-28 delivery checkpoint (artifacts built 2026-09-27 11:15 -0300):
 - Commits: `8037ff9` pins/stages the engine; `dece2af` implements its lifecycle,
