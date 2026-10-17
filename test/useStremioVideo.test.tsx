@@ -65,8 +65,18 @@ describe('native subtitle coordination', () => {
     await act(async () => { await result.current.load(stream); });
     expect(mocks.ensure).toHaveBeenCalledTimes(2);
     expect(mocks.dispatch).toHaveBeenCalledWith(expect.objectContaining({
-      commandName: 'load', commandArgs: expect.objectContaining({ streamingServerURL: 'http://127.0.0.1:11471/' }),
+      commandName: 'load', commandArgs: expect.objectContaining({
+        streamingServerURL: 'http://127.0.0.1:11471/',
+        formats: expect.arrayContaining(['mp4', 'matroska,webm', 'mpegts']),
+        videoCodecs: expect.arrayContaining(['h264', 'hevc', 'av1']),
+        audioCodecs: expect.arrayContaining(['aac', 'ac3', 'dts', 'flac', 'truehd']),
+        maxAudioChannels: 8,
+      }),
     }), expect.anything());
+    const load = mocks.dispatch.mock.calls.find(([action]) => action.commandName === 'load')?.[0];
+    expect(load.commandArgs.formats.length).toBeGreaterThan(0);
+    expect(load.commandArgs.videoCodecs.length).toBeGreaterThan(0);
+    expect(load.commandArgs.audioCodecs.length).toBeGreaterThan(0);
   });
 
   it('does not start playback when closed during engine startup', async () => {

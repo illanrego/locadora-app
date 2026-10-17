@@ -381,6 +381,27 @@ the latest safe counters. With diagnostics disabled it prints one redacted
 stderr line and writes no file or extra mpv property request. The existing
 player has no transient confirmation pattern, so MARK adds no visual overlay.
 
+### D-029 — Native media capabilities for direct playback
+
+Accepted 2026-10-17 by owner priority change, continuing D-027 and D-028.
+The owner measured a recurring 80 ms video timeline gap at each four-second
+boundary of the engine's HLS route; the same file's direct URL had no video or
+audio timestamp gaps. Declare the Linux shell's libmpv capabilities in the
+Stremio Video load command so its probe uses native demuxers and decoders rather
+than WebKit's HTML media-element sniffer. The container names are `mp4`,
+`matroska,webm`, and `mpegts`; codec names follow FFmpeg probe spelling. Eight
+audio channels cover native 7.1 output. Keep the existing decode, rendering,
+timing and buffering policies unchanged.
+
+The upstream `withStreamingServer` predicate also forces HLS when a file has
+any embedded subtitle stream or two supported audio streams, even when libmpv
+can play both. Capability fields cannot override those two checks. The app's
+external subtitle resource pipeline uses native `sub-add`, while mpv discovers
+embedded tracks from the direct file. No dependency patch is authorized by the
+subtitle safety condition in this milestone, so those files remain an explicit
+coverage limit pending an owner-approved library adaptation. Real-stream
+playback and a 25-second direct-route timeline require the owner's retest.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

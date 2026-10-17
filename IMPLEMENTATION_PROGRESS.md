@@ -2,9 +2,39 @@
 
 Last updated: 2026-10-17
 Current milestone: source-dependent playback hiccups and measurable decode policy
-Status: diagnostics timeline and MARK implemented; optimized binary rebuilt; owner playback retest pending
+Status: native capability declaration under D-029; surface instrumentation cleanup next; owner playback retest pending
 
 ## Resume checkpoint
+
+2026-10-17 direct-playback priority change (D-029, Package 1):
+- Owner made avoiding the engine's four-second HLS packager the active playback
+  milestone. The orchestrator measured 80 ms video gaps at every segment boundary
+  on HLS and no video or audio timestamp gaps on the same direct file. This
+  supersedes the previous trace-collection `Next task`. Starting tree was clean
+  at `1cbf092`; the web checkout remained read-only.
+- The load command now declares libmpv's containers, codecs and eight audio
+  channels in one place instead of using WebKit's HTML media-element sniffer.
+  A disposable 1280x720 HEVC MKV was generated with `ffmpeg`. The bundled
+  engine v0.16.1 rejected a separate local HTTP URL with `blocked private
+  address 127.0.0.1`; its own local archive stream served the same generated
+  clip to `/hlsv2/probe`. That probe returned `format.name=matroska,webm` and
+  `streams[0].codec=hevc`; the library's exact predicate returned old=false,
+  native=true. The temporary engine and HTTP server were stopped and the
+  disposable files removed. Other declared codec tokens have not been tested
+  with generated variants.
+- Subtitle audit: `WatchFlow` resolves external subtitle resources separately
+  and `useStremioVideo` selects them through the native `player_select_subtitle`
+  / `sub-add` path. Direct media still reaches mpv with embedded tracks, and
+  native `track-list` events feed the library's `subtitlesTracks`; the app filters
+  only `Locadora external` from that list. No dependency patch is needed for
+  subtitle safety. However, `canPlayProbe` has two additional browser-specific
+  HLS triggers, any embedded subtitle and two supported audio tracks. Those
+  cannot be overridden by capability fields and remain a coverage limit.
+- Package 1 check: `npm run check` passed, exit 0: TypeScript, Vitest 152
+  tests/38 files, and Vite build (existing large-chunk advisory). No visual or
+  real-stream playback check was performed.
+- Next package removes only the temporary surface-probe instrumentation. Keep
+  live geometry, fullscreen and the opt-in playback diagnostics/MARK untouched.
 
 2026-10-17 hiccup MARK (Package 4):
 - Shift+M was chosen after checking the WatchFlow keyboard map (Escape,

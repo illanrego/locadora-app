@@ -73,6 +73,15 @@ const INITIAL_STATE: StremioVideoState = {
   muted: false,
 };
 
+// The shell plays through native libmpv, not WebKit's HTML media element.
+// Override Stremio Video's browser sniffing when its engine probes a stream.
+const NATIVE_MEDIA_CAPABILITIES = {
+  formats: ['mp4', 'matroska,webm', 'mpegts'],
+  videoCodecs: ['h264', 'h265', 'hevc', 'vp8', 'vp9', 'av1'],
+  audioCodecs: ['aac', 'mp3', 'ac3', 'eac3', 'vorbis', 'opus', 'dts', 'flac', 'truehd'],
+  maxAudioChannels: 8,
+};
+
 function stremioVideoError(value: unknown): string {
   if (value && typeof value === 'object' && 'error' in value) {
     return safeDiagnostic((value as { error: unknown }).error);
@@ -338,6 +347,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
         gpuVideoProcessing: false,
         assSubtitlesStyling: true,
         streamingServerURL: serviceAvailable ? STREMIO_SERVICE_URL : null,
+        ...NATIVE_MEDIA_CAPABILITIES,
       },
     }, {
       containerElement,
