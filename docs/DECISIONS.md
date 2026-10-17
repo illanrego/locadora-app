@@ -333,7 +333,7 @@ redacted `[locadora-video]` start/end summaries. The setting is off by default.
 Raw mpv messages and arbitrary string property values cannot enter the file or
 stderr. The owner will retest a hiccuping source before further timing changes.
 
-The embedded decode policy is being changed to `auto-copy-safe`, the documented union of
+The embedded decode policy uses `auto-copy-safe`, the documented union of
 `auto-safe` and `auto-copy`; the Stremio `auto-copy` request follows the same
 closed policy. The previous `auto` choice could fall straight to software after
 its first direct method failed on the X11/GLX render context. Copy-back VAAPI

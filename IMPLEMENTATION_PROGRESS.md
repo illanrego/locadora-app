@@ -36,6 +36,23 @@ Status: diagnostics and decode-policy packages in progress; owner playback retes
   passed. Native socket tests required an outside-sandbox retry after the
   initial in-sandbox run failed at `ControlUnavailable`. No GUI or real-stream
   playback was performed.
+- Decode-policy package: embedded libmpv initializes with `auto-copy-safe`;
+  the Stremio `auto-copy` set request translates to the same value, which the
+  native property allowlist accepts as a closed choice. The existing libmpv
+  option regression now reads back `hwdec` from the initialized handle. No
+  render-loop, advanced-control, video-timing-offset, buffer, or `vd-lavc-dr`
+  change was made. See D-027 for the diagnostic-gated timing follow-up.
+- Package-two checks: `npm run check` passed typecheck, Vitest 152/38 and Vite
+  build (existing chunk advisory), exit 0; `cargo test --manifest-path
+  crates/native-core/Cargo.toml -- --test-threads=1` passed 20 tests;
+  `cargo test --manifest-path src-tauri/Cargo.toml` passed 29 tests with 2
+  ignored. Both crates passed strict `cargo clippy --all-targets -- -D
+  warnings`, `cargo fmt --check`, and `git diff --check`. Mutating the
+  diagnostic classifier to include raw mpv text made the redaction test fail
+  on a token; restoring `hwdec=auto` made the libmpv read-back test fail
+  (`auto` versus `auto-copy-safe`). Both source files were restored. Real
+  stream behavior and the selected decode method remain unverified pending
+  the owner retest.
 
 2026-10-10 title search priority change:
 - The owner made a standalone title search the active task. Starting `git

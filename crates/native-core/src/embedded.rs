@@ -90,7 +90,7 @@ impl EmbeddedMpv {
             ("osc", "no"),
             ("input-default-bindings", "no"),
             ("input-vo-keyboard", "no"),
-            ("hwdec", "auto"),
+            ("hwdec", "auto-copy-safe"),
             ("input-ipc-server", socket),
         ]
         .into_iter()
@@ -219,6 +219,7 @@ mod tests {
             format: c_int,
             data: *mut c_void,
         ) -> c_int;
+        fn mpv_free(data: *mut c_void);
     }
 
     #[test]
@@ -241,6 +242,27 @@ mod tests {
             offset, 0.0,
             "GTK presents immediately; mpv must not submit early"
         );
+        let mut hwdec: *mut c_char = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                mpv_get_property(
+                    owner.0,
+                    c"hwdec".as_ptr(),
+                    1,
+                    (&mut hwdec as *mut *mut c_char).cast(),
+                )
+            },
+            0,
+            "initialized libmpv must expose the requested decode policy"
+        );
+        assert!(!hwdec.is_null());
+        assert_eq!(
+            unsafe { std::ffi::CStr::from_ptr(hwdec) }.to_str().unwrap(),
+            "auto-copy-safe"
+        );
+        unsafe {
+            mpv_free(hwdec.cast());
+        }
         // Verify the running libmpv accepts the shared buffering policy.
         for (name, expected) in [
             ("cache-pause-wait", 15.0),

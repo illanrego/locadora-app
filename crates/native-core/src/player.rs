@@ -603,9 +603,12 @@ impl MpvSession {
             "sub-ass-override" => value
                 .as_str()
                 .is_some_and(|value| matches!(value, "no" | "strip")),
-            "hwdec" => value
-                .as_str()
-                .is_some_and(|value| matches!(value, "no" | "auto" | "auto-copy" | "d3d11va")),
+            "hwdec" => value.as_str().is_some_and(|value| {
+                matches!(
+                    value,
+                    "no" | "auto" | "auto-copy" | "auto-copy-safe" | "d3d11va"
+                )
+            }),
             "osc" => value
                 .as_str()
                 .is_some_and(|value| matches!(value, "yes" | "no")),
@@ -944,6 +947,8 @@ mod tests {
         }
         assert!(allowed("pause", json!(true)));
         assert!(allowed("sub-delay", json!(1.25)));
+        assert!(allowed("hwdec", json!("auto-copy-safe")));
+        assert!(!allowed("hwdec", json!("vaapi-copy")));
         assert!(!allowed("script-opts", json!("danger")));
         assert!(!allowed("sub-delay", json!(601)));
     }

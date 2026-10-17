@@ -22,12 +22,10 @@ function nativeCommandError(value: unknown): string {
 }
 
 function nativePropertyValue(property: string, value: unknown): unknown {
-  // Stremio's generic shell asks for copy-back decoding. This desktop shell
-  // owns a native libmpv OpenGL surface, where zero-copy interop is available.
-  // Copy-back is unavailable on some Linux
-  // drivers, and mpv then falls back to software decoding, which cannot keep up
-  // with real 1080p content on a weak CPU.
-  if (property === 'hwdec' && value === 'auto-copy') return 'auto';
+  // Stremio asks for copy-back decoding. The embedded libmpv policy uses
+  // auto-copy-safe: mpv may use a safe direct method, then a copy-back method
+  // when the render backend cannot support direct interop.
+  if (property === 'hwdec' && value === 'auto-copy') return 'auto-copy-safe';
   return value;
 }
 
