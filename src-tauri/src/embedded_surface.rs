@@ -6,7 +6,6 @@ use std::{
     cell::{Cell, RefCell},
     ffi::{c_char, c_void},
     rc::Rc,
-    sync::atomic::{AtomicU32, Ordering},
 };
 use tauri::{Emitter, WebviewWindow};
 
@@ -56,20 +55,6 @@ impl VideoBounds {
         Ok(())
     }
 
-    /// Descriptor-free summary used by the temporary bounds diagnostics.
-    pub fn summary(&self) -> String {
-        format!(
-            "visible={} x={} y={} w={} h={} vp={}x{}",
-            self.visible,
-            self.x,
-            self.y,
-            self.width,
-            self.height,
-            self.viewport_width,
-            self.viewport_height
-        )
-    }
-
     fn margins(&self, width: i32, height: i32) -> [i32; 4] {
         let scale_x = f64::from(width) / self.viewport_width.max(1.0);
         let scale_y = f64::from(height) / self.viewport_height.max(1.0);
@@ -107,27 +92,9 @@ struct Surface {
     last_real_bounds: Option<VideoBounds>,
     requested_visible: Cell<bool>,
     fullscreen: bool,
-    draws: Rc<Cell<u64>>,
-    frame_updates: Rc<Cell<u64>>,
-    bounds_reports: Rc<Cell<u64>>,
 }
 
 thread_local! { static SURFACE: RefCell<Option<Surface>> = const { RefCell::new(None) }; }
-
-/// Shared budget so the temporary surface diagnostics stay bounded and can
-/// never become a per-frame log. Values only; never a descriptor.
-static BOUND_LOG_BUDGET: AtomicU32 = AtomicU32::new(12);
-
-pub fn log_bounds_diagnostic(message: &str) {
-    let logged = BOUND_LOG_BUDGET
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |remaining| {
-            remaining.checked_sub(1)
-        })
-        .is_ok();
-    if logged {
-        eprintln!("[locadora-video] {message}");
-    }
-}
 
 impl Surface {
     /// The rectangle the surface should occupy. A live session keeps the last
@@ -222,15 +189,10 @@ pub fn install(window: &WebviewWindow) -> Result<(), String> {
     overlay.show();
 
     let renderer: Rc<RefCell<Option<MpvRenderContext>>> = Rc::new(RefCell::new(None));
-    let draws = Rc::new(Cell::new(0_u64));
-    let frame_updates = Rc::new(Cell::new(0_u64));
-    let bounds_reports = Rc::new(Cell::new(0_u64));
-    let draw_count = draws.clone();
     let draw_renderer = renderer.clone();
     let error_window = window.clone();
     area.connect_render(move |area, _| {
         if let Some(renderer) = draw_renderer.borrow_mut().as_mut() {
-            draw_count.set(draw_count.get().saturating_add(1));
             let mut framebuffer = 0;
             unsafe {
                 epoxy_glGetIntegerv(0x8CA6, &mut framebuffer);
@@ -251,14 +213,12 @@ pub fn install(window: &WebviewWindow) -> Result<(), String> {
         glib::Propagation::Stop
     });
     let frame_renderer = renderer.clone();
-    let update_count = frame_updates.clone();
     area.add_tick_callback(move |area, _| {
         if area.is_visible() {
             area.make_current();
             if let Some(renderer) = frame_renderer.borrow_mut().as_mut()
                 && renderer.update()
             {
-                update_count.set(update_count.get().saturating_add(1));
                 area.queue_render();
             }
         }
@@ -323,9 +283,6 @@ pub fn install(window: &WebviewWindow) -> Result<(), String> {
             last_real_bounds: None,
             requested_visible: Cell::new(false),
             fullscreen: false,
-            draws,
-            frame_updates,
-            bounds_reports,
         })
     });
     Ok(())
@@ -337,8 +294,12 @@ pub fn start(cache_dir: Option<&std::path::Path>) -> Result<MpvSession, String> 
         let surface = surface
             .as_ref()
             .ok_or("Embedded video surface is unavailable")?;
-        let session = MpvSession::start_with_diagnostics(&player_runtime_root(), VideoOutput::Embedded, cache_dir)
-            .map_err(|error| format!("Could not initialize embedded mpv: {error}"))?;
+        let session = MpvSession::start_with_diagnostics(
+            &player_runtime_root(),
+            VideoOutput::Embedded,
+            cache_dir,
+        )
+        .map_err(|error| format!("Could not initialize embedded mpv: {error}"))?;
         surface.area.show();
         surface.area.realize();
         surface.area.make_current();
@@ -360,35 +321,8 @@ pub fn start(cache_dir: Option<&std::path::Path>) -> Result<MpvSession, String> 
             }
         };
         *surface.renderer.borrow_mut() = Some(renderer);
-        surface.draws.set(0);
-        surface.frame_updates.set(0);
-        surface.bounds_reports.set(0);
         surface.layout();
         surface.area.queue_render();
-        log_bounds_diagnostic(&format!("start bounds {}", surface.bounds.summary()));
-        // Two bounded, descriptor-free samples per startup; no mpv log forwarding.
-        for delay in [5_u64, 15] {
-            glib::timeout_add_local_once(std::time::Duration::from_secs(delay), move || {
-                SURFACE.with(|surface| {
-                    if let Some(surface) = surface.borrow().as_ref()
-                        && surface.renderer.borrow().is_some()
-                    {
-                        log_bounds_diagnostic(&format!(
-                            "+{}s visible={} mapped={} bounds=[{}] reports={} size={}x{} draws={} frame-updates={}",
-                            delay,
-                            surface.area.is_visible(),
-                            surface.area.is_mapped(),
-                            surface.bounds.summary(),
-                            surface.bounds_reports.get(),
-                            surface.area.allocated_width(),
-                            surface.area.allocated_height(),
-                            surface.draws.get(),
-                            surface.frame_updates.get()
-                        ));
-                    }
-                });
-            });
-        }
         Ok(session)
     })
 }
@@ -396,7 +330,6 @@ pub fn start(cache_dir: Option<&std::path::Path>) -> Result<MpvSession, String> 
 pub fn set_bounds(bounds: VideoBounds) {
     SURFACE.with(|surface| {
         if let Some(surface) = surface.borrow_mut().as_mut() {
-            let previous = surface.bounds;
             surface.bounds = bounds;
             // Retain geometry through transient empty measurements, but always
             // honor explicit visibility so unload/cleanup can hide the surface.
@@ -404,18 +337,7 @@ pub fn set_bounds(bounds: VideoBounds) {
                 surface.last_real_bounds = Some(bounds);
             }
             surface.requested_visible.set(bounds.visible);
-            surface
-                .bounds_reports
-                .set(surface.bounds_reports.get().saturating_add(1));
             surface.layout();
-            // Report visibility transitions and early visible reports only.
-            if bounds.visible != previous.visible || bounds.visible {
-                log_bounds_diagnostic(&format!(
-                    "bounds {} reports={}",
-                    bounds.summary(),
-                    surface.bounds_reports.get()
-                ));
-            }
         }
     });
 }

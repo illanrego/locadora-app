@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   ensure: vi.fn().mockResolvedValue(undefined),
   dispatch: vi.fn(), select: vi.fn().mockResolvedValue(undefined), property: vi.fn().mockResolvedValue(undefined),
   bounds: vi.fn().mockResolvedValue(undefined), fullscreen: vi.fn().mockResolvedValue(undefined),
-  probe: vi.fn().mockResolvedValue(undefined), torrent: vi.fn().mockResolvedValue(undefined),
+  torrent: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@stremio/stremio-video', () => ({ default: class {
   on(name: string, listener: (...args: unknown[]) => void) { mocks.listeners.set(name, listener); }
@@ -23,7 +23,6 @@ vi.mock('../src/platform/nativeBridge', () => ({
   setNativePlayerProperty: mocks.property,
   setNativeVideoBounds: mocks.bounds,
   setNativePlayerFullscreen: mocks.fullscreen,
-  reportSurfaceProbe: mocks.probe,
   onNativePlayerFullscreenChanged: async (listener: (fullscreen: boolean) => void) => {
     mocks.listeners.set('native-fullscreen', listener as (...args: unknown[]) => void);
     return () => mocks.listeners.delete('native-fullscreen');

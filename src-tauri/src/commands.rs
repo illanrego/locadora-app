@@ -1379,39 +1379,10 @@ pub fn player_set_bounds(
     request: crate::embedded_surface::VideoBounds,
     window: WebviewWindow,
 ) -> Result<(), String> {
-    if let Err(error) = request.validate() {
-        // The frontend reports bounds with `void`, so a rejection is otherwise
-        // invisible and reads as "the video surface never appeared".
-        crate::embedded_surface::log_bounds_diagnostic(&format!(
-            "bounds rejected: {error} [{}]",
-            request.summary()
-        ));
-        return Err(error);
-    }
+    request.validate()?;
     window
         .run_on_main_thread(move || crate::embedded_surface::set_bounds(request))
         .map_err(|_| "Could not position the native video surface".to_owned())
-}
-
-#[tauri::command]
-pub fn player_surface_probe(detail: String) -> Result<(), String> {
-    // TEMPORARY diagnostic for the missing embedded picture. Accepts only a
-    // short, sanitized layout summary and shares the bounded log budget, so it
-    // cannot become a data or log exfiltration path. Remove with the probe.
-    const MAX_LENGTH: usize = 600;
-    let sanitized = detail.len() <= MAX_LENGTH
-        && detail.chars().all(|c| {
-            c.is_ascii_alphanumeric()
-                || matches!(
-                    c,
-                    ' ' | '.' | ',' | '=' | ':' | '/' | '_' | '-' | 'x' | '>' | ';'
-                )
-        });
-    if !sanitized {
-        return Err("Invalid surface probe".into());
-    }
-    crate::embedded_surface::log_bounds_diagnostic(&format!("probe {detail}"));
-    Ok(())
 }
 
 #[tauri::command]

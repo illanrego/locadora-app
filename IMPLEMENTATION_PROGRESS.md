@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-17
 Current milestone: source-dependent playback hiccups and measurable decode policy
-Status: native capability declaration under D-029; surface instrumentation cleanup next; owner playback retest pending
+Status: native capability and surface-probe cleanup built; owner playback retest pending
 
 ## Resume checkpoint
 
@@ -35,6 +35,27 @@ Status: native capability declaration under D-029; surface instrumentation clean
   real-stream playback check was performed.
 - Next package removes only the temporary surface-probe instrumentation. Keep
   live geometry, fullscreen and the opt-in playback diagnostics/MARK untouched.
+
+2026-10-17 surface-probe cleanup (Package 2):
+- Removed the temporary frontend CSS/layout probe, native IPC command, bounded
+  geometry logger, start/5s/15s samples, and draw/frame/bounds counters. Kept
+  `VideoBounds` validation and margins, `last_real_bounds`, `layout`, GTK
+  resize/tick/render wiring, fullscreen and Escape behavior. Also kept the
+  delayed bounds remeasure calls: they retry real layout after a load or panel
+  transition, so deleting them would change geometry behavior despite the
+  request to remove probe settle timers. Only their diagnostic reason labels
+  were removed. The opt-in playback timeline, MARK and Shift+M are untouched.
+- `npm run check` passed, exit 0: TypeScript, Vitest 152 tests/38 files, Vite
+  build. `cargo test --manifest-path crates/native-core/Cargo.toml --
+  --test-threads=1` passed 22 tests, 0 failed; `cargo test --manifest-path
+  src-tauri/Cargo.toml` passed 29 tests, 0 failed, 2 ignored. Both crates passed
+  `cargo clippy --manifest-path <crate>/Cargo.toml --all-targets -- -D warnings`.
+  Both crates passed `cargo fmt --manifest-path <crate>/Cargo.toml --check`
+  after applying a Tauri line-wrap fix. `git diff --check` passed.
+- `npm run tauri -- build --no-bundle` passed, exit 0; the optimized binary was
+  refreshed after the final source edit. `find src src-tauri/src -type f -newer
+  src-tauri/target/release/wills-locadora-player` printed nothing. No app
+  launch, visual check, real stream, or 25-second playback timeline was tested.
 
 2026-10-17 hiccup MARK (Package 4):
 - Shift+M was chosen after checking the WatchFlow keyboard map (Escape,
@@ -771,12 +792,11 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: owner runs the rebuilt binary with
-`LOCADORA_PLAYBACK_DIAGNOSTICS=1`, plays a source that hiccups, presses Shift+M
-at each visible interruption, and supplies the redacted trace from the app
-cache `diagnostics/` directory plus `[locadora-video]` stderr lines. Compare
-decode method, pixel format, delayed/output/decoder counts and cache pauses
-at each MARK before changing renderer timing.
+Next task: owner runs the rebuilt binary on a single-audio MKV source without
+embedded subtitles, confirms the live mpv `file-format` is a container rather
+than `hls`, and supplies a 25-second timeline for zero-gap/zero-duplicate
+comparison. A separate embedded-subtitle or multi-audio source should establish
+the remaining HLS coverage limit before any library adaptation is approved.
 
 2026-09-28 delivery checkpoint (artifacts built 2026-09-27 11:15 -0300):
 - Commits: `8037ff9` pins/stages the engine; `dece2af` implements its lifecycle,
