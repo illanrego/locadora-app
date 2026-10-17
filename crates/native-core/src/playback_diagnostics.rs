@@ -431,7 +431,8 @@ impl PlaybackDiagnostics {
             })
             .collect::<Vec<_>>();
         files.sort();
-        let excess = files.len().saturating_sub(20);
+        // The new file is created by flush after rotation.
+        let excess = files.len().saturating_sub(19);
         for file in files.into_iter().take(excess) {
             let _ = fs::remove_file(file);
         }

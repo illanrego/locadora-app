@@ -374,6 +374,13 @@ later pauses count as underruns. Classified mpv warnings stay redacted. The
 file retains source, MARK and summary lines even if old timeline lines must be
 evicted. The exact opt-in gate and D-027 decode policy remain unchanged.
 
+The player accepts Shift+M as a hiccup MARK while video is loaded. It reaches
+the running native session through a zero-argument allowlisted command and
+records wall-clock milliseconds, the already observed playback position, and
+the latest safe counters. With diagnostics disabled it prints one redacted
+stderr line and writes no file or extra mpv property request. The existing
+player has no transient confirmation pattern, so MARK adds no visual overlay.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

@@ -1460,6 +1460,16 @@ pub fn player_control(
 }
 
 #[tauri::command]
+pub fn player_mark(state: State<'_, PlayerState>) -> Result<(), String> {
+    let mut player = state.0.lock().map_err(|_| "Player state is unavailable")?;
+    player
+        .as_mut()
+        .ok_or("Player is not running")?
+        .mark_hiccup();
+    Ok(())
+}
+
+#[tauri::command]
 pub fn player_set_property(
     request: PlayerPropertyRequest,
     state: State<'_, PlayerState>,

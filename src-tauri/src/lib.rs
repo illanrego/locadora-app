@@ -54,6 +54,7 @@ pub fn run() {
             commands::player_fullscreen,
             commands::player_load,
             commands::player_control,
+            commands::player_mark,
             commands::player_set_property,
             commands::player_select_subtitle,
             commands::player_events,

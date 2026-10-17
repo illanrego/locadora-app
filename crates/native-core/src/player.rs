@@ -1060,5 +1060,9 @@ mod tests {
         assert!(session.embedded_handle().is_some());
         assert!(session.child.is_none());
         assert!(session.is_alive());
+        assert!(session.diagnostics.is_none());
+        let next_request_id = session.next_request_id;
+        session.mark_hiccup();
+        assert_eq!(session.next_request_id, next_request_id);
     }
 }

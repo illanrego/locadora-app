@@ -248,6 +248,11 @@ export async function controlNativePlayer(action: 'pause' | 'resume' | 'seek' | 
   return invoke('player_control', { action, seconds });
 }
 
+export async function markNativePlayerHiccup(): Promise<void> {
+  if (!isNativeShell()) return;
+  return invoke('player_mark');
+}
+
 export async function setNativePlayerProperty(name: string, value: unknown): Promise<void> {
   if (!isNativeShell()) throw new Error('Native player is unavailable');
   return invoke('player_set_property', { request: { name, value } });

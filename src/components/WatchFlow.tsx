@@ -8,7 +8,7 @@ import { resolveTitleSubtitles, type StremioExtraSubtitleTrack } from '../media/
 import { normalizeSubtitleLanguage } from '../media/subtitles';
 import { readSubtitleDelay, writeSubtitleDelay, videoDelayIdentity } from '../media/subtitleDelayStore';
 import { useStremioVideo } from '../media/useStremioVideo';
-import { readMediaConfiguration } from '../platform/nativeBridge';
+import { markNativePlayerHiccup, readMediaConfiguration } from '../platform/nativeBridge';
 import { filterSources, type ResolutionFilter } from '../media/sourcePicker';
 import { Modal } from './Modal';
 import { PlayerIcon } from './PlayerIcon';
@@ -222,6 +222,9 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
       } else if (event.key === 'ArrowRight' && video.state.loaded) {
         event.preventDefault();
         video.seekRelative(10);
+      } else if (event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && event.key.toLowerCase() === 'm' && !event.repeat) {
+        event.preventDefault();
+        void markNativePlayerHiccup();
       }
     };
     window.addEventListener('keydown', onPlaybackKey);

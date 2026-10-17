@@ -2,9 +2,35 @@
 
 Last updated: 2026-10-17
 Current milestone: source-dependent playback hiccups and measurable decode policy
-Status: diagnostics timeline repaired; MARK package next; owner playback retest pending
+Status: diagnostics timeline and MARK implemented; optimized binary rebuilt; owner playback retest pending
 
 ## Resume checkpoint
+
+2026-10-17 hiccup MARK (Package 4):
+- Shift+M was chosen after checking the WatchFlow keyboard map (Escape,
+  F/F11, Space, arrows and subtitle brackets) and Stremio ShellVideo. Plain
+  M remains free for the conventional mute action. The loaded player sends a
+  zero-argument `player_mark` command through the deny-by-default Tauri list;
+  `MpvSession` writes a redacted, timestamped mark beside timeline samples
+  and prints it once to stderr. When diagnostics are disabled, the mark prints
+  using the already observed position, writes no file and issues no extra mpv
+  request. The player has no transient confirmation pattern, so there is no
+  visual MARK overlay or new user-facing copy.
+- Fixed the final-review rotation off-by-one: rotation runs before the new
+  file is created, so it now leaves room for exactly one new trace among the
+  newest 20 files.
+- `npm run check` passed TypeScript, 152 Vitest tests/38 files and Vite build;
+  `cargo test --manifest-path crates/native-core/Cargo.toml --
+  --test-threads=1` passed 22 tests; `cargo test --manifest-path
+  src-tauri/Cargo.toml` passed 29 with 2 ignored. Both crates passed strict
+  `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check`;
+  `git diff --check` passed. The native checks were rerun after the rotation
+  fix. `npm run tauri -- build --no-bundle` first failed in sandbox at
+  `spawnSync tar EPERM` during engine preparation; the approved outside-sandbox
+  retry passed. The final rebuild after the rotation fix passed in 2m02s.
+  `find src src-tauri/src -type f -newer
+  src-tauri/target/release/wills-locadora-player` printed nothing. No app launch,
+  manual visual check or real-stream playback was performed.
 
 2026-10-17 playback diagnostics repair (Package 3):
 - Starting tree was clean at `e128b92`; the separate web checkout stayed read-only.
@@ -715,10 +741,12 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: add the zero-argument hiccup MARK command to the running `MpvSession`,
-bind a free key in `WatchFlow.tsx`, verify its disabled-diagnostics stderr path,
-and rebuild the optimized no-bundle binary. Then the owner retests a hiccuping
-source and supplies the redacted timeline before any renderer timing change.
+Next task: owner runs the rebuilt binary with
+`LOCADORA_PLAYBACK_DIAGNOSTICS=1`, plays a source that hiccups, presses Shift+M
+at each visible interruption, and supplies the redacted trace from the app
+cache `diagnostics/` directory plus `[locadora-video]` stderr lines. Compare
+decode method, pixel format, delayed/output/decoder counts and cache pauses
+at each MARK before changing renderer timing.
 
 2026-09-28 delivery checkpoint (artifacts built 2026-09-27 11:15 -0300):
 - Commits: `8037ff9` pins/stages the engine; `dece2af` implements its lifecycle,
