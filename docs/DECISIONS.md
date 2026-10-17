@@ -321,6 +321,38 @@ auto-jump: a `woody allen` query returns both "Woody Allen" and "Allen Woody",
 so the choice stays with the visitor. No member, rental or player state
 participates, and the web storefront ships the identical contract.
 
+### D-027 — Measured playback hiccups and decode fallback
+
+Accepted 2026-10-17 by owner priority change. Playback hiccups are the active
+milestone ahead of title-search visual acceptance; this resumes the playback
+investigation paused by D-024. D-022 timing and D-023 buffering changes did not
+establish the cause of source-dependent interruptions. Embedded libmpv now has
+opt-in `LOCADORA_PLAYBACK_DIAGNOSTICS=1` diagnostics: one-second property samples,
+bounded classified warning lines, per-playback capped files in app cache, and
+redacted `[locadora-video]` start/end summaries. The setting is off by default.
+Raw mpv messages and arbitrary string property values cannot enter the file or
+stderr. The owner will retest a hiccuping source before further timing changes.
+
+The embedded decode policy is being changed to `auto-copy-safe`, the documented union of
+`auto-safe` and `auto-copy`; the Stremio `auto-copy` request follows the same
+closed policy. The previous `auto` choice could fall straight to software after
+its first direct method failed on the X11/GLX render context. Copy-back VAAPI
+works in a null-output probe, but that probe does not prove which method the
+embedded renderer will select. `hwdec-current` in the new trace provides that
+evidence.
+
+Pending the diagnostic retest, investigate render API advanced control and
+swap timing as a separate package. Installed `/usr/include/mpv/render.h` says
+`MPV_RENDER_PARAM_ADVANCED_CONTROL` is "strongly recommended" and "Correct
+functionality is impossible if the update callback is not set, or not set soon
+enough". It requires `mpv_render_context_set_update_callback()`; the
+`MPV_RENDER_FRAME_INFO_BLOCK_VSYNC` contract says vsync can be reported by
+"making a call to `mpv_render_context_report_swap()` at vsync time". The
+`MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME` docs describe the matching nonblocking
+timing choice. Do not enable advanced control, change D-022's block/offset pair,
+or change `vd-lavc-dr` without the new evidence and a complete callback/swap
+implementation.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

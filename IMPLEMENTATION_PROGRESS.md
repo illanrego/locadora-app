@@ -1,10 +1,41 @@
 # Implementation progress
 
-Last updated: 2026-10-10
-Current milestone: desktop title search in normal and immersive browsing
-Status: implementation and automated checks complete; optimized desktop rebuilt; owner visual/API acceptance pending
+Last updated: 2026-10-17
+Current milestone: source-dependent playback hiccups and measurable decode policy
+Status: diagnostics and decode-policy packages in progress; owner playback retest pending
 
 ## Resume checkpoint
+
+2026-10-17 playback-hiccup priority change:
+- Owner moved the playback-hiccup investigation ahead of pending title-search
+  visual acceptance, superseding the previous `Next task` and resuming the
+  source-dependent investigation paused in D-024. Starting `git status --short`
+  was empty at `4778f1d`. Two commits are planned: opt-in bounded/redacted
+  diagnostics first, then the corrected copy-back-capable decode policy.
+- The 2026-09-22 conclusion that `auto` retries copy-back was wrong. mpv 0.35.1
+  documents a direct-method failure falling to software; the recorded trace
+  showed about 13 output drops/s, zero decoder drops and no cache underrun.
+  The prior `Not using this for auto-copy` line only filtered a direct method.
+  A `vaapi-copy` null-output probe proves copy-back works here, not which method
+  the embedded X11/GLX context selects. The new trace must settle that.
+- Diagnostics package: only an exact `LOCADORA_PLAYBACK_DIAGNOSTICS=1` enables
+  warning subscriptions and one-second IPC property reads during embedded
+  playback. A 180-line ring is rewritten to one 64 KiB cache file per play;
+  only the newest 20 playback files remain. mpv warning text is classified
+  into fixed categories, and all property strings are strict allowlists or
+  replaced with `unknown`, so URL/infohash/path/title bytes never enter the
+  file or two `[locadora-video]` summaries. The default path has no channel,
+  sampling, file or extra IPC. No media descriptor or member state is logged.
+- Package-one checks: `npm run check` passed typecheck, Vitest 152/38, Vite
+  build (existing chunk advisory), exit 0; `cargo test --manifest-path
+  crates/native-core/Cargo.toml -- --test-threads=1` passed 20 tests (0 failed),
+  including the redaction regression; `cargo test --manifest-path
+  src-tauri/Cargo.toml` passed 29 tests (2 ignored); strict `cargo clippy
+  --manifest-path <each Cargo.toml> --all-targets -- -D warnings`, both
+  `cargo fmt --manifest-path <each Cargo.toml> --check`, and `git diff --check`
+  passed. Native socket tests required an outside-sandbox retry after the
+  initial in-sandbox run failed at `ControlUnavailable`. No GUI or real-stream
+  playback was performed.
 
 2026-10-10 title search priority change:
 - The owner made a standalone title search the active task. Starting `git
@@ -631,14 +662,11 @@ of patching the dependency on disk. Relative Vite asset URLs were kept as
 portability for Tauri's asset origin, but absolute paths were already resolving
 there; they were not the cause of the blank window.
 
-Next task: owner visually verify title search in the rebuilt desktop: open
-"Buscar título" in 2D, switch to 3D and open it from "Buscar fitas", search a
-live movie and series in both locales, inspect each result, and report any
-Worker/API or visual mismatch. Then continue the pending person-stand visual
-flow using a live title with id-bearing credits, including 2D/3D fallback.
-The earlier failing-source playback retest, signed-in rental-preference
-acceptance, clean-machine installation, Flatpak and distribution audit remain
-pending after this task.
+Next task: owner runs the rebuilt binary with
+`LOCADORA_PLAYBACK_DIAGNOSTICS=1`, plays a source that hiccups, and pastes the
+`[locadora-video]` summary lines plus the diagnostics file from the app cache
+`diagnostics/` directory. Use those counters to distinguish presentation drops,
+decode drops, and cache pauses before changing renderer timing again.
 
 2026-09-28 delivery checkpoint (artifacts built 2026-09-27 11:15 -0300):
 - Commits: `8037ff9` pins/stages the engine; `dece2af` implements its lifecycle,

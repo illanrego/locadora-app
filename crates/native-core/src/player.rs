@@ -1,4 +1,5 @@
 use crate::EmbeddedMpv;
+use crate::playback_diagnostics::{PROPERTIES as DIAGNOSTIC_PROPERTIES, PlaybackDiagnostics};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -10,7 +11,7 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicU64, Ordering},
-        mpsc::{self, Receiver},
+        mpsc::{self, Receiver, SyncSender},
     },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -177,6 +178,10 @@ pub struct MpvSession {
     embedded: Option<Arc<EmbeddedMpv>>,
     writer: BufWriter<UnixStream>,
     events: Receiver<PlayerEvent>,
+    diagnostic_events: Option<Receiver<Value>>,
+    diagnostics: Option<PlaybackDiagnostics>,
+    diagnostic_requests: std::collections::HashMap<u64, &'static str>,
+    last_diagnostic_sample: Instant,
     session_dir: PathBuf,
     next_request_id: u64,
     subtitle_revision: u64,
@@ -253,7 +258,10 @@ fn event_from_message(value: &Value) -> Option<PlayerEvent> {
     }
 }
 
-fn spawn_event_reader(stream: UnixStream) -> Receiver<PlayerEvent> {
+fn spawn_event_reader(
+    stream: UnixStream,
+    diagnostic_sender: Option<SyncSender<Value>>,
+) -> Receiver<PlayerEvent> {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
         let reader = BufReader::new(stream);
@@ -262,6 +270,18 @@ fn spawn_event_reader(stream: UnixStream) -> Receiver<PlayerEvent> {
             let Ok(value) = serde_json::from_str::<Value>(&line) else {
                 continue;
             };
+            if let Some(sender) = &diagnostic_sender {
+                let kind = value.get("event").and_then(Value::as_str);
+                if matches!(
+                    kind,
+                    Some("log-message" | "file-loaded" | "end-file" | "idle")
+                ) || (kind == Some("property-change")
+                    && value.get("name").and_then(Value::as_str) == Some("paused-for-cache"))
+                    || value.get("request_id").is_some()
+                {
+                    let _ = sender.try_send(value.clone());
+                }
+            }
             if let Some(event) = event_from_message(&value)
                 && sender.send(event).is_err()
             {
@@ -382,6 +402,17 @@ fn descriptor_shape(value: &str) -> String {
 
 impl MpvSession {
     pub fn start(runtime_root: &Path, video_output: VideoOutput) -> Result<Self, PlayerError> {
+        Self::start_with_diagnostics(runtime_root, video_output, None)
+    }
+
+    pub fn start_with_diagnostics(
+        runtime_root: &Path,
+        video_output: VideoOutput,
+        cache_dir: Option<&Path>,
+    ) -> Result<Self, PlayerError> {
+        let diagnostics_enabled = video_output == VideoOutput::Embedded
+            && cache_dir.is_some()
+            && std::env::var("LOCADORA_PLAYBACK_DIAGNOSTICS").as_deref() == Ok("1");
         let session_dir = session_directory(runtime_root);
         let socket_path = session_dir.join("mpv.sock");
         // Fail loudly instead of letting mpv bind silently fail and time out.
@@ -392,7 +423,10 @@ impl MpvSession {
         fs::set_permissions(&session_dir, fs::Permissions::from_mode(0o700))
             .map_err(|_| PlayerError::ControlUnavailable)?;
         let embedded = if video_output == VideoOutput::Embedded {
-            Some(EmbeddedMpv::new(&socket_path)?)
+            Some(EmbeddedMpv::new_with_diagnostics(
+                &socket_path,
+                diagnostics_enabled,
+            )?)
         } else {
             None
         };
@@ -438,12 +472,26 @@ impl MpvSession {
         let reader = stream
             .try_clone()
             .map_err(|_| PlayerError::ControlUnavailable)?;
-        let events = spawn_event_reader(reader);
+        let (diagnostic_sender, diagnostic_events) = if diagnostics_enabled {
+            let (sender, receiver) = mpsc::sync_channel(256);
+            (Some(sender), Some(receiver))
+        } else {
+            (None, None)
+        };
+        let events = spawn_event_reader(reader, diagnostic_sender);
         let mut session = Self {
             child,
             embedded,
             writer: BufWriter::new(stream),
             events,
+            diagnostic_events,
+            diagnostics: if diagnostics_enabled {
+                cache_dir.map(PlaybackDiagnostics::new)
+            } else {
+                None
+            },
+            diagnostic_requests: std::collections::HashMap::new(),
+            last_diagnostic_sample: Instant::now(),
             session_dir,
             next_request_id: 1,
             subtitle_revision: 0,
@@ -469,6 +517,9 @@ impl MpvSession {
             (17, "video-params"),
         ] {
             session.send_command(vec![json!("observe_property"), json!(id), json!(name)])?;
+        }
+        if diagnostics_enabled {
+            session.send_command(vec![json!("request_log_messages"), json!("warn")])?;
         }
         Ok(session)
     }
@@ -567,6 +618,10 @@ impl MpvSession {
     }
 
     pub fn stop_media(&mut self) -> Result<(), PlayerError> {
+        self.drain_diagnostics();
+        if let Some(diagnostics) = &mut self.diagnostics {
+            diagnostics.finish();
+        }
         self.invalidate_subtitle();
         self.send_command(vec![json!("stop")])
     }
@@ -605,7 +660,71 @@ impl MpvSession {
     }
 
     pub fn drain_events(&mut self) -> Vec<PlayerEvent> {
+        self.drain_diagnostics();
         self.events.try_iter().take(100).collect()
+    }
+
+    fn drain_diagnostics(&mut self) {
+        let Some(receiver) = &self.diagnostic_events else {
+            return;
+        };
+        let messages = receiver.try_iter().take(256).collect::<Vec<_>>();
+        for message in messages {
+            match message.get("event").and_then(Value::as_str) {
+                Some("file-loaded") => {
+                    if let Some(diag) = &mut self.diagnostics {
+                        diag.start(SESSION_COUNTER.fetch_add(1, Ordering::Relaxed));
+                    }
+                    self.last_diagnostic_sample = Instant::now() - Duration::from_secs(1);
+                }
+                Some("end-file" | "idle") => {
+                    if let Some(diag) = &mut self.diagnostics {
+                        diag.finish();
+                    }
+                }
+                Some("log-message") => {
+                    if let Some(diag) = &mut self.diagnostics {
+                        diag.log(&message);
+                    }
+                }
+                Some("property-change") => {
+                    if let Some(diag) = &mut self.diagnostics {
+                        diag.sample(
+                            "paused-for-cache",
+                            message.get("data").unwrap_or(&Value::Null),
+                        );
+                    }
+                }
+                _ => {
+                    if let Some(id) = message.get("request_id").and_then(Value::as_u64)
+                        && let Some(name) = self.diagnostic_requests.remove(&id)
+                        && let Some(diag) = &mut self.diagnostics
+                    {
+                        diag.sample(name, message.get("data").unwrap_or(&Value::Null));
+                    }
+                }
+            }
+        }
+        if self
+            .diagnostics
+            .as_ref()
+            .is_some_and(PlaybackDiagnostics::is_active)
+            && self.last_diagnostic_sample.elapsed() >= Duration::from_secs(1)
+        {
+            self.last_diagnostic_sample = Instant::now();
+            for &name in DIAGNOSTIC_PROPERTIES {
+                let id = self.next_request_id;
+                if self
+                    .send_command(vec![json!("get_property"), json!(name)])
+                    .is_ok()
+                {
+                    self.diagnostic_requests.insert(id, name);
+                }
+            }
+            if let Some(diag) = &self.diagnostics {
+                diag.flush();
+            }
+        }
     }
 
     pub fn is_alive(&mut self) -> bool {
@@ -619,6 +738,10 @@ impl MpvSession {
 
 impl Drop for MpvSession {
     fn drop(&mut self) {
+        self.drain_diagnostics();
+        if let Some(diag) = &mut self.diagnostics {
+            diag.finish();
+        }
         if self.embedded.is_some() {
             // The UI must free the GL render context before dropping this owner.
             self.embedded.take();

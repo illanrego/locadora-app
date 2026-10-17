@@ -1364,9 +1364,10 @@ pub async fn player_start(
             return Ok(());
         }
     }
-    let session = on_main_thread(&window, || {
+    let cache_dir = window.app_handle().path().app_cache_dir().ok();
+    let session = on_main_thread(&window, move || {
         crate::embedded_surface::release();
-        crate::embedded_surface::start()
+        crate::embedded_surface::start(cache_dir.as_deref())
     })
     .await??;
     *state.0.lock().map_err(|_| "Player state is unavailable")? = Some(session);
@@ -1608,7 +1609,9 @@ fn public_person_search_url(request: &PublicPersonSearchRequest) -> Result<Strin
 }
 
 #[tauri::command]
-pub async fn fetch_public_person_search(request: PublicPersonSearchRequest) -> Result<Value, String> {
+pub async fn fetch_public_person_search(
+    request: PublicPersonSearchRequest,
+) -> Result<Value, String> {
     let url = public_person_search_url(&request)?;
     fetch_bounded_https_json(&url)
         .await

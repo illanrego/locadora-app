@@ -6,6 +6,8 @@ mod network;
 #[cfg(unix)]
 pub use embedded::{EmbeddedMpv, MpvRenderContext};
 #[cfg(unix)]
+mod playback_diagnostics;
+#[cfg(unix)]
 mod player;
 mod stremio;
 

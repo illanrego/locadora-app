@@ -54,7 +54,15 @@ unsafe impl Send for EmbeddedMpv {}
 unsafe impl Sync for EmbeddedMpv {}
 
 impl EmbeddedMpv {
+    #[cfg(test)]
     pub(crate) fn new(socket: &Path) -> Result<Arc<Self>, PlayerError> {
+        Self::new_with_diagnostics(socket, false)
+    }
+
+    pub(crate) fn new_with_diagnostics(
+        socket: &Path,
+        diagnostics: bool,
+    ) -> Result<Arc<Self>, PlayerError> {
         let handle = unsafe { mpv_create() };
         if handle.is_null() {
             return Err(PlayerError::Unavailable);
@@ -64,7 +72,14 @@ impl EmbeddedMpv {
         for (name, value) in [
             ("config", "no"),
             ("terminal", "no"),
-            ("msg-level", "all=no"),
+            (
+                "msg-level",
+                if diagnostics {
+                    "all=no,vd=warn,vo=warn,demuxer=warn,ao=warn,lavf=warn,ffmpeg=warn,cplayer=warn"
+                } else {
+                    "all=no"
+                },
+            ),
             ("idle", "yes"),
             ("vo", "libmpv"),
             // render() disables mpv's target-time wait because GTK must not

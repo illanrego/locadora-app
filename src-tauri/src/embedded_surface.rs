@@ -331,13 +331,13 @@ pub fn install(window: &WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
-pub fn start() -> Result<MpvSession, String> {
+pub fn start(cache_dir: Option<&std::path::Path>) -> Result<MpvSession, String> {
     SURFACE.with(|surface| {
         let surface = surface.borrow();
         let surface = surface
             .as_ref()
             .ok_or("Embedded video surface is unavailable")?;
-        let session = MpvSession::start(&player_runtime_root(), VideoOutput::Embedded)
+        let session = MpvSession::start_with_diagnostics(&player_runtime_root(), VideoOutput::Embedded, cache_dir)
             .map_err(|error| format!("Could not initialize embedded mpv: {error}"))?;
         surface.area.show();
         surface.area.realize();
