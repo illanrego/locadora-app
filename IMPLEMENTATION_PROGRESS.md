@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-17
 Current milestone: source-dependent playback hiccups and measurable decode policy
-Status: diagnostics and decode-policy packages in progress; owner playback retest pending
+Status: diagnostics and decode-policy packages committed; optimized binary rebuilt; owner playback retest pending
 
 ## Resume checkpoint
 
@@ -53,6 +53,13 @@ Status: diagnostics and decode-policy packages in progress; owner playback retes
   (`auto` versus `auto-copy-safe`). Both source files were restored. Real
   stream behavior and the selected decode method remain unverified pending
   the owner retest.
+- Final release proof: `npm run tauri -- build --no-bundle` passed (optimized
+  profile 2m05s), refreshing
+  `src-tauri/target/release/wills-locadora-player`; the preparatory `tsc -b &&
+  vite build` also passed. `find src src-tauri/src -type f -newer
+  src-tauri/target/release/wills-locadora-player` printed nothing. Final
+  `git diff --check` passed. No manual GUI, playback, or real-source trace
+  was available, so this is a measurable fix awaiting the owner's retest.
 
 2026-10-10 title search priority change:
 - The owner made a standalone title search the active task. Starting `git
