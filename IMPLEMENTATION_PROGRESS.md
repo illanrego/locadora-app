@@ -2,9 +2,28 @@
 
 Last updated: 2026-10-18
 Current milestone: source-dependent playback hiccups and measurable decode policy
-Status: direct playback verified by the owner; buffering middle term and trace accounting applied
+Status: playback-hiccup milestone closed and verified on the direct route; buffering middle term and trace accounting applied
 
 ## Resume checkpoint
+
+2026-10-18 playback hiccup milestone CLOSED (verified):
+- The owner confirmed playback is smooth after the route fix. Verified on the
+  live stream while it played: the session loaded the DIRECT file URL
+  (127.0.0.1:11471/<infohash>/<index>, segments=2), `file-format=mkv`, and a
+  20 s ffprobe window at the playhead (video 480 packets, audio 938 packets)
+  reported zero gaps and zero duplicate timestamps - against the earlier
+  "+0.080 s at every exactly 4.0 s boundary" on the HLS route. Counters were
+  vo=0, dec=0, delayed=0 with a 120 s cache and no cache pause; the engine
+  reported 9 peers at 3.4 MB/s, 83% of the stream fetched. Owner also synced
+  subtitles with the in-app timing controls on the direct route, which is the
+  subtitle-safety claim confirmed in practice.
+- `hwdec-current` remains empty (software decoding) on the HEVC title measured,
+  with zero dropped and zero delayed frames, so the decode escalation stays
+  conditional rather than urgent.
+- Next task: owner names the next locadora-app priority - the hiccup milestone is
+  closed and D-029/D-030 carry its decisions. The only known-open playback item
+  is the conditional hardware-decode escalation (copy-back first, then the EGL
+  route), taken up only when a heavy source shows decoder drops.
 
 2026-10-18 buffering middle term and honest underrun accounting (D-030):
 - Owner direction: privilege weak connections over strong ones, because a good
