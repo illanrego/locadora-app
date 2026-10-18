@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { safeDiagnostic } from './redaction';
 import { visibleVideoBounds } from './videoBounds';
 import { StremioShellTransport } from '../platform/stremioShellTransport';
-import { STREMIO_SERVICE_URL, ensureStreamingService } from '../platform/stremioService';
+import { STREMIO_SERVICE_URL, ensureStreamingService, ensureTorrentStream } from '../platform/stremioService';
 import type { StremioPlayableStream } from './stremioStream';
 import type { StremioExtraSubtitleTrack } from './subtitleResolution';
 import {
@@ -82,6 +82,20 @@ const NATIVE_MEDIA_CAPABILITIES = {
   maxAudioChannels: 8,
 };
 
+// Empty capability lists make Stremio Video's probe reject the stream, so it
+// falls back to its engine route, which serves any torrent. Used only as a
+// second attempt when a direct media URL never starts playing.
+const FALLBACK_ROUTE_CAPABILITIES = {
+  formats: [] as string[],
+  videoCodecs: [] as string[],
+  audioCodecs: [] as string[],
+  maxAudioChannels: 0,
+};
+
+// A direct URL the engine cannot serve leaves mpv waiting silently, so a load
+// that has produced no picture by now is retried through the engine route.
+const LOAD_STALL_TIMEOUT_MS = 25_000;
+
 function stremioVideoError(value: unknown): string {
   if (value && typeof value === 'object' && 'error' in value) {
     return safeDiagnostic((value as { error: unknown }).error);
@@ -118,6 +132,8 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
   const extraTracks = useRef<StremioExtraSubtitleTrack[]>([]);
   const selectedExtra = useRef<string | null>(null);
   const nativeSurfaceVisible = useRef(false);
+  const loadedRef = useRef(false);
+  const loadStallTimer = useRef<number | null>(null);
   const presentationTimers = useRef<number[]>([]);
   // TEMPORARY: which call site scheduled the last bounds report, for the
   // missing-picture diagnostic. Remove with the probe.
@@ -287,6 +303,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
         setState((current) => ({ ...current, subtitlesTracks: value.filter((track) => track.label !== 'Locadora external') }));
         return;
       }
+      if (name === 'loaded') loadedRef.current = value === true;
       setState((current) => ({ ...current, [name]: value }));
     };
     video.on('propChanged', receiveProperty);
@@ -299,6 +316,10 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     return () => {
       loadGeneration.current += 1;
       subtitleGeneration.current += 1;
+      if (loadStallTimer.current !== null) {
+        window.clearTimeout(loadStallTimer.current);
+        loadStallTimer.current = null;
+      }
       video.destroy();
       void transport.destroy();
       videoRef.current = null;
@@ -318,11 +339,21 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     const containerElement = containerRef.current;
     if (!video || !transport || !containerElement) throw new Error('Stremio video is not ready');
     const usesTorrent = 'infoHash' in stream;
+    loadedRef.current = false;
+    if (loadStallTimer.current !== null) {
+      window.clearTimeout(loadStallTimer.current);
+      loadStallTimer.current = null;
+    }
     video.dispatch({ type: 'command', commandName: 'unload' });
     nativeSurfaceVisible.current = false;
     reportTrigger.current = 'load-pre';
     window.dispatchEvent(new Event('resize'));
-    if (usesTorrent) await ensureStreamingService();
+    if (usesTorrent) {
+      await ensureStreamingService();
+      // Best effort: without the torrent registered in the engine, the direct
+      // media URL is not servable and the load below would never start.
+      await ensureTorrentStream(stream).catch(() => undefined);
+    }
     const serviceAvailable = usesTorrent;
     if (generation !== loadGeneration.current) return;
     await transport.start();
@@ -336,24 +367,34 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
       window.setTimeout(() => scheduleReport.current('settle'), delay);
     }
     setState((current) => ({ ...current, streamingServiceAvailable: serviceAvailable }));
-    video.dispatch({
-      type: 'command',
-      commandName: 'load',
-      commandArgs: {
-        stream,
-        platform: 'linux',
-        time: 0,
-        hardwareDecoding: true,
-        gpuVideoProcessing: false,
-        assSubtitlesStyling: true,
-        streamingServerURL: serviceAvailable ? STREMIO_SERVICE_URL : null,
-        ...NATIVE_MEDIA_CAPABILITIES,
-      },
-    }, {
-      containerElement,
-      shellTransport: transport,
-      mpvSeparateWindow: false,
-    });
+    const dispatchLoad = (capabilities: typeof NATIVE_MEDIA_CAPABILITIES) => {
+      video.dispatch({
+        type: 'command',
+        commandName: 'load',
+        commandArgs: {
+          stream,
+          platform: 'linux',
+          time: 0,
+          hardwareDecoding: true,
+          gpuVideoProcessing: false,
+          assSubtitlesStyling: true,
+          streamingServerURL: serviceAvailable ? STREMIO_SERVICE_URL : null,
+          ...capabilities,
+        },
+      }, {
+        containerElement,
+        shellTransport: transport,
+        mpvSeparateWindow: false,
+      });
+    };
+    dispatchLoad(NATIVE_MEDIA_CAPABILITIES);
+    // One fallback attempt per load: a stalled direct URL must not strand the
+    // player on its loading screen.
+    loadStallTimer.current = window.setTimeout(() => {
+      loadStallTimer.current = null;
+      if (generation !== loadGeneration.current || loadedRef.current) return;
+      dispatchLoad(FALLBACK_ROUTE_CAPABILITIES);
+    }, LOAD_STALL_TIMEOUT_MS);
   }, []);
 
   const unload = useCallback(() => {
@@ -361,6 +402,11 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     subtitleGeneration.current += 1;
     selectedExtra.current = null;
     nativeSurfaceVisible.current = false;
+    loadedRef.current = false;
+    if (loadStallTimer.current !== null) {
+      window.clearTimeout(loadStallTimer.current);
+      loadStallTimer.current = null;
+    }
     reportTrigger.current = 'unload';
     void setNativePlayerFullscreen(false);
     window.dispatchEvent(new Event('resize'));

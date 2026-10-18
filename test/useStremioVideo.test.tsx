@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   ensure: vi.fn().mockResolvedValue(undefined),
   dispatch: vi.fn(), select: vi.fn().mockResolvedValue(undefined), property: vi.fn().mockResolvedValue(undefined),
   bounds: vi.fn().mockResolvedValue(undefined), fullscreen: vi.fn().mockResolvedValue(undefined),
-  probe: vi.fn().mockResolvedValue(undefined),
+  probe: vi.fn().mockResolvedValue(undefined), torrent: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@stremio/stremio-video', () => ({ default: class {
   on(name: string, listener: (...args: unknown[]) => void) { mocks.listeners.set(name, listener); }
@@ -17,7 +17,7 @@ vi.mock('@stremio/stremio-video', () => ({ default: class {
 vi.mock('../src/platform/stremioShellTransport', () => ({ StremioShellTransport: class {
   async start() {} async destroy() {}
 } }));
-vi.mock('../src/platform/stremioService', () => ({ STREMIO_SERVICE_URL: 'http://127.0.0.1:11471/', ensureStreamingService: mocks.ensure }));
+vi.mock('../src/platform/stremioService', () => ({ STREMIO_SERVICE_URL: 'http://127.0.0.1:11471/', ensureStreamingService: mocks.ensure, ensureTorrentStream: mocks.torrent }));
 vi.mock('../src/platform/nativeBridge', () => ({
   selectNativeSubtitle: mocks.select,
   setNativePlayerProperty: mocks.property,
@@ -165,5 +165,38 @@ describe('native subtitle coordination', () => {
     act(() => { result.current.addExtraSubtitlesTracks([track]); result.current.selectSubtitleTrack(track.id, true); });
     await waitFor(() => expect(result.current.state.subtitleError).toBe('subtitle-unavailable'));
     expect(result.current.state.error).toBeNull();
+  });
+
+  it('registers a torrent with the engine before loading it, and not for a url stream', async () => {
+    const { result } = renderHook(() => useStremioVideo('0.35.1'));
+    Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });
+    const stream = { infoHash: 'C'.repeat(40), fileIdx: 3, announce: ['udp://tracker.example.invalid:1337'] };
+    await act(async () => { await result.current.load(stream); });
+    expect(mocks.torrent).toHaveBeenCalledWith(stream);
+    mocks.torrent.mockClear();
+    await act(async () => { await result.current.load({ url: 'https://media.example.invalid/video' }); });
+    expect(mocks.torrent).not.toHaveBeenCalled();
+  });
+
+  it('retries through the engine route when a load never starts, and leaves a started load alone', async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useStremioVideo('0.35.1'));
+      Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });
+      await act(async () => { await result.current.load({ infoHash: 'd'.repeat(40), fileIdx: 0, announce: [] }); });
+      const loads = () => mocks.dispatch.mock.calls.filter(([action]) => action.commandName === 'load').map(([action]) => action);
+      expect(loads()).toHaveLength(1);
+      expect(loads()[0].commandArgs.formats.length).toBeGreaterThan(0);
+      await act(async () => { await vi.advanceTimersByTimeAsync(26_000); });
+      expect(loads()).toHaveLength(2);
+      expect(loads()[1].commandArgs.formats).toHaveLength(0);
+      mocks.dispatch.mockClear();
+      await act(async () => { await result.current.load({ infoHash: 'e'.repeat(40), fileIdx: 0, announce: [] }); });
+      act(() => { mocks.listeners.get('propChanged')?.('loaded', true); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(26_000); });
+      expect(loads()).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
