@@ -408,6 +408,31 @@ patch; a Vitest regression fails when it is missing or upstream changes its
 predicate. Public release notices record the adaptation. Real-stream playback
 and a 25-second direct-route timeline require the owner's retest.
 
+### D-030 — Buffering middle term and honest cache accounting
+
+Accepted 2026-10-18 by the owner, superseding D-023's numbers. The buffering
+policy is deliberately biased towards weak connections: a good connection plays
+well with a deep reserve, a bad one fails without it. Read-ahead and the forward
+ceiling stay deep (`cache-secs` and `demuxer-readahead-secs` 120 s, 256 MiB
+forward). The resume target becomes the middle term at 8 s: a starving source
+stumbles for a few seconds instead of freezing for a quarter of a minute, while
+still riding out a dip. The backward cache doubles to 64 MiB so stepping back
+replays from memory instead of asking the swarm again. mpv still owns recovery;
+no UI timer forces play. The embedded read-back regression carries the new
+values, and the resume target is the only knob any future retest needs to judge.
+
+The opt-in playback diagnostics no longer count the opening cache fill as an
+underrun. `paused-for-cache` reports false at load, before the initial fill
+pause, so a pause is now counted only once a `time-pos` sample shows real
+progress while not paused for cache; the first pause is still recorded, as
+`initial-buffer`. Every playback before this change ended with
+`cache-underruns=1 cache-pause=7.5s initial-buffer=0.000` on sources that never
+starved, which made a healthy trace look faulty.
+
+The native child-player path (`VideoOutput::Window` / `Null`, its own mpv
+process) is deliberately kept: only the test suite and the documented diagnostic
+route use it, and it is how a player-side question is isolated from the shell.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

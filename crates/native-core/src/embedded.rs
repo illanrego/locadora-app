@@ -265,11 +265,11 @@ mod tests {
         }
         // Verify the running libmpv accepts the shared buffering policy.
         for (name, expected) in [
-            ("cache-pause-wait", 15.0),
+            ("cache-pause-wait", 8.0),
             ("cache-secs", 120.0),
             ("demuxer-readahead-secs", 120.0),
             ("demuxer-max-bytes", 268435456.0),
-            ("demuxer-max-back-bytes", 33554432.0),
+            ("demuxer-max-back-bytes", 67108864.0),
         ] {
             let property = CString::new(name).unwrap();
             let mut value = f64::NAN;

@@ -169,7 +169,7 @@ pub(crate) struct PlaybackDiagnostics {
     source_seen: HashSet<&'static str>,
     first_playback_seen: bool,
     pause_started: Option<Instant>,
-    pause_is_initial: bool,
+    playing_seen: bool,
     cache_underruns: u64,
     cache_pause_seconds: f64,
     initial_buffer_seconds: f64,
@@ -188,7 +188,7 @@ impl PlaybackDiagnostics {
             source_seen: HashSet::new(),
             first_playback_seen: false,
             pause_started: None,
-            pause_is_initial: false,
+            playing_seen: false,
             cache_underruns: 0,
             cache_pause_seconds: 0.0,
             initial_buffer_seconds: 0.0,
@@ -234,7 +234,7 @@ impl PlaybackDiagnostics {
         self.summary_end = None;
         self.first_playback_seen = false;
         self.pause_started = None;
-        self.pause_is_initial = false;
+        self.playing_seen = false;
         self.cache_underruns = 0;
         self.cache_pause_seconds = 0.0;
         self.initial_buffer_seconds = 0.0;
@@ -264,6 +264,15 @@ impl PlaybackDiagnostics {
         }
         let safe = safe_value(name, reply);
         self.values.insert(name, safe);
+        // Real progress is the only proof playback started: the initial cache
+        // fill pauses before any frame is shown, and mpv reports
+        // paused-for-cache=false at load, before that pause begins.
+        if name == "time-pos"
+            && reply.get("data").unwrap_or(reply).as_f64().unwrap_or(0.0) >= 1.0
+            && self.get("paused-for-cache") != "1"
+        {
+            self.playing_seen = true;
+        }
         if SOURCE_PROPERTIES.contains(&name) {
             self.source_seen.insert(name);
             if self.source_seen.len() == SOURCE_PROPERTIES.len() {
@@ -299,24 +308,22 @@ impl PlaybackDiagnostics {
         match value.as_bool() {
             Some(true) if self.pause_started.is_none() => {
                 self.pause_started = Some(Instant::now());
-                self.pause_is_initial = !self.first_playback_seen;
-                if !self.pause_is_initial {
+                if self.playing_seen {
                     self.cache_underruns += 1;
                 }
             }
             Some(false) => {
                 if let Some(start) = self.pause_started.take() {
                     let elapsed = start.elapsed().as_secs_f64();
-                    if self.pause_is_initial {
-                        self.initial_buffer_seconds += elapsed;
-                        self.push(format!("initial-buffer pause={elapsed:.3}"));
-                    } else {
+                    if self.playing_seen {
                         self.cache_pause_seconds += elapsed;
                         self.push(format!("cache-pause pause={elapsed:.3}"));
+                    } else {
+                        self.initial_buffer_seconds += elapsed;
+                        self.push(format!("initial-buffer pause={elapsed:.3}"));
                     }
                     self.flush();
                 }
-                self.first_playback_seen = true;
             }
             _ => {}
         }
@@ -395,10 +402,10 @@ impl PlaybackDiagnostics {
         }
         if let Some(start) = self.pause_started.take() {
             let elapsed = start.elapsed().as_secs_f64();
-            if self.pause_is_initial {
-                self.initial_buffer_seconds += elapsed;
-            } else {
+            if self.playing_seen {
                 self.cache_pause_seconds += elapsed;
+            } else {
+                self.initial_buffer_seconds += elapsed;
             }
         }
         let line = format!(
@@ -506,12 +513,18 @@ mod tests {
                 &json!({"data": if name == "video-format" { json!("h264") } else { json!(128) }}),
             );
         }
+        // The opening fill is not an underrun: no frame has been shown yet.
         diag.cache_pause(&json!(true));
         diag.cache_pause(&json!(false));
         assert_eq!(diag.cache_underruns, 0);
+        assert!(diag.initial_buffer_seconds > 0.0);
+        // Once real progress is sampled, a later pause is a genuine underrun.
+        diag.sample("paused-for-cache", &json!({"data": false}));
+        diag.sample("time-pos", &json!({"data": 42.5}));
         diag.cache_pause(&json!(true));
         diag.cache_pause(&json!(false));
         assert_eq!(diag.cache_underruns, 1);
+        assert!(diag.cache_pause_seconds > 0.0);
         assert!(
             diag.timeline
                 .iter()

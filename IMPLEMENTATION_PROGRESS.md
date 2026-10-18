@@ -1,10 +1,29 @@
 # Implementation progress
 
-Last updated: 2026-10-17
+Last updated: 2026-10-18
 Current milestone: source-dependent playback hiccups and measurable decode policy
-Status: native capability and surface-probe cleanup built; owner playback retest pending
+Status: direct playback verified by the owner; buffering middle term and trace accounting applied
 
 ## Resume checkpoint
+
+2026-10-18 buffering middle term and honest underrun accounting (D-030):
+- Owner direction: privilege weak connections over strong ones, because a good
+  connection needs no help. `cache-pause-wait` 15 -> 8 s,
+  `demuxer-max-back-bytes` 32 -> 64 MiB; read-ahead and forward byte ceiling
+  unchanged at 120 s / 256 MiB. D-023 superseded. The embedded read-back
+  regression carries the new values.
+- Diagnostics: the opening cache fill is no longer counted as an underrun - it
+  was, on every playback, because `paused-for-cache=false` arrives at load
+  before the fill pause. A pause counts only after a `time-pos` sample shows
+  progress; the first one is recorded as `initial-buffer`.
+- The native child-player path stays: it is the documented diagnostic route and
+  the only way the Rust tests drive a real mpv session.
+- Checks: `cargo test --manifest-path crates/native-core/Cargo.toml --
+  --test-threads=1` passed 22 tests; strict Clippy and `cargo fmt --check`
+  passed. Mutation-checked: counting every pause as an underrun again fails the
+  marks test (`left: 1, right: 0`), and restoring `cache-pause-wait=15` fails the
+  read-back test (`left: 15.0, right: 8.0`). No JS change, so the Vite gate was
+  unchanged; the release binary was rebuilt and the owner retests playback.
 
 2026-10-17 direct-playback priority change (D-029, Package 1):
 - Owner made avoiding the engine's four-second HLS packager the active playback
