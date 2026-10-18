@@ -13,6 +13,7 @@ import { PersonView } from './components/PersonView';
 import { TitleSearch } from './components/TitleSearch';
 import { readMemberSession, readNativeCapabilities, updateMemberCollection, type NativeCapabilities } from './platform/nativeBridge';
 import { readQuickWatchEnabled, writeQuickWatchEnabled } from './media/quickWatchPreference';
+import type { BoundedEpisode } from './media/seriesEpisodes';
 import { readImmersiveEnabled, writeImmersiveEnabled } from './locadora/immersive';
 import { hasLocalSavedTitle, readLocalSavedCollections, setLocalSavedTitle, writeLocalSavedCollections, type SavedCollection } from './member/localSaved';
 import './styles.css';
@@ -56,7 +57,10 @@ export default function App() {
   const [panel, setPanel] = useState<Panel>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mediaSettingsOpen, setMediaSettingsOpen] = useState(false);
-  const [watchTitle, setWatchTitle] = useState<DiscoveryTitle | null>(null);
+  const [watchSelection, setWatchSelection] = useState<{
+    title: DiscoveryTitle;
+    episode: BoundedEpisode | null;
+  } | null>(null);
   const [donationOpen, setDonationOpen] = useState(false);
   const [nativeCapabilities, setNativeCapabilities] = useState<NativeCapabilities | null>(null);
   const [quickWatchEnabled, setQuickWatchEnabled] = useState(readQuickWatchEnabled);
@@ -372,7 +376,7 @@ export default function App() {
         {pages.length > 0 && <Suspense fallback={<p className="immersive-loading">{t.loading}</p>}>
           <ImmersiveShelf titles={immersiveTitles} genre={genre} year={year} locale={locale} stand={immersiveStand} sort={sort}
             standLabel={creditStand ? `${locale === 'pt-BR' ? 'Estante' : 'Stand'}: ${creditStand.name}` : undefined}
-            paused={watchTitle !== null || selected !== null || panel !== null || mediaSettingsOpen || donationOpen}
+            paused={watchSelection !== null || selected !== null || panel !== null || mediaSettingsOpen || donationOpen}
             onInspect={inspectTitle} onReady={immersiveStarted} onFailure={immersiveFailed}
             onConfigure={configureImmersive} onNavigate={navigateImmersive} />
         </Suspense>}
@@ -458,7 +462,8 @@ export default function App() {
           favorite={hasLocalSavedTitle(saved, selected, 'favorite')}
           onToggleBasket={() => toggleBasket(selected)}
           onToggleSaved={(collection) => void setSavedTitle(selected, collection, !hasLocalSavedTitle(saved, selected, collection))}
-          onWatch={() => { setWatchTitle(selected); closeInspection(); }}
+          onWatch={() => { setWatchSelection({ title: selected, episode: null }); closeInspection(); }}
+          onWatchEpisode={(episode) => { setWatchSelection({ title: selected, episode }); closeInspection(); }}
           onCreditPerson={openCredit}
           onClose={closeInspection}
         />
@@ -480,13 +485,14 @@ export default function App() {
       />}
       {mediaSettingsOpen && <MediaSettings locale={locale} onClose={() => setMediaSettingsOpen(false)} />}
       {donationOpen && <DonationPanel locale={locale} onClose={() => setDonationOpen(false)} />}
-      {watchTitle && (
+      {watchSelection && (
         <WatchFlow
-          title={watchTitle}
+          title={watchSelection.title}
+          episode={watchSelection.episode}
           locale={locale}
           mpvVersion={nativeCapabilities?.mpv.version ?? null}
           quickWatchEnabled={quickWatchEnabled}
-          onClose={() => setWatchTitle(null)}
+          onClose={() => setWatchSelection(null)}
         />
       )}
     </div>

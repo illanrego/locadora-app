@@ -48,6 +48,26 @@ describe('configured media resolution', () => {
     expect(result.manualCandidates).toHaveLength(1);
   });
 
+  it.each([
+    ['movie', title, null, 'tt1254207'],
+    ['series episode', normalizeDiscoveryTitle({ id: 2, imdbId: 'tt0903747', type: 'series', name: 'Series', year: 2008 })!, { season: 16, episode: 5 }, 'tt0903747:16:5'],
+  ])('requests the expected resource identity for %s', async (_label, selectedTitle, episode, expectedId) => {
+    const requests: unknown[] = [];
+    await resolveTitleMedia(selectedTitle, addons.slice(0, 1), {
+      episode,
+      fetcher: async (request) => {
+        requests.push(request);
+        return { streams: [] };
+      },
+    });
+    expect(requests).toEqual([{
+      addonId: 'good',
+      resource: 'stream',
+      contentType: selectedTitle.identity.type,
+      id: expectedId,
+    }]);
+  });
+
   it('does not query add-ons without a confirmed IMDb identity', async () => {
     const unmapped = normalizeDiscoveryTitle({ id: 3, type: 'movie', name: 'Unmapped', year: 2000 })!;
     let called = false;

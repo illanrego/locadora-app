@@ -77,10 +77,16 @@ export function episodesForSeason(episodes: SeriesEpisodes, season: number): Bou
   return episodes.seasons.find((entry) => entry.season === season)?.episodes ?? [];
 }
 
-export function nextEpisode(episodes: SeriesEpisodes, watched: ReadonlySet<string>): BoundedEpisode | null {
+export function nextEpisode(
+  episodes: SeriesEpisodes,
+  watched: ReadonlySet<string>,
+  resumeFrom?: Pick<BoundedEpisode, 'season' | 'episode'>,
+): BoundedEpisode | null {
   for (const group of episodes.seasons) {
     if (group.season === 0) continue;
     for (const episode of group.episodes) {
+      if (resumeFrom && (episode.season < resumeFrom.season
+        || (episode.season === resumeFrom.season && episode.episode < resumeFrom.episode))) continue;
       if (!watched.has(`${episode.season}:${episode.episode}`)) return episode;
     }
   }

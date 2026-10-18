@@ -6,6 +6,7 @@ import {
 import { normalizeStreams } from './normalization';
 import { selectQuickWatch, type QuickWatchResult } from './quickWatch';
 import { safeDiagnostic } from './redaction';
+import { episodeVideoId, type BoundedEpisode } from './seriesEpisodes';
 import type { StreamCandidate } from './types';
 
 export type ResolutionStatus =
@@ -52,7 +53,11 @@ function emptyResolution(status: ResolutionStatus, imdbId: string | null): Media
 export async function resolveTitleMedia(
   title: DiscoveryTitle,
   addons: ConfiguredAddon[],
-  options: { signal?: AbortSignal; fetcher?: ConfiguredResourceFetcher } = {},
+  options: {
+    signal?: AbortSignal;
+    fetcher?: ConfiguredResourceFetcher;
+    episode?: Pick<BoundedEpisode, 'season' | 'episode'> | null;
+  } = {},
 ): Promise<MediaResolution> {
   const imdbId = externalId(title.identity, 'imdb');
   if (!imdbId) return emptyResolution('identity-unmapped', null);
@@ -61,12 +66,13 @@ export async function resolveTitleMedia(
   if (aborted(options.signal)) return emptyResolution('cancelled', imdbId);
 
   const fetcher = options.fetcher ?? fetchConfiguredAddonResource;
+  const requestId = options.episode ? episodeVideoId(imdbId, options.episode) : imdbId;
   const settled = await Promise.allSettled(streamAddons.map(async (addon) => {
     const body = await fetcher({
       addonId: addon.id,
       resource: 'stream',
       contentType: title.identity.type,
-      id: imdbId,
+      id: requestId,
     });
     if (!body || typeof body !== 'object' || !Array.isArray((body as { streams?: unknown }).streams)) {
       throw new Error('Add-on returned an invalid stream response');

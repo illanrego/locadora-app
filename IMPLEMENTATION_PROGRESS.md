@@ -1,10 +1,37 @@
 # Implementation progress
 
 Last updated: 2026-10-18
-Current milestone: series episode tracking, Part 1 (episode list, data only)
-Status: owner priority changed; Part 1 implementation and automated checks in progress
+Current milestone: series episode tracking, Part 2 (episode playback)
+Status: Part 2 implementation complete; automated checks passed; GUI playback not performed
 
 ## Resume checkpoint
+
+2026-10-18 series episode tracking, Part 2 complete (D-031):
+- A series inspection now loads its bounded episode list through the Part 1
+  service, hides season 0 by default, and presents a season selector plus
+  `T16E05`-style episode actions with optional names. Typed Part 1 reasons cover
+  missing IMDb identity, metadata configuration/failure, malformed metadata and
+  empty normal-episode lists; rejected metadata never reaches the UI.
+- Selecting an episode carries only its bounded season/episode identity into
+  the existing `WatchFlow`. Stream and external-subtitle resource requests use
+  the shared `episodeVideoId()` result (`tt…:S:E`) with content type `series`.
+  Series still always enter the existing manual source picker; there is no
+  Quick Watch, autoplay, next-episode action, season pack or progress storage.
+  Movie resolution remains on its existing bare IMDb request.
+- `nextEpisode()` accepts an optional resume pointer and skips unwatched gaps
+  before that pointer. Tests cover no pointer, a mid-season pointer, the last
+  episode of a season, a pointer beyond available metadata and watched gaps.
+- Checks: `npm run check` passed, exit 0: TypeScript, Vitest 173 tests/43 files,
+  and Vite production build (192 modules; existing large-chunk advisory).
+  `git diff --check` passed. `npm run tauri -- build --no-bundle` passed and
+  refreshed the optimized desktop binary. No GUI, browser, real metadata
+  response, source selection or playback validation was performed.
+- No D-031 contract changed, no dependency was added, and no new decision entry
+  was needed.
+- Next task: implement Part 3 from `docs/SERIES_EPISODE_TRACKING_PLAN.md` §5:
+  add the versioned local progress store, watched threshold/manual toggle, and
+  `Continuar`/`Começar` action using the resume pointer. Keep playback position
+  unpersisted and keep all Locadora rental/member state untouched.
 
 2026-10-18 series episode tracking priority change (D-031):
 - Owner priority: "series episode support [is] the active milestone, ahead of

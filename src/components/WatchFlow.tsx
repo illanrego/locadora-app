@@ -10,6 +10,7 @@ import { readSubtitleDelay, writeSubtitleDelay, videoDelayIdentity } from '../me
 import { useStremioVideo } from '../media/useStremioVideo';
 import { markNativePlayerHiccup, readMediaConfiguration } from '../platform/nativeBridge';
 import { filterSources, type ResolutionFilter } from '../media/sourcePicker';
+import type { BoundedEpisode } from '../media/seriesEpisodes';
 import { Modal } from './Modal';
 import { PlayerIcon } from './PlayerIcon';
 
@@ -18,6 +19,7 @@ interface WatchFlowProps {
   locale: Locale;
   mpvVersion: string | null;
   quickWatchEnabled: boolean;
+  episode?: Pick<BoundedEpisode, 'season' | 'episode' | 'name'> | null;
   onClose: () => void;
 }
 
@@ -51,7 +53,7 @@ function explanation(resolution: MediaResolution | null, locale: Locale): string
   return messages[resolution.status][locale];
 }
 
-export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClose }: WatchFlowProps) {
+export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episode = null, onClose }: WatchFlowProps) {
   const video = useStremioVideo(mpvVersion);
   useLayoutEffect(() => {
     document.documentElement.classList.add('player-open');
@@ -103,13 +105,13 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
         const addons = await readMediaConfiguration();
         if (controller.signal.aborted) return;
         setSubtitlesLoading(true);
-        void resolveTitleSubtitles(title, addons, { signal: controller.signal }).then((subtitles) => {
+        void resolveTitleSubtitles(title, addons, { signal: controller.signal, episode }).then((subtitles) => {
           if (controller.signal.aborted) return;
           externalSubtitlesRef.current = subtitles;
           video.addExtraSubtitlesTracks(subtitles);
           setSubtitlesLoading(false);
         }).catch(() => { if (!controller.signal.aborted) setSubtitlesLoading(false); });
-        const result = await resolveTitleMedia(title, addons, { signal: controller.signal });
+        const result = await resolveTitleMedia(title, addons, { signal: controller.signal, episode });
         if (controller.signal.aborted) return;
         setResolution(result);
         setLookupState('ready');
@@ -133,7 +135,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, onClos
       controller.abort();
       if (abortRef.current === controller) abortRef.current = null;
     };
-  }, [locale, play, quickWatchEnabled, title, video.addExtraSubtitlesTracks]);
+  }, [episode, locale, play, quickWatchEnabled, title, video.addExtraSubtitlesTracks]);
 
   const close = useCallback(() => {
     abortRef.current?.abort();

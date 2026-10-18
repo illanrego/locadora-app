@@ -4,6 +4,7 @@ import {
   type ConfiguredAddon,
 } from '../platform/nativeBridge';
 import { stableHash } from './hash';
+import { episodeVideoId, type BoundedEpisode } from './seriesEpisodes';
 import { normalizeSubtitleTracks } from './subtitles';
 
 export interface StremioExtraSubtitleTrack {
@@ -20,18 +21,23 @@ type ConfiguredResourceFetcher = typeof fetchConfiguredAddonResource;
 export async function resolveTitleSubtitles(
   title: DiscoveryTitle,
   addons: ConfiguredAddon[],
-  options: { signal?: AbortSignal; fetcher?: ConfiguredResourceFetcher } = {},
+  options: {
+    signal?: AbortSignal;
+    fetcher?: ConfiguredResourceFetcher;
+    episode?: Pick<BoundedEpisode, 'season' | 'episode'> | null;
+  } = {},
 ): Promise<StremioExtraSubtitleTrack[]> {
   const imdbId = externalId(title.identity, 'imdb');
-  if (!imdbId || title.identity.type !== 'movie' || options.signal?.aborted) return [];
+  if (!imdbId || (title.identity.type === 'series' && !options.episode) || options.signal?.aborted) return [];
   const subtitleAddons = addons.filter((addon) => addon.supportsSubtitles);
   const fetcher = options.fetcher ?? fetchConfiguredAddonResource;
+  const requestId = options.episode ? episodeVideoId(imdbId, options.episode) : imdbId;
   const settled = await Promise.allSettled(subtitleAddons.map(async (addon) => {
     const body = await fetcher({
       addonId: addon.id,
       resource: 'subtitles',
-      contentType: 'movie',
-      id: imdbId,
+      contentType: title.identity.type,
+      id: requestId,
     });
     if (!body || typeof body !== 'object') return [];
     return normalizeSubtitleTracks((body as { subtitles?: unknown }).subtitles).map((track) => ({

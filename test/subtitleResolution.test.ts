@@ -48,4 +48,19 @@ describe('official Core subtitle resource resolution', () => {
     expect(tracks).toEqual([]);
     expect(called).toBe(false);
   });
+
+  it('uses the composed episode identity for series subtitles', async () => {
+    const series = normalizeDiscoveryTitle({ id: 2, imdbId: 'tt0903747', type: 'series', name: 'Series' })!;
+    const requests: unknown[] = [];
+    await resolveTitleSubtitles(series, addons, {
+      episode: { season: 16, episode: 5 },
+      fetcher: async (request) => {
+        requests.push(request);
+        return { subtitles: [] };
+      },
+    });
+    expect(requests).toEqual([{
+      addonId: 'subtitles', resource: 'subtitles', contentType: 'series', id: 'tt0903747:16:5',
+    }]);
+  });
 });

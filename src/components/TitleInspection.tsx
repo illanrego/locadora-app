@@ -7,6 +7,8 @@ import { creditSelection, type CreditStandSelection } from '../locadora/creditSt
 import { Modal } from './Modal';
 import { VhsInspection } from './VhsInspection';
 import { departmentLabel } from './PersonView';
+import { SeriesEpisodePicker } from './SeriesEpisodePicker';
+import type { BoundedEpisode } from '../media/seriesEpisodes';
 
 interface TitleInspectionProps {
   title: DiscoveryTitle;
@@ -19,6 +21,7 @@ interface TitleInspectionProps {
   onToggleBasket: () => void;
   onToggleSaved: (collection: 'watch_later' | 'favorite') => void;
   onWatch: () => void;
+  onWatchEpisode: (episode: BoundedEpisode) => void;
   onCreditPerson: (credit: CreditStandSelection) => void;
   onClose: () => void;
 }
@@ -34,6 +37,7 @@ export function TitleInspection({
   onToggleBasket,
   onToggleSaved,
   onWatch,
+  onWatchEpisode,
   onCreditPerson,
   onClose,
 }: TitleInspectionProps) {
@@ -68,6 +72,12 @@ export function TitleInspection({
       <button type="button" className="tape-close" onClick={onClose} aria-label={pt ? 'Fechar inspeção' : 'Close inspection'}>×</button>
       <VhsInspection title={inspectionTitle} locale={locale} onInspectClose={onClose}
         onCreditPerson={(entry, department) => onCreditPerson(creditSelection(entry, department))} />
+      {title.identity.type === 'series' && <SeriesEpisodePicker
+        title={title}
+        locale={locale}
+        canWatch={canWatch}
+        onSelect={onWatchEpisode}
+      />}
       <details className="tape-credit-panel">
         <summary>{pt ? 'Créditos da fita' : 'Tape credits'}</summary>
         {([
@@ -97,9 +107,9 @@ export function TitleInspection({
         </button>
       </div>
       <div className="tape-actions" role="group" aria-label={pt ? 'Ações da fita' : 'Tape actions'}>
-        <button type="button" disabled={!canWatch} title={canWatch ? undefined : t.development} onClick={onWatch}>
+        {title.identity.type === 'movie' && <button type="button" disabled={!canWatch} title={canWatch ? undefined : t.development} onClick={onWatch}>
           {canWatch ? (pt ? 'Assistir' : 'Watch') : t.watchDevelopment}
-        </button>
+        </button>}
         <button type="button" aria-pressed={savedForLater} onClick={() => onToggleSaved('watch_later')}>
           {savedForLater ? (pt ? 'Remover de Ver depois' : 'Remove from Watch later') : (pt ? 'Salvar para depois' : 'Save for later')}
         </button>

@@ -44,13 +44,20 @@ describe('series episodes', () => {
     expect(sparse.seasons).toHaveLength(40);
   });
 
-  it('finds the first unwatched normal episode across gaps and season boundaries', () => {
+  it('finds the first unwatched normal episode with no resume pointer', () => {
     expect(nextEpisode(sample, new Set())).toMatchObject({ season: 1, episode: 1 });
-    expect(nextEpisode(sample, new Set(['1:1']))).toMatchObject({ season: 1, episode: 2 });
-    expect(nextEpisode(sample, new Set(['1:1', '1:2']))).toMatchObject({ season: 2, episode: 1 });
-    expect(nextEpisode(sample, new Set(['1:1', '1:2', '2:1']))).toMatchObject({ season: 2, episode: 2 });
     expect(nextEpisode(sample, new Set(['1:1', '1:2', '2:1', '2:2']))).toBeNull();
+  });
+
+  it('resumes at or after a mid-season pointer and ignores earlier watched gaps', () => {
+    expect(nextEpisode(sample, new Set(['2:1']), { season: 2, episode: 1 })).toMatchObject({ season: 2, episode: 2 });
     expect(nextEpisode(sample, new Set(['1:1', '2:1', '2:2']))).toMatchObject({ season: 1, episode: 2 });
+    expect(nextEpisode(sample, new Set(['1:1', '2:1']), { season: 2, episode: 1 })).toMatchObject({ season: 2, episode: 2 });
+  });
+
+  it('crosses a season boundary and returns null for a pointer past the end', () => {
+    expect(nextEpisode(sample, new Set(['1:2']), { season: 1, episode: 2 })).toMatchObject({ season: 2, episode: 1 });
+    expect(nextEpisode(sample, new Set(), { season: 3, episode: 1 })).toBeNull();
   });
 
   it('composes only bounded episode ids with a confirmed series IMDb id', () => {

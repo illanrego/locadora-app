@@ -44,7 +44,7 @@ describe('person stands', () => {
     const normalized = normalizeDiscoveryTitle(title)!;
     const props = { title: normalized, locale: 'pt-BR' as const, isInBasket: false, basketFull: false,
       canWatch: false, savedForLater: false, favorite: false, onToggleBasket: vi.fn(), onToggleSaved: vi.fn(),
-      onWatch: vi.fn(), onCreditPerson, onClose: vi.fn() };
+      onWatch: vi.fn(), onWatchEpisode: vi.fn(), onCreditPerson, onClose: vi.fn() };
     const user = userEvent.setup();
     const view = render(<TitleInspection {...props} />);
     await user.click(screen.getByText('Créditos da fita'));
