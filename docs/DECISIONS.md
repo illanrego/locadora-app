@@ -433,6 +433,20 @@ The native child-player path (`VideoOutput::Window` / `Null`, its own mpv
 process) is deliberately kept: only the test suite and the documented diagnostic
 route use it, and it is how a player-side question is isolated from the shell.
 
+### D-031 — Series episode identity, metadata and local progress
+
+Accepted 2026-10-18 for the three-part series episode milestone. A series
+remains the Locadora rental, review and save entity; an episode is a playback
+entity identified as `tt…:S:E`, composed from a confirmed IMDb series ID and
+integer season and episode numbers. Episode lists come from a bundled public
+meta add-on through the existing native resource path, with no Worker route.
+The default is seeded only for an empty media configuration and never replaces
+an existing user configuration or the read-only installed Stremio import.
+Episode-level watched progress will be local-only in Part 3, narrowing D-005
+for episode bookkeeping. Playback position remains unpersisted. D-006 still
+requires manual series source selection; this decision creates no series Quick
+Watch or autoplay rules.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

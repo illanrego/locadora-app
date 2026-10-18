@@ -1,10 +1,23 @@
 # Implementation progress
 
 Last updated: 2026-10-18
-Current milestone: source-dependent playback hiccups and measurable decode policy
-Status: playback-hiccup milestone closed and verified on the direct route; buffering middle term and trace accounting applied
+Current milestone: series episode tracking, Part 1 (episode list, data only)
+Status: owner priority changed; Part 1 implementation and automated checks in progress
 
 ## Resume checkpoint
+
+2026-10-18 series episode tracking priority change (D-031):
+- Owner priority: "series episode support [is] the active milestone, ahead of
+  the previous `Next task`." This supersedes the 2026-10-18 playback-hiccup
+  checkpoint's handoff for the owner to name a next locadora-app priority.
+- Part 1 follows `docs/SERIES_EPISODE_TRACKING_PLAN.md` §4 and §5. It adds
+  bounded episode parsing, pure next-episode and identity helpers, a typed
+  metadata fetch through the existing native `meta` command, and an empty-only
+  public Cinemeta default. Part 2 and Part 3 remain out of scope here.
+- Next task: after Part 1 is committed and green, implement Part 2 from
+  `docs/SERIES_EPISODE_TRACKING_PLAN.md` §5: wire the composed episode ID into
+  series stream resolution and add the 2D inspector episode selector with the
+  existing manual source picker; preserve D-006 and do not start Part 3.
 
 2026-10-18 playback hiccup milestone CLOSED (verified):
 - The owner confirmed playback is smooth after the route fix. Verified on the

@@ -259,6 +259,34 @@ export async function selectNativeSubtitle(url: string | null): Promise<void> {
   return invoke('player_select_subtitle', { url });
 }
 
+const DEFAULT_META_MANIFEST = 'https://v3-cinemeta.strem.io/manifest.json';
+const DEFAULT_MEDIA_SEED_KEY = 'locadora:default-media-seed-v1';
+let mediaConfigurationQueue: Promise<unknown> = Promise.resolve();
+let defaultSeededThisSession = false;
+
+function serializeMediaConfiguration<T>(task: () => Promise<T>): Promise<T> {
+  const result = mediaConfigurationQueue.then(task, task);
+  mediaConfigurationQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+function defaultSeedRecorded(): boolean {
+  try {
+    return defaultSeededThisSession || window.localStorage.getItem(DEFAULT_MEDIA_SEED_KEY) === '1';
+  } catch {
+    return defaultSeededThisSession;
+  }
+}
+
+function recordDefaultSeed(): void {
+  defaultSeededThisSession = true;
+  try {
+    window.localStorage.setItem(DEFAULT_MEDIA_SEED_KEY, '1');
+  } catch {
+    // A working keyring remains useful when WebView local storage is unavailable.
+  }
+}
+
 export async function shutdownNativePlayer(): Promise<void> {
   if (!isNativeShell()) return;
   return invoke('player_shutdown');
@@ -266,27 +294,53 @@ export async function shutdownNativePlayer(): Promise<void> {
 
 export async function readMediaConfiguration(): Promise<ConfiguredAddon[]> {
   if (!isNativeShell()) return [];
-  return invoke<ConfiguredAddon[]>('media_configuration_status');
+  return serializeMediaConfiguration(async () => {
+    const addons = await invoke<ConfiguredAddon[]>('media_configuration_status');
+    if (addons.length || defaultSeedRecorded()) return addons;
+    try {
+      const seeded = await invoke<ConfiguredAddon[]>('media_configuration_add', { manifestUrl: DEFAULT_META_MANIFEST });
+      recordDefaultSeed();
+      return seeded;
+    } catch {
+      // The public default is optional when its manifest cannot be reached.
+      return addons;
+    }
+  });
 }
 
 export async function addMediaConfiguration(manifestUrl: string): Promise<ConfiguredAddon[]> {
   if (!isNativeShell()) throw new Error('Protected media configuration is available in the desktop app');
-  return invoke<ConfiguredAddon[]>('media_configuration_add', { manifestUrl });
+  return serializeMediaConfiguration(async () => {
+    const addons = await invoke<ConfiguredAddon[]>('media_configuration_add', { manifestUrl });
+    recordDefaultSeed();
+    return addons;
+  });
 }
 
 export async function importInstalledStremioConfiguration(): Promise<StremioImportResult> {
   if (!isNativeShell()) throw new Error('Installed Stremio import is available in the desktop app');
-  return invoke<StremioImportResult>('media_configuration_import_stremio');
+  return serializeMediaConfiguration(async () => {
+    const result = await invoke<StremioImportResult>('media_configuration_import_stremio');
+    recordDefaultSeed();
+    return result;
+  });
 }
 
 export async function removeMediaConfiguration(addonId: string): Promise<ConfiguredAddon[]> {
   if (!isNativeShell()) throw new Error('Protected media configuration is available in the desktop app');
-  return invoke<ConfiguredAddon[]>('media_configuration_remove', { addonId });
+  return serializeMediaConfiguration(async () => {
+    const addons = await invoke<ConfiguredAddon[]>('media_configuration_remove', { addonId });
+    recordDefaultSeed();
+    return addons;
+  });
 }
 
 export async function disconnectMediaConfiguration(): Promise<void> {
   if (!isNativeShell()) return;
-  return invoke('media_configuration_disconnect');
+  return serializeMediaConfiguration(async () => {
+    await invoke('media_configuration_disconnect');
+    recordDefaultSeed();
+  });
 }
 
 export async function fetchConfiguredAddonResource(request: {
