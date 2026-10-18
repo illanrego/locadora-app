@@ -36,8 +36,11 @@ describe('series episodes', () => {
   });
 
   it('limits seasons and episodes across oversized metadata', () => {
-    const videos = Array.from({ length: 2000 }, (_, i) => ({ season: Math.floor(i / 10) + 1, episode: i % 10 + 1 }));
+    const videos = Array.from({ length: 1800 }, (_, i) => ({ season: Math.floor(i / 30) + 1, episode: i % 30 + 1 }));
     const result = parseSeriesEpisodes({ meta: { videos } });
+    // The total-episode ceiling is what cuts here: 1500 episodes reached at
+    // season 50 of an unrealistically dense series.
+    expect(result.seasons).toHaveLength(50);
     expect(result.seasons.flatMap((season) => season.episodes)).toHaveLength(1500);
     const sparse = parseSeriesEpisodes({ meta: { videos: Array.from({ length: 80 }, (_, i) => ({ season: i + 1, episode: 1 })) } });
     expect(sparse.seasons).toHaveLength(60);
