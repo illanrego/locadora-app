@@ -36,12 +36,20 @@ describe('series episodes', () => {
   });
 
   it('limits seasons and episodes across oversized metadata', () => {
-    const videos = Array.from({ length: 500 }, (_, i) => ({ season: Math.floor(i / 10) + 1, episode: i % 10 + 1 }));
+    const videos = Array.from({ length: 2000 }, (_, i) => ({ season: Math.floor(i / 10) + 1, episode: i % 10 + 1 }));
     const result = parseSeriesEpisodes({ meta: { videos } });
-    expect(result.seasons).toHaveLength(30);
-    expect(result.seasons.flatMap((season) => season.episodes)).toHaveLength(300);
-    const sparse = parseSeriesEpisodes({ meta: { videos: Array.from({ length: 50 }, (_, i) => ({ season: i + 1, episode: 1 })) } });
-    expect(sparse.seasons).toHaveLength(40);
+    expect(result.seasons.flatMap((season) => season.episodes)).toHaveLength(1500);
+    const sparse = parseSeriesEpisodes({ meta: { videos: Array.from({ length: 80 }, (_, i) => ({ season: i + 1, episode: 1 })) } });
+    expect(sparse.seasons).toHaveLength(60);
+  });
+
+  it('keeps every season of a long-running series', () => {
+    // Family Guy's public metadata is 511 episodes across seasons 0-24; the
+    // previous 300-episode ceiling dropped everything after the mid-teens.
+    const videos = Array.from({ length: 511 }, (_, i) => ({ season: Math.floor(i / 20), episode: i % 20 + 1 }));
+    const result = parseSeriesEpisodes({ meta: { videos } });
+    expect(result.seasons.flatMap((season) => season.episodes)).toHaveLength(511);
+    expect(result.seasons.at(-1)?.season).toBe(25);
   });
 
   it('finds the first unwatched normal episode with no resume pointer', () => {

@@ -9,9 +9,13 @@ export interface SeriesEpisodes {
   seasons: Array<{ season: number; episodes: BoundedEpisode[] }>;
 }
 
-const MAX_SEASONS = 40;
-const MAX_EPISODES = 300;
-const MAX_SCANNED_VIDEOS = 3000;
+const MAX_SEASONS = 60;
+// 1500 episodes is deliberately close to what the native JSON transport
+// (1 MiB) can carry, so the real ceiling is the transport rather than this
+// number. A long-running series must not lose its later seasons: at 300, a
+// 24-season show was silently cut off around season 13.
+const MAX_EPISODES = 1500;
+const MAX_SCANNED_VIDEOS = 5000;
 const IMDB_ID = /^tt[0-9]{5,9}$/;
 
 export function isSeriesImdbId(value: unknown): value is string {
