@@ -28,9 +28,14 @@ const query = {
 
 function writeRawTitleRecord(key: string, value: unknown): Promise<void> {
   return new Promise((resolve, reject) => {
-    const opening = indexedDB.open('wills-locadora-catalogue', 1);
+    const opening = indexedDB.open('wills-locadora-catalogue', 2);
     opening.onupgradeneeded = () => {
-      for (const name of ['shelves', 'titles']) opening.result.createObjectStore(name, { keyPath: 'key' }).createIndex('savedAt', 'savedAt');
+      for (const name of ['shelves', 'titles']) {
+        if (!opening.result.objectStoreNames.contains(name)) {
+          opening.result.createObjectStore(name, { keyPath: 'key' }).createIndex('savedAt', 'savedAt');
+        }
+      }
+      if (!opening.result.objectStoreNames.contains('progress')) opening.result.createObjectStore('progress', { keyPath: 'key' });
     };
     opening.onsuccess = () => {
       const db = opening.result;

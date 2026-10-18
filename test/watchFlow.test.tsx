@@ -10,15 +10,17 @@ import { normalizeStreams } from '../src/media/normalization';
 
 const mocks = vi.hoisted(() => ({
   controller: null as unknown as StremioVideoController,
-  resolve: vi.fn(), subtitles: vi.fn(), configuration: vi.fn(),
+  resolve: vi.fn(), subtitles: vi.fn(), configuration: vi.fn(), setWatched: vi.fn(),
 }));
 vi.mock('../src/media/useStremioVideo', () => ({ useStremioVideo: () => mocks.controller }));
 vi.mock('../src/media/resolutionService', () => ({ resolveTitleMedia: mocks.resolve }));
 vi.mock('../src/media/subtitleResolution', () => ({ resolveTitleSubtitles: mocks.subtitles }));
 vi.mock('../src/platform/nativeBridge', () => ({ readMediaConfiguration: mocks.configuration }));
+vi.mock('../src/locadora/localCache', () => ({ setEpisodeWatched: mocks.setWatched }));
 import { WatchFlow } from '../src/components/WatchFlow';
 
 const title = normalizeDiscoveryTitle({ id: 1, type: 'movie', name: 'Synthetic screening', year: 2020 })!;
+const seriesTitle = normalizeDiscoveryTitle({ id: 2, imdbId: 'tt0182576', type: 'series', name: 'Synthetic series', year: 1999 })!;
 const candidates = normalizeStreams([
   { url: 'https://media.example.invalid/first', name: 'First', resolution: 1080, seeders: 20, behaviorHints: { videoSize: 1_000_000_000 } },
   { url: 'https://media.example.invalid/second', name: 'Second', resolution: 720, seeders: 10, behaviorHints: { videoSize: 800_000_000 } },
@@ -53,9 +55,9 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-function mount(quickWatchEnabled = true, locale: 'pt-BR' | 'en-US' = 'en-US', episode: { season: number; episode: number; name?: string } | null = null) {
+function mount(quickWatchEnabled = true, locale: 'pt-BR' | 'en-US' = 'en-US', episode: { season: number; episode: number; name?: string } | null = null, selectedTitle = title) {
   const onClose = vi.fn();
-  const props = { title, locale, mpvVersion: null, quickWatchEnabled, episode, onClose };
+  const props = { title: selectedTitle, locale, mpvVersion: null, quickWatchEnabled, episode, onClose };
   return { ...render(<WatchFlow {...props} />), onClose, props };
 }
 
@@ -196,6 +198,24 @@ describe('cinema player interactions', () => {
       expect.anything(), expect.anything(),
       expect.objectContaining({ episode: { season: 16, episode: 5, name: 'Family Guy' } }),
     );
+  });
+
+  it('auto-marks at the threshold only once per episode player session', async () => {
+    const user = userEvent.setup();
+    const view = mount(true, 'en-US', { season: 16, episode: 5 }, seriesTitle);
+    const sources = await screen.findByRole('list', { name: 'Available sources' });
+    await user.click(within(sources).getAllByRole('button')[0]);
+
+    mocks.controller.state = { ...initialState, time: 89_000, duration: 100_000 };
+    view.rerender(<WatchFlow {...view.props} />);
+    expect(mocks.setWatched).not.toHaveBeenCalled();
+    mocks.controller.state = { ...initialState, time: 90_000, duration: 100_000 };
+    view.rerender(<WatchFlow {...view.props} />);
+    await waitFor(() => expect(mocks.setWatched).toHaveBeenCalledTimes(1));
+    expect(mocks.setWatched).toHaveBeenCalledWith('tt0182576', { season: 16, episode: 5 }, true);
+    mocks.controller.state = { ...initialState, time: 99_000, duration: 100_000 };
+    view.rerender(<WatchFlow {...view.props} />);
+    expect(mocks.setWatched).toHaveBeenCalledTimes(1);
   });
 
   it('opens sources without autoplay when Quick Watch is off and allows retry after load failure', async () => {

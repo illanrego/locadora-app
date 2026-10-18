@@ -93,6 +93,17 @@ export function nextEpisode(
   return null;
 }
 
+export function shouldMarkEpisodeWatched(state: {
+  time: number | null;
+  duration: number | null;
+  ended: boolean;
+}): boolean {
+  if (state.ended) return true;
+  return typeof state.time === 'number' && Number.isFinite(state.time) && state.time >= 0
+    && typeof state.duration === 'number' && Number.isFinite(state.duration) && state.duration > 0
+    && state.time / state.duration >= 0.9;
+}
+
 export function episodeVideoId(imdbId: string, episode: Pick<BoundedEpisode, 'season' | 'episode'>): string {
   if (!isSeriesImdbId(imdbId) || index(episode.season, 0) === null || index(episode.episode, 1) === null) {
     throw new Error('Invalid episode identity');

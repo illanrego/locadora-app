@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { episodeVideoId, episodesForSeason, nextEpisode, parseSeriesEpisodes } from '../src/media/seriesEpisodes';
+import { episodeVideoId, episodesForSeason, nextEpisode, parseSeriesEpisodes, shouldMarkEpisodeWatched } from '../src/media/seriesEpisodes';
 
 const sample = parseSeriesEpisodes({ meta: { videos: [
   { season: 2, episode: 2, title: 'Second', released: '2020-02-29T00:00:00.000Z' },
@@ -58,6 +58,14 @@ describe('series episodes', () => {
   it('crosses a season boundary and returns null for a pointer past the end', () => {
     expect(nextEpisode(sample, new Set(['1:2']), { season: 1, episode: 2 })).toMatchObject({ season: 2, episode: 1 });
     expect(nextEpisode(sample, new Set(), { season: 3, episode: 1 })).toBeNull();
+  });
+
+  it.each([
+    [{ time: 89_000, duration: 100_000, ended: false }, false],
+    [{ time: 90_000, duration: 100_000, ended: false }, true],
+    [{ time: null, duration: null, ended: true }, true],
+  ] as const)('applies the watched threshold to %o', (state, expected) => {
+    expect(shouldMarkEpisodeWatched(state)).toBe(expected);
   });
 
   it('composes only bounded episode ids with a confirmed series IMDb id', () => {

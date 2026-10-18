@@ -199,6 +199,9 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .tape-episodes button:disabled { opacity: .58; cursor: not-allowed; }
 .tape-episodes button strong { color: var(--yellow); }
 .tape-episodes button:hover:not(:disabled) strong { color: inherit; }
+.tape-episodes li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .25rem; }
+.tape-episodes .episode-watched-toggle { width: auto; align-content: center; padding: .35rem .45rem; font-size: .58rem; }
+.tape-episodes .episode-watched-toggle[aria-pressed="true"] { color: var(--ink); background: var(--yellow); }
 .credit-more { margin-top: .5rem; }
 .credit-deep { margin-top: .5rem; }
 .person-modal { width: min(760px, calc(100vw - 2rem)); padding: 1.25rem; }

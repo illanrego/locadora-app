@@ -1,10 +1,50 @@
 # Implementation progress
 
 Last updated: 2026-10-18
-Current milestone: series episode tracking, Part 2 (episode playback)
-Status: Part 2 implementation complete; automated checks passed; GUI playback not performed
+Current milestone: series episode tracking, Part 3 (progress and continue)
+Status: Part 3 implementation complete; automated checks passed; GUI playback not performed
 
 ## Resume checkpoint
+
+2026-10-18 series episode tracking, Part 3 complete (D-031):
+- The existing catalogue IndexedDB now upgrades from schema version 1 to 2 and
+  adds a `progress` store keyed as `progress:<seriesId>`. `CACHE_VERSION`
+  remains 2, so the schema upgrade preserves title/shelf cache keys. Progress
+  records keep the server-shaped D-031 fields, validate stored input and retain
+  only the newest 500 watched timestamps. Individual and bulk read/write/clear
+  operations are exposed; the canonical `clearLocalCache()` clears progress in
+  the same transaction as shelves and titles.
+- This checkout had no pre-existing local-cache clear function or UI caller to
+  extend. The similarly worded Media Settings action deletes protected add-on
+  configuration and was deliberately not overloaded. `clearLocalCache()` is
+  therefore the single cache-clear path, and its progress behavior is covered
+  directly; adding a new settings action was outside Part 3 rather than
+  inventing a second path.
+- Episode playback marks watched at `time / duration >= 0.9` or `ended`, using
+  the existing Stremio Video state. A per-WatchFlow episode guard permits one
+  write per episode per mounted player session. No playback position is stored,
+  and the write touches no rental, return, collection, review or donation state.
+- The 2D episode picker reads local progress, labels watched episodes, and uses
+  the same write path for manual mark/unmark. Its primary playback action uses
+  `nextEpisode()` with the stored pointer: `Continuar TxxExx` when watched
+  progress exists and `Começar TxxExx` at the first known normal episode when
+  none exists. A fully watched list reports the series complete instead of
+  wrapping or autoplaying. Every episode action still enters the Part 2 manual
+  source picker under D-006.
+- Focused checks passed: `npm test -- test/seriesEpisodes.test.ts
+  test/localSeriesProgress.test.ts test/localCacheSchema.test.ts
+  test/localCatalogueCache.test.ts test/seriesEpisodePicker.test.tsx
+  test/watchFlow.test.tsx` (36 tests/6 files). `npm run check` passed, exit 0:
+  TypeScript, Vitest 184 tests/45 files, and Vite production build (192 modules;
+  existing large-chunk advisory). `git diff --check` passed.
+- `npm run tauri -- build --no-bundle` passed and refreshed the optimized
+  desktop binary. No GUI, browser, real metadata response, source selection or
+  playback validation was performed. No dependency, Rust change, backend call,
+  analytics or D-031 contract change was added.
+- Next task: owner manually verifies the Part 3 desktop flow with a real series:
+  choose an episode through the manual source picker, cross the 90%/ended mark,
+  reopen the tape and confirm the watched badge plus `Continuar` target; also
+  verify manual mark/unmark. Automated implementation is complete.
 
 2026-10-18 series episode tracking, Part 2 complete (D-031):
 - A series inspection now loads its bounded episode list through the Part 1

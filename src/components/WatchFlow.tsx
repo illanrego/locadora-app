@@ -8,9 +8,11 @@ import { resolveTitleSubtitles, type StremioExtraSubtitleTrack } from '../media/
 import { normalizeSubtitleLanguage } from '../media/subtitles';
 import { readSubtitleDelay, writeSubtitleDelay, videoDelayIdentity } from '../media/subtitleDelayStore';
 import { useStremioVideo } from '../media/useStremioVideo';
+import { setEpisodeWatched } from '../locadora/localCache';
+import { externalId } from '../domain/content';
 import { markNativePlayerHiccup, readMediaConfiguration } from '../platform/nativeBridge';
 import { filterSources, type ResolutionFilter } from '../media/sourcePicker';
-import type { BoundedEpisode } from '../media/seriesEpisodes';
+import { shouldMarkEpisodeWatched, type BoundedEpisode } from '../media/seriesEpisodes';
 import { Modal } from './Modal';
 import { PlayerIcon } from './PlayerIcon';
 
@@ -77,6 +79,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
   const externalSubtitlesRef = useRef<StremioExtraSubtitleTrack[]>([]);
   const tracksButtonRef = useRef<HTMLButtonElement>(null);
   const sourcesButtonRef = useRef<HTMLButtonElement>(null);
+  const autoMarkedEpisodes = useRef(new Set<string>());
 
   const play = useCallback(async (candidate: StreamCandidate) => {
     const stream = toStremioPlayableStream(candidate);
@@ -238,6 +241,15 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
   useEffect(() => {
     if (video.state.ended && video.state.fullscreen) video.setFullscreen(false);
   }, [video.setFullscreen, video.state.ended, video.state.fullscreen]);
+  useEffect(() => {
+    if (!candidateId || !episode || !shouldMarkEpisodeWatched(video.state)) return;
+    const seriesId = externalId(title.identity, 'imdb');
+    if (!seriesId) return;
+    const key = `${episode.season}:${episode.episode}`;
+    if (autoMarkedEpisodes.current.has(key)) return;
+    autoMarkedEpisodes.current.add(key);
+    void setEpisodeWatched(seriesId, episode, true);
+  }, [candidateId, episode, title.identity, video.state]);
   const playerError = video.state.error ?? lookupError;
   const phase = lookupState === 'loading'
     ? 'loading-streams'

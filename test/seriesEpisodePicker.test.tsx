@@ -5,10 +5,14 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { normalizeDiscoveryTitle } from '../src/domain/content';
 
-const mocks = vi.hoisted(() => ({ configuration: vi.fn(), fetcher: vi.fn() }));
+const mocks = vi.hoisted(() => ({ configuration: vi.fn(), fetcher: vi.fn(), readProgress: vi.fn(), setWatched: vi.fn() }));
 vi.mock('../src/platform/nativeBridge', () => ({
   readMediaConfiguration: mocks.configuration,
   fetchConfiguredAddonResource: mocks.fetcher,
+}));
+vi.mock('../src/locadora/localCache', () => ({
+  readSeriesProgress: mocks.readProgress,
+  setEpisodeWatched: mocks.setWatched,
 }));
 import { SeriesEpisodePicker } from '../src/components/SeriesEpisodePicker';
 
@@ -19,6 +23,8 @@ beforeEach(() => {
   mocks.configuration.mockResolvedValue([
     { id: 'meta', name: 'Metadata', resources: ['meta'], supportsStreams: false, supportsSubtitles: false },
   ]);
+  mocks.readProgress.mockResolvedValue(null);
+  mocks.setWatched.mockResolvedValue(null);
   mocks.fetcher.mockResolvedValue({ meta: { videos: [
     { season: 0, episode: 1, name: 'Special' },
     { season: 16, episode: 5, name: 'The chosen one' },
@@ -45,5 +51,41 @@ describe('series episode picker', () => {
     await waitFor(() => expect(mocks.fetcher).toHaveBeenCalledWith({
       addonId: 'meta', resource: 'meta', contentType: 'series', id: 'tt0182576',
     }));
+  });
+
+  it('starts the first known episode when there is no progress', async () => {
+    mocks.fetcher.mockResolvedValue({ meta: { videos: [
+      { season: 1, episode: 1, name: 'Pilot' },
+      { season: 1, episode: 2 },
+    ] } });
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(<SeriesEpisodePicker title={title} locale="en-US" canWatch onSelect={onSelect} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Start T01E01' }));
+    expect(onSelect).toHaveBeenCalledWith({ season: 1, episode: 1, name: 'Pilot' });
+  });
+
+  it('continues across a season boundary and manually toggles the same progress record', async () => {
+    const timestamp = '2026-10-18T12:00:00.000Z';
+    mocks.readProgress.mockResolvedValue({
+      seriesId: 'tt0182576', season: 16, episode: 6,
+      watched: { '16:5': timestamp, '16:6': timestamp }, updatedAt: timestamp,
+    });
+    mocks.setWatched.mockResolvedValue({
+      seriesId: 'tt0182576', season: 16, episode: 5,
+      watched: { '16:6': timestamp }, updatedAt: timestamp,
+    });
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(<SeriesEpisodePicker title={title} locale="pt-BR" canWatch onSelect={onSelect} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Continuar T17E01' }));
+    expect(onSelect).toHaveBeenCalledWith({ season: 17, episode: 1, name: 'A new year' });
+    await user.click(screen.getByRole('button', { name: 'Assistido T16E05' }));
+    expect(mocks.setWatched).toHaveBeenCalledWith(
+      'tt0182576', { season: 16, episode: 5, name: 'The chosen one' }, false,
+    );
+    expect(await screen.findByRole('button', { name: 'Marcar como assistido T16E05' })).toBeInTheDocument();
   });
 });
