@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { DiscoveryTitle } from '../domain/content';
 import { externalId } from '../domain/content';
 import type { Locale } from '../locadora/catalog';
-import { readSeriesProgress, setEpisodeWatched, type ProgressRecord } from '../locadora/localCache';
+import { clearSeriesProgress, readSeriesProgress, setEpisodeWatched, type ProgressRecord } from '../locadora/localCache';
 import { episodesForSeason, nextEpisode, type BoundedEpisode } from '../media/seriesEpisodes';
 import {
   episodeListMessage,
@@ -86,6 +86,16 @@ export function SeriesEpisodePicker({ title, locale, canWatch, onSelect }: Serie
           onClick={() => onSelect(continueEpisode)}>
           {hasWatched ? (pt ? 'Continuar' : 'Continue') : (pt ? 'Começar' : 'Start')} {episodeLabel(continueEpisode)}
         </button> : hasWatched && <p>{pt ? 'Série concluída.' : 'Series complete.'}</p>}
+        {hasWatched && imdbId && <button type="button" className="episode-forget"
+          disabled={progressPending !== null}
+          onClick={() => {
+            setProgressPending('forget');
+            void clearSeriesProgress(imdbId)
+              .then(() => setProgress(null))
+              .finally(() => setProgressPending(null));
+          }}>
+          {pt ? 'Esquecer progresso' : 'Forget progress'}
+        </button>}
         <label>
           <span>{pt ? 'Temporada' : 'Season'}</span>
           <select value={selectedSeason ?? ''} onChange={(event) => setSelectedSeason(Number(event.currentTarget.value))}>

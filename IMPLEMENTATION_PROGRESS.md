@@ -1,10 +1,32 @@
 # Implementation progress
 
 Last updated: 2026-10-18
-Current milestone: series episode tracking, Part 3 (progress and continue)
-Status: Part 3 implementation complete; automated checks passed; GUI playback not performed
+Current milestone: series episode tracking, closed out with owner-facing fixes
+Status: episode lists, playback and local progress complete; metadata default now applies to any configuration that cannot answer `meta`; checks green
 
 ## Resume checkpoint
+
+2026-10-18 owner follow-ups after Part 3 (D-031):
+- Owner asked for the two fixes that stood between the milestone and using it.
+  1. The metadata default was seeded only for a completely empty configuration,
+     so a user whose add-ons came from a Stremio import (streams and subtitles
+     only, the common case) could never get an episode list. Seeding is now
+     decided by the configuration itself: any configuration with an add-on that
+     declares the `meta` resource needs nothing, and one that cannot answer
+     `meta` gets the public default appended after it, order preserved. The
+     recorded-seed flag keeps a failed attempt from repeating, `add` and
+     `import` no longer set it (they answer "what is configured", not "can meta
+     be answered"), while `remove` and `disconnect` still do, so a deliberate
+     emptying is never re-seeded.
+  2. Progress had no user-facing way to be forgotten. The series episode picker
+     gains `Esquecer progresso` / `Forget progress` beside the continue action,
+     scoped to that one series through `clearSeriesProgress()`; `clearLocalCache()`
+     still clears everything.
+- Checks: `npm run check` exit 0 — TypeScript, Vitest 186 tests/45 files, Vite
+  production build. Focused: `test/mediaConfigurationDefault.test.ts` (4 tests)
+  and `test/seriesEpisodePicker.test.tsx` (4 tests).
+- The release binary was rebuilt after these changes so the owner can run the
+  alias and retest.
 
 2026-10-18 series episode tracking, Part 3 complete (D-031):
 - The existing catalogue IndexedDB now upgrades from schema version 1 to 2 and

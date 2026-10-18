@@ -5,7 +5,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { normalizeDiscoveryTitle } from '../src/domain/content';
 
-const mocks = vi.hoisted(() => ({ configuration: vi.fn(), fetcher: vi.fn(), readProgress: vi.fn(), setWatched: vi.fn() }));
+const mocks = vi.hoisted(() => ({ configuration: vi.fn(), fetcher: vi.fn(), readProgress: vi.fn(), setWatched: vi.fn(), clearProgress: vi.fn() }));
 vi.mock('../src/platform/nativeBridge', () => ({
   readMediaConfiguration: mocks.configuration,
   fetchConfiguredAddonResource: mocks.fetcher,
@@ -13,6 +13,7 @@ vi.mock('../src/platform/nativeBridge', () => ({
 vi.mock('../src/locadora/localCache', () => ({
   readSeriesProgress: mocks.readProgress,
   setEpisodeWatched: mocks.setWatched,
+  clearSeriesProgress: mocks.clearProgress,
 }));
 import { SeriesEpisodePicker } from '../src/components/SeriesEpisodePicker';
 
@@ -25,6 +26,7 @@ beforeEach(() => {
   ]);
   mocks.readProgress.mockResolvedValue(null);
   mocks.setWatched.mockResolvedValue(null);
+  mocks.clearProgress.mockResolvedValue(undefined);
   mocks.fetcher.mockResolvedValue({ meta: { videos: [
     { season: 0, episode: 1, name: 'Special' },
     { season: 16, episode: 5, name: 'The chosen one' },
@@ -87,5 +89,22 @@ describe('series episode picker', () => {
       'tt0182576', { season: 16, episode: 5, name: 'The chosen one' }, false,
     );
     expect(await screen.findByRole('button', { name: 'Marcar como assistido T16E05' })).toBeInTheDocument();
+  });
+
+  it('forgets this series progress only, and only on request', async () => {
+    const timestamp = '2026-10-18T12:00:00.000Z';
+    mocks.readProgress.mockResolvedValue({
+      seriesId: 'tt0182576', season: 16, episode: 5,
+      watched: { '16:5': timestamp }, updatedAt: timestamp,
+    });
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(<SeriesEpisodePicker title={title} locale="pt-BR" canWatch onSelect={onSelect} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Esquecer progresso' }));
+    expect(mocks.clearProgress).toHaveBeenCalledWith('tt0182576');
+    expect(await screen.findByRole('button', { name: 'Começar T16E05' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Esquecer progresso' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Marcar como assistido T16E05' })).toBeInTheDocument();
   });
 });

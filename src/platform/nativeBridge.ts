@@ -278,6 +278,14 @@ function defaultSeedRecorded(): boolean {
   }
 }
 
+// The default exists so a series can list its episodes without the user
+// configuring anything. An existing configuration that already answers `meta`
+// needs nothing; one built only from stream/subtitle add-ons (the common
+// imported case) still gets the metadata default appended after it.
+function configurationNeedsMetaDefault(addons: readonly ConfiguredAddon[]): boolean {
+  return !addons.some((addon) => Array.isArray(addon.resources) && addon.resources.includes('meta'));
+}
+
 function recordDefaultSeed(): void {
   defaultSeededThisSession = true;
   try {
@@ -296,7 +304,11 @@ export async function readMediaConfiguration(): Promise<ConfiguredAddon[]> {
   if (!isNativeShell()) return [];
   return serializeMediaConfiguration(async () => {
     const addons = await invoke<ConfiguredAddon[]>('media_configuration_status');
-    if (addons.length || defaultSeedRecorded()) return addons;
+    if (!configurationNeedsMetaDefault(addons)) {
+      recordDefaultSeed();
+      return addons;
+    }
+    if (defaultSeedRecorded()) return addons;
     try {
       const seeded = await invoke<ConfiguredAddon[]>('media_configuration_add', { manifestUrl: DEFAULT_META_MANIFEST });
       recordDefaultSeed();
@@ -312,7 +324,6 @@ export async function addMediaConfiguration(manifestUrl: string): Promise<Config
   if (!isNativeShell()) throw new Error('Protected media configuration is available in the desktop app');
   return serializeMediaConfiguration(async () => {
     const addons = await invoke<ConfiguredAddon[]>('media_configuration_add', { manifestUrl });
-    recordDefaultSeed();
     return addons;
   });
 }
@@ -321,7 +332,6 @@ export async function importInstalledStremioConfiguration(): Promise<StremioImpo
   if (!isNativeShell()) throw new Error('Installed Stremio import is available in the desktop app');
   return serializeMediaConfiguration(async () => {
     const result = await invoke<StremioImportResult>('media_configuration_import_stremio');
-    recordDefaultSeed();
     return result;
   });
 }

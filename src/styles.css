@@ -197,6 +197,7 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .tape-episodes button { display: grid; width: 100%; gap: .15rem; padding: .5rem; color: var(--cream); background: #243e61; border: 1px solid #050a12; font: inherit; text-align: left; cursor: pointer; }
 .tape-episodes button:hover:not(:disabled) { color: var(--ink); background: var(--yellow); }
 .tape-episodes button:disabled { opacity: .58; cursor: not-allowed; }
+.tape-episodes .episode-forget { margin-top: .4rem; text-align: center; background: transparent; border: 1px dashed #f6ebcc66; }
 .tape-episodes button strong { color: var(--yellow); }
 .tape-episodes button:hover:not(:disabled) strong { color: inherit; }
 .tape-episodes li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .25rem; }
