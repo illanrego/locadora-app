@@ -116,7 +116,9 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
         setResolution(result);
         setLookupState('ready');
         const winner = result.quickWatch?.winner;
-        if (quickWatchEnabled && winner && toStremioPlayableStream(winner)) {
+        // D-006: series episodes stay manual. The movie size/seeders ladder is
+        // not valid for an episode, so Quick Watch never autoplays one.
+        if (quickWatchEnabled && !episode && winner && toStremioPlayableStream(winner)) {
           await play(winner);
         } else if (result.status === 'manual-selection-required' || winner) {
           setManualVisible(true);

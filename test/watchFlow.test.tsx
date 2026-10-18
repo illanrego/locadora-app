@@ -53,9 +53,9 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-function mount(quickWatchEnabled = true, locale: 'pt-BR' | 'en-US' = 'en-US') {
+function mount(quickWatchEnabled = true, locale: 'pt-BR' | 'en-US' = 'en-US', episode: { season: number; episode: number; name?: string } | null = null) {
   const onClose = vi.fn();
-  const props = { title, locale, mpvVersion: null, quickWatchEnabled, onClose };
+  const props = { title, locale, mpvVersion: null, quickWatchEnabled, episode, onClose };
   return { ...render(<WatchFlow {...props} />), onClose, props };
 }
 
@@ -186,6 +186,16 @@ describe('cinema player interactions', () => {
     view.rerender(<WatchFlow {...view.props} />);
     await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument());
     expect(screen.getByRole('dialog')).toHaveClass('fullscreen-controls-visible');
+  });
+
+  it('never autoplays a series episode, even with Quick Watch enabled', async () => {
+    mount(true, 'en-US', { season: 16, episode: 5, name: 'Family Guy' });
+    await screen.findByRole('list', { name: 'Available sources' });
+    expect(mocks.controller.load).not.toHaveBeenCalled();
+    expect(mocks.resolve).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(),
+      expect.objectContaining({ episode: { season: 16, episode: 5, name: 'Family Guy' } }),
+    );
   });
 
   it('opens sources without autoplay when Quick Watch is off and allows retry after load failure', async () => {
