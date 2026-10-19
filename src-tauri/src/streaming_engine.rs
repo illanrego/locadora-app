@@ -18,6 +18,9 @@ use tauri::{AppHandle, Manager, State};
 
 pub const PORT: u16 = 11471;
 pub const URL: &str = "http://127.0.0.1:11471/";
+pub const TAPE_PORT: u16 = 11472;
+pub const TAPE_URL: &str = "http://127.0.0.1:11472/";
+const DEFAULT_TAPE_PEER_PORT: u16 = 6881;
 const BINARY: &[u8] = include_bytes!("../resources/streaming-engine/stremio-server");
 const LICENSE: &[u8] = include_bytes!("../resources/streaming-engine/LICENSE");
 const PROVENANCE: &[u8] = include_bytes!("../resources/streaming-engine/provenance.json");
@@ -26,6 +29,7 @@ const SBOM: &[u8] = include_bytes!("../resources/streaming-engine/sbom.json");
 #[derive(Default)]
 pub struct EngineState {
     inner: Mutex<Engine>,
+    tape: Mutex<TapeEngine>,
     closing: AtomicBool,
 }
 
@@ -38,11 +42,24 @@ struct Engine {
     spawn_thread: Option<(std::sync::mpsc::Sender<()>, thread::JoinHandle<()>)>,
 }
 
+#[derive(Default)]
+struct TapeEngine {
+    child: Option<Child>,
+    store: Option<PathBuf>,
+    // See Engine::spawn_thread. The tape process needs the same parent-death guarantee.
+    spawn_thread: Option<(std::sync::mpsc::Sender<()>, thread::JoinHandle<()>)>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EngineReady {
     url: &'static str,
     version: &'static str,
+}
+
+#[derive(Serialize)]
+pub struct TapeEngineReady {
+    url: &'static str,
 }
 
 fn private_dir(path: &Path) -> Result<(), String> {
@@ -248,15 +265,202 @@ impl Drop for Engine {
     }
 }
 
+fn tape_command(binary: &Path, store: &Path, port: u16, peer_port: u16) -> Command {
+    let mut command = Command::new(binary);
+    command
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("APP_PATH", store)
+        .env("BIND_ADDRESS", "127.0.0.1")
+        .env("HTTP_PORT", port.to_string())
+        .env("HTTPS_PORT", "0")
+        .env(
+            "STREMIO_ALLOWED_ORIGINS",
+            "tauri://localhost,http://tauri.localhost",
+        )
+        .env("STREMIO_MEM_LIMIT", "268435456")
+        .env("STREMIO_TORRENT_IDLE_TIMEOUT", "0")
+        .env("STREMIO_MAX_SEED_RATIO", "0")
+        .env("BT_LISTEN_PORT", peer_port.to_string())
+        .env("STREMIO_TRACKERS_URL", "off")
+        .env("STREMIO_LOCAL_IMDB", "off")
+        .env("STREMIO_METADATA_URL", "off")
+        .env("STREMIO_ENABLE_DLNA", "0")
+        .env("STREMIO_DISABLE_WEBTORRENT", "1")
+        .env("STREMIO_LOG_LEVEL", "error")
+        .env("STREMIO_HTTP_LOG", "0")
+        .current_dir(store)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0);
+    command
+}
+
+impl TapeEngine {
+    fn alive(&mut self) -> bool {
+        self.child
+            .as_mut()
+            .is_some_and(|child| matches!(child.try_wait(), Ok(None)))
+    }
+
+    fn ensure(
+        &mut self,
+        binary_root: &Path,
+        store: &Path,
+        port: u16,
+        peer_port: u16,
+        closing: &AtomicBool,
+    ) -> Result<(), String> {
+        if closing.load(Ordering::SeqCst) {
+            return Err("Application is closing".into());
+        }
+        if self.alive() {
+            return Ok(());
+        }
+        self.stop();
+        let reservation = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).map_err(
+            |_| "Locadora's tape engine port is busy. Close the conflicting application and retry.",
+        )?;
+        let binary = materialize(binary_root)?;
+        private_dir(store)?;
+        self.store = Some(store.to_path_buf());
+        let mut command = tape_command(&binary, store, port, peer_port);
+        let parent = std::process::id();
+        // SAFETY: only async-signal-safe libc operations between fork and exec.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if libc::getppid() as u32 != parent {
+                    libc::_exit(1);
+                }
+                Ok(())
+            });
+        }
+        drop(reservation);
+        let (child_tx, child_rx) = std::sync::mpsc::sync_channel(1);
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let thread = thread::spawn(move || {
+            let _ = child_tx.send(command.spawn());
+            let _ = release_rx.recv();
+        });
+        self.spawn_thread = Some((release_tx, thread));
+        match child_rx.recv() {
+            Ok(Ok(child)) => self.child = Some(child),
+            _ => {
+                self.stop();
+                return Err("Could not start the bundled tape engine".into());
+            }
+        }
+        let result = self.wait_ready(port, store, closing);
+        if result.is_err() {
+            self.stop();
+        }
+        result
+    }
+
+    fn wait_ready(&mut self, port: u16, store: &Path, closing: &AtomicBool) -> Result<(), String> {
+        let client = reqwest::blocking::Client::builder()
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_millis(600))
+            .build()
+            .map_err(|_| "Could not initialize tape engine readiness check")?;
+        let settings_url = format!("http://127.0.0.1:{port}/settings");
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while Instant::now() < deadline {
+            if closing.load(Ordering::SeqCst) {
+                return Err("Application is closing".into());
+            }
+            if !self.alive() {
+                return Err("The bundled tape engine stopped during startup. Retry.".into());
+            }
+            if let Ok(response) = client.get(&settings_url).send()
+                && response.status().is_success()
+            {
+                let mut bytes = Vec::new();
+                if response.take(65_537).read_to_end(&mut bytes).is_ok()
+                    && bytes.len() <= 65_536
+                    && let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes)
+                    && json["values"]["appPath"].as_str() == store.to_str()
+                    && json["values"]["serverVersion"].as_str() == Some("4.21.0")
+                    && self.alive()
+                {
+                    let configured = client
+                        .post(&settings_url)
+                        .json(&serde_json::json!({
+                            "cacheSize": null,
+                            "seedingEnabled": true
+                        }))
+                        .send()
+                        .and_then(reqwest::blocking::Response::error_for_status)
+                        .and_then(reqwest::blocking::Response::json::<serde_json::Value>)
+                        .ok()
+                        .is_some_and(|value| value["success"].as_bool() == Some(true));
+                    if configured {
+                        return Ok(());
+                    }
+                    return Err("Could not configure the tape engine storage policy".into());
+                }
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        Err("The bundled tape engine did not become ready. Retry.".into())
+    }
+
+    fn stop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            if matches!(child.try_wait(), Ok(None)) {
+                let group = -(child.id() as i32);
+                // SAFETY: child is unreaped and this process created its process group.
+                unsafe {
+                    libc::kill(group, libc::SIGTERM);
+                }
+                let deadline = Instant::now() + Duration::from_secs(2);
+                while matches!(child.try_wait(), Ok(None)) && Instant::now() < deadline {
+                    thread::sleep(Duration::from_millis(25));
+                }
+                if matches!(child.try_wait(), Ok(None)) {
+                    unsafe {
+                        libc::kill(group, libc::SIGKILL);
+                    }
+                }
+            }
+            let _ = child.wait();
+        }
+        if let Some((release, thread)) = self.spawn_thread.take() {
+            let _ = release.send(());
+            let _ = thread.join();
+        }
+        // The durable tape store is rental-owned and is never removed at shutdown.
+        self.store = None;
+    }
+}
+
+impl Drop for TapeEngine {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
 impl EngineState {
     pub fn shutdown(&self) {
         self.closing.store(true, Ordering::SeqCst);
         if let Ok(mut engine) = self.inner.lock() {
             engine.stop();
         }
+        if let Ok(mut engine) = self.tape.lock() {
+            engine.stop();
+        }
     }
     pub fn is_ready(&self) -> bool {
         self.inner.lock().is_ok_and(|mut engine| engine.alive())
+    }
+
+    fn tape_is_ready(&self) -> bool {
+        self.tape.lock().is_ok_and(|mut engine| engine.alive())
     }
 }
 
@@ -413,6 +617,145 @@ pub async fn streaming_engine_request(
     })
 }
 
+#[tauri::command]
+pub async fn tape_engine_ensure(
+    app: AppHandle,
+    peer_port: Option<u16>,
+) -> Result<TapeEngineReady, String> {
+    let binary_root = app
+        .path()
+        .app_cache_dir()
+        .map_err(|_| "Could not locate engine storage")?
+        .join("streaming-engine");
+    let store = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| "Could not locate tape storage")?
+        .join("tape-store");
+    let peer_port = peer_port.unwrap_or(DEFAULT_TAPE_PEER_PORT);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<EngineState>();
+        let mut engine = state
+            .tape
+            .lock()
+            .map_err(|_| "Tape engine state is unavailable")?;
+        engine.ensure(&binary_root, &store, TAPE_PORT, peer_port, &state.closing)?;
+        Ok(TapeEngineReady { url: TAPE_URL })
+    })
+    .await
+    .map_err(|_| "Tape startup task failed")?
+}
+
+fn tape_path_allowed(path: &str) -> bool {
+    let Some(relative) = path.strip_prefix('/') else {
+        return false;
+    };
+    if relative.starts_with('/') {
+        return false;
+    }
+    let parts: Vec<_> = relative.split('/').collect();
+    let hash_valid = parts.first().is_some_and(|hash| {
+        hash.len() == 40
+            && hash
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    });
+    if !hash_valid || parts.len() > 3 {
+        return false;
+    }
+    let index_valid = |part: &str| {
+        (1..=4).contains(&part.len()) && part.bytes().all(|byte| byte.is_ascii_digit())
+    };
+    let action_valid = |part: &str| matches!(part, "stats.json" | "create" | "remove");
+    match parts.as_slice() {
+        [_] => true,
+        [_, second] => index_valid(second) || action_valid(second),
+        [_, second, third] => index_valid(second) && action_valid(third),
+        _ => false,
+    }
+}
+
+fn tape_request_allowed(url: &url::Url, method: &str, body: Option<&str>) -> bool {
+    if url.scheme() != "http"
+        || url.host_str() != Some("127.0.0.1")
+        || url.port() != Some(TAPE_PORT)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || url.as_str().len() > 32_768
+        || body.is_some_and(|body| body.len() > 3 * 1024 * 1024)
+        || !tape_path_allowed(url.path())
+    {
+        return false;
+    }
+    let is_create = url.path().split('/').next_back() == Some("create");
+    match method {
+        "POST" => is_create,
+        "GET" => !is_create && body.is_none(),
+        _ => false,
+    }
+}
+
+#[tauri::command]
+pub async fn tape_engine_request(
+    state: State<'_, EngineState>,
+    url: String,
+    method: String,
+    body: Option<String>,
+) -> Result<EngineResponse, String> {
+    let parsed = url::Url::parse(&url).map_err(|_| "Invalid tape engine request")?;
+    if !tape_request_allowed(&parsed, &method, body.as_deref()) || !state.tape_is_ready() {
+        return Err("Tape engine request is unavailable or not permitted".into());
+    }
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(45))
+        .build()
+        .map_err(|_| "Could not initialize tape engine request")?;
+    let mut request = client.request(
+        if method == "POST" {
+            reqwest::Method::POST
+        } else {
+            reqwest::Method::GET
+        },
+        parsed,
+    );
+    if let Some(body) = body {
+        request = request
+            .header("content-type", "application/json")
+            .body(body);
+    }
+    let mut response = request
+        .send()
+        .await
+        .map_err(|_| "Tape engine request failed. Retry.")?;
+    let status = response.status().as_u16();
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("application/json")
+        .to_string();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| "Could not read tape engine response")?
+    {
+        if bytes.len() + chunk.len() > 2 * 1024 * 1024 {
+            return Err("Tape engine response exceeded limit".into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(EngineResponse {
+        status,
+        body: String::from_utf8(bytes).map_err(|_| "Invalid tape engine response")?,
+        content_type,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,5 +871,224 @@ mod tests {
         closing.store(true, Ordering::SeqCst);
         assert!(engine.ensure(&root, port, &closing).is_err());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    fn command_env(command: &Command, key: &str) -> Option<String> {
+        command
+            .get_envs()
+            .find(|(name, _)| *name == key)
+            .and_then(|(_, value)| value)
+            .map(|value| value.to_string_lossy().into_owned())
+    }
+
+    #[test]
+    fn tape_role_has_distinct_fixed_port_and_disk_environment() {
+        let store = Path::new("/private/tape-store");
+        let command = tape_command(
+            Path::new("/private/engine"),
+            store,
+            TAPE_PORT,
+            DEFAULT_TAPE_PEER_PORT,
+        );
+        assert_eq!(PORT, 11471);
+        assert_eq!(TAPE_PORT, 11472);
+        assert_ne!(PORT, TAPE_PORT);
+        assert_eq!(URL, "http://127.0.0.1:11471/");
+        assert_eq!(TAPE_URL, "http://127.0.0.1:11472/");
+        assert_eq!(command_env(&command, "APP_PATH").as_deref(), store.to_str());
+        assert_eq!(command_env(&command, "HTTP_PORT").as_deref(), Some("11472"));
+        assert_eq!(command_env(&command, "STREMIO_MEMORY_CACHE_SIZE"), None);
+        assert_eq!(
+            command_env(&command, "STREMIO_TORRENT_IDLE_TIMEOUT").as_deref(),
+            Some("0")
+        );
+        assert_eq!(
+            command_env(&command, "STREMIO_MAX_SEED_RATIO").as_deref(),
+            Some("0")
+        );
+        assert_eq!(
+            command_env(&command, "BT_LISTEN_PORT").as_deref(),
+            Some("6881")
+        );
+        assert_eq!(
+            command_env(&command, "STREMIO_MEM_LIMIT").as_deref(),
+            Some("268435456")
+        );
+        assert_eq!(
+            command_env(&command, "STREMIO_DISABLE_WEBTORRENT").as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            command_env(&command, "STREMIO_TRACKERS_URL").as_deref(),
+            Some("off")
+        );
+        assert_eq!(
+            command_env(&command, "STREMIO_LOG_LEVEL").as_deref(),
+            Some("error")
+        );
+        assert_eq!(
+            command_env(&command, "STREMIO_HTTP_LOG").as_deref(),
+            Some("0")
+        );
+    }
+
+    #[test]
+    fn tape_engine_is_lazy_until_explicit_ensure() {
+        let state = EngineState::default();
+        assert!(state.tape.lock().unwrap().child.is_none());
+        assert!(!state.tape_is_ready());
+        assert!(state.tape.lock().unwrap().child.is_none());
+        assert!(!state.is_ready());
+        assert!(state.tape.lock().unwrap().child.is_none());
+    }
+
+    #[test]
+    fn tape_engine_conflict_is_fail_closed_and_drop_preserves_store() {
+        let root = std::env::temp_dir().join(format!(
+            "locadora-tape-engine-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let binary_root = root.join("engine");
+        let store = root.join("tape-store");
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let closing = AtomicBool::new(false);
+        let mut engine = TapeEngine::default();
+        assert!(
+            engine
+                .ensure(&binary_root, &store, port, 0, &closing)
+                .unwrap_err()
+                .contains("busy")
+        );
+        assert!(engine.child.is_none());
+        drop(listener);
+
+        engine
+            .ensure(&binary_root, &store, port, 0, &closing)
+            .unwrap();
+        assert!(engine.alive());
+        assert_eq!(
+            fs::metadata(&store).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        let client = reqwest::blocking::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let settings: serde_json::Value = client
+            .get(format!("http://127.0.0.1:{port}/settings"))
+            .send()
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .unwrap();
+        assert!(settings["values"]["cacheSize"].is_null());
+        assert_eq!(settings["values"]["seedingEnabled"].as_bool(), Some(true));
+
+        let retained = store.join("retained-after-drop");
+        fs::write(&retained, b"fixture").unwrap();
+        engine.stop();
+        assert!(!engine.alive());
+        assert!(
+            retained.exists(),
+            "tape engine teardown removed its durable store"
+        );
+        assert!(TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn parsed_tape_url(path: &str) -> url::Url {
+        url::Url::parse(&format!(
+            "{TAPE_URL}{}",
+            path.strip_prefix('/').unwrap_or(path)
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn tape_bridge_accepts_only_the_frozen_path_shapes() {
+        let hash = "a".repeat(40);
+        for (path, method, body) in [
+            (format!("/{hash}"), "GET", None),
+            (format!("/{hash}/3"), "GET", None),
+            (format!("/{hash}/stats.json"), "GET", None),
+            (format!("/{hash}/3/stats.json"), "GET", None),
+            (format!("/{hash}/remove"), "GET", None),
+            (format!("/{hash}/create"), "POST", Some("{}")),
+        ] {
+            assert!(tape_request_allowed(&parsed_tape_url(&path), method, body));
+        }
+    }
+
+    #[test]
+    fn tape_bridge_rejects_wrong_origin() {
+        let hash = "a".repeat(40);
+        for address in [
+            format!("http://127.0.0.1:11471/{hash}/remove"),
+            format!("https://127.0.0.1:11472/{hash}/remove"),
+            format!("http://localhost:11472/{hash}/remove"),
+        ] {
+            assert!(!tape_request_allowed(
+                &url::Url::parse(&address).unwrap(),
+                "GET",
+                None
+            ));
+        }
+    }
+
+    #[test]
+    fn tape_bridge_rejects_wrong_method() {
+        let hash = "a".repeat(40);
+        assert!(!tape_request_allowed(
+            &parsed_tape_url(&format!("/{hash}/create")),
+            "PUT",
+            Some("{}")
+        ));
+        assert!(!tape_request_allowed(
+            &parsed_tape_url(&format!("/{hash}/remove")),
+            "POST",
+            None
+        ));
+    }
+
+    #[test]
+    fn tape_bridge_rejects_bad_path() {
+        let hash = "a".repeat(40);
+        for path in [
+            format!("/{}", "A".repeat(40)),
+            format!("//{hash}/remove"),
+            format!("/{hash}/10000/stats.json"),
+            format!("/{hash}/proxy"),
+            format!("/{hash}/1/stats.json/extra"),
+        ] {
+            assert!(!tape_request_allowed(&parsed_tape_url(&path), "GET", None));
+        }
+    }
+
+    #[test]
+    fn tape_bridge_rejects_oversized_body() {
+        let hash = "a".repeat(40);
+        let oversized = "x".repeat(3 * 1024 * 1024 + 1);
+        assert!(!tape_request_allowed(
+            &parsed_tape_url(&format!("/{hash}/create")),
+            "POST",
+            Some(&oversized)
+        ));
+    }
+
+    #[test]
+    fn tape_bridge_rejects_body_for_non_create_path() {
+        let hash = "a".repeat(40);
+        assert!(!tape_request_allowed(
+            &parsed_tape_url(&format!("/{hash}/remove")),
+            "GET",
+            Some("{}")
+        ));
     }
 }

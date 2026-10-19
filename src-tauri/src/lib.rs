@@ -2,6 +2,7 @@ mod commands;
 mod embedded_surface;
 mod native_locale;
 mod streaming_engine;
+mod tape_store;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -21,6 +22,11 @@ pub fn run() {
             streaming_engine::streaming_engine_ensure,
             streaming_engine::streaming_engine_status,
             streaming_engine::streaming_engine_request,
+            streaming_engine::tape_engine_ensure,
+            streaming_engine::tape_engine_request,
+            tape_store::tape_store_read,
+            tape_store::tape_store_write,
+            tape_store::tape_store_clear,
             commands::fetch_public_shelf,
             commands::fetch_public_title,
             commands::fetch_public_search,

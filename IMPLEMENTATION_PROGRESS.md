@@ -2,22 +2,57 @@
 
 Last updated: 2026-10-19
 Current milestone: D-034 rented tapes P1 — native tape surface
-Status: implementation in progress; native and JS checks pending
+Status: P1 complete; automated native and JS gates passed
 
 ## Resume checkpoint
 
-2026-10-19 owner priority change — rented tapes P1:
-- Owner: “Start the rented-tape milestone (design is settled in the plan).”
-  D-034 records the ten settled decisions and weak-connection constraint.
-  This takes priority over the previous owner-side resume/visual acceptance.
-- Native surface only: independent lazy tape engine at 11472, durable private
-  store, separate bounded request bridge, and atomic validated manifest I/O.
-  Engine A's implementation, frontend, player policy and existing tests stay
-  unchanged. No new dependency, push, GUI automation or playback claims.
-- Pre-existing work: ` M docs/RENTED_TAPE_DOWNLOAD_AND_SEEDING_PLAN.md`;
-  preserve it without staging or editing it.
-- **Next task:** finish P1 native implementation and run the required serial
-  gates plus the teardown mutation check, then commit the milestone once.
+2026-10-19 D-034 rented tapes P1 native surface complete:
+- `EngineState` now supervises a second, independent `TapeEngine`, but only
+  `tape_engine_ensure` can start it. It reserves fixed loopback port 11472,
+  reuses the pinned/materialized D-018 binary, and points `APP_PATH` at the
+  private app-data `tape-store` directory. Its separate environment leaves the
+  memory-cache variable unset, disables idle reclaim, sets unlimited seed ratio,
+  defaults the peer port to 6881, and starts with a 256 MiB process limit.
+  Startup posts `cacheSize: null` and `seedingEnabled: true`; shutdown stops the
+  owned process but deliberately never removes the durable store.
+- Engine A remains textually unchanged at its behavior boundaries: port 11471,
+  URL, RAM-cache and 512 MiB env table, 30-second idle reclaim, ephemeral
+  session directory, `remove_dir_all` teardown, request bridge, ensure/status
+  commands and pre-existing lifecycle/allowlist tests. No player, frontend,
+  queue, rental, series or CSP path changed.
+- `tape_engine_request` has its own fixed-origin validator. It accepts only
+  lower-case 40-hex tape paths in the frozen optional index/action grammar,
+  maps POST to `create` and GET to non-`create` paths, rejects query/userinfo/
+  fragments, limits request bodies to 3 MiB and permits a body only on create.
+  Responses retain the existing 2 MiB bridge ceiling without widening Engine
+  A's bridge.
+- The new typed `tape_store_*` commands own `tape-store.json` under app data.
+  The v1 shape is strict and bounded (at most ten rows, 16 MiB encoded manifest,
+  8 MiB decoded torrent payload per row, lower-case hash, file index at most
+  9999 and JavaScript-safe positive byte size). Writes create a mode-0600 temp
+  file, write and fsync it, rename it over the destination and fsync the mode-
+  0700 parent. Missing, malformed, oversized or shape-invalid files read as
+  `null`; clear removes only the app-owned manifest.
+- Teardown mutation check: after temporarily changing `TapeEngine::stop` to
+  `remove_dir_all(store)`, `cargo test --manifest-path src-tauri/Cargo.toml
+  streaming_engine::tests::tape_engine_conflict_is_fail_closed_and_drop_preserves_store
+  -- --exact --nocapture` failed as required with `tape engine teardown removed
+  its durable store`. Restoring the non-deleting teardown made the same command
+  pass (1 passed, 42 filtered out).
+- Final native gate: `cargo test --manifest-path src-tauri/Cargo.toml` exited 0
+  — 43 library tests discovered, 41 passed and 2 ignored; main and doc tests
+  each ran 0. `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
+  -- -D warnings` exited 0. `cargo fmt --manifest-path src-tauri/Cargo.toml
+  --check` exited 0.
+- Unchanged JS gate: `npm run check` exited 0 — TypeScript passed; Test Files
+  46 passed (46), Tests 291 passed (291); Vite built 193 modules with only the
+  existing large-chunk advisory. No browser/GUI automation, manual visual or
+  playback validation was performed. No dependency was added and nothing was
+  pushed.
+- **Next task:** implement D-034 P2 from
+  `docs/RENTED_TAPE_DOWNLOAD_AND_SEEDING_PLAN.md` §21: pure-TypeScript manifest
+  lifecycle, admission and one-at-a-time download queue over this native
+  surface, without changing player URL policy or Engine A.
 
 
 2026-10-19 D-033 local resume positions complete:
