@@ -5,6 +5,7 @@ import { loadCreditStand, loadShelf, loadTitleDetails, type ShelfPage, type Shel
 import type { CreditStandSelection } from './locadora/creditStands';
 import { SidePanel } from './components/SidePanel';
 import { MediaSettings } from './components/MediaSettings';
+import { TapeSettingsGroup } from './components/TapeSettingsGroup';
 import { TitleInspection } from './components/TitleInspection';
 import { VhsTape } from './components/VhsTape';
 import { WatchFlow } from './components/WatchFlow';
@@ -436,6 +437,7 @@ export default function App() {
                 ? `${nativeCapabilities.mpv.version ?? 'mpv'} · ${locale === 'pt-BR' ? 'pronto' : 'ready'}`
                 : t.development}
             </p>
+            <TapeSettingsGroup locale={locale} />
           </section>
         )}
       </header>

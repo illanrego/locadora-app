@@ -339,6 +339,22 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .member-shelf .member-title-link { font-size: .72rem; }
 .member-history summary { color: var(--cyan); font: 900 .85rem "Arial Narrow", Arial, sans-serif; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
 .member-history[open] summary { margin-bottom: .65rem; }
+.tape-dashboard-table { width: 100%; margin: .2rem 0 .75rem; border-collapse: collapse; }
+.tape-dashboard-table th, .tape-dashboard-table td { padding: .48rem .5rem; border-bottom: 1px dashed #ffffff24; text-align: left; vertical-align: baseline; }
+.tape-dashboard-table thead th { color: var(--muted); font: 800 .56rem/1.3 "Courier New", monospace; letter-spacing: .08em; text-transform: uppercase; }
+.tape-dashboard-table tbody th { color: var(--cream); font: 900 .74rem/1.35 "Arial Narrow", Arial, sans-serif; }
+.tape-dashboard-table tbody th .member-title-link { font: inherit; text-align: left; }
+.tape-dashboard-table td { color: #d6ccb7; font: 700 .66rem "Courier New", monospace; white-space: nowrap; }
+.tape-dashboard-total { margin: 0 0 .3rem; color: var(--yellow); font: 800 .7rem/1.45 "Courier New", monospace; }
+.tape-dashboard-disclosure { margin: 0; color: var(--muted); font-size: .7rem; line-height: 1.5; }
+.settings-drawer .tape-settings-group { display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(6rem, 7rem); align-items: center; gap: .25rem .6rem; padding: .55rem .7rem; border: 1px dashed #ffffff36; }
+.tape-settings-group legend { padding: 0 .25rem; }
+.tape-settings-group label { color: var(--yellow); font: 800 .6rem/1.3 "Courier New", monospace; letter-spacing: .04em; text-transform: uppercase; }
+.settings-drawer .tape-settings-group label.tape-settings-toggle { grid-column: 1 / -1; display: flex; align-items: center; gap: .5rem; color: var(--cream); font: 700 .68rem/1.35 "Courier New", monospace; letter-spacing: 0; text-transform: none; cursor: pointer; }
+.tape-settings-toggle input { width: 20px; height: 20px; flex: none; accent-color: var(--yellow); }
+.tape-settings-group input[type="number"] { width: 100%; min-height: 34px; padding: .35rem .45rem; border: 2px solid #3f526b; color: var(--cream); background: #080d15; font: 700 .7rem "Courier New", monospace; }
+.tape-settings-hint, .tape-settings-note { grid-column: 1 / -1; margin: 0 0 .15rem; color: var(--muted); font-size: .6rem; line-height: 1.4; }
+.tape-settings-note { margin-top: .2rem; color: #d6ccb7; }
 .return-review { padding: .8rem; border: 2px solid var(--yellow); background: #172c4966; }
 .return-review h3 { margin-top: 0; color: var(--yellow); }
 .return-review > p { margin: 0 0 .8rem; color: #d6ccb7; font-size: .75rem; line-height: 1.5; }

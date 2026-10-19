@@ -1,10 +1,75 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: D-034 rented tapes P5 — a rented movie becomes a download
-Status: P5 implemented and automated checks green; owner engine/network acceptance pending
+Current milestone: D-034 rented tapes P6 — the tape dashboard and settings surface
+Status: P6 implemented and automated checks green; owner engine/network acceptance pending
 
 ## Resume checkpoint
+
+2026-10-19 D-034 rented tapes P6 tape dashboard and settings surface:
+- `src/components/TapeDashboard.tsx` (new) is the read-only dashboard inside
+  the Carteirinha, placed after the active rentals and before the collapsed
+  history. It renders one row per **local-manifest** tape with title, readable
+  state, size on disk, a best-effort `uploaded` figure and last played, then the
+  total-versus-ceiling line and the plain-language disclosure. It renders
+  nothing at all for an empty manifest, an unreadable manifest, or while the
+  read is in flight. No return, delete, retry, pause or reprioritise control
+  exists; the only button is "inspect this title", and only when the tape's
+  `contentId` matches a title the panel already knows (`knownTitles`, the same
+  canonical keys), so no title is invented to make a button.
+- `src/rentals/tapeDashboard.ts` (new) is the pure half: manifest → rows, the
+  state-word table, byte/date formatting, the total sentence, and the bounded
+  `readTapeUploaded` parser. A missing uploaded figure is `null` and paints as
+  "—"; only a real `0` prints as `0 MB`.
+- Uploaded is read per tape through the existing allowlisted bridge with
+  `GET /<hash>/<fileIdx>/stats.json` (`requestTapeEngine`, never `ensure`). A
+  stopped engine, a non-200 answer, a malformed or unbounded body, or a bridge
+  rejection becomes a dash per row and never an error surface. No session-total
+  column was added: the P6 brief's columns are the four named ones and a
+  session-scoped sum has no committed source yet.
+- `src/components/TapeSettingsGroup.tsx` (new) is the four `locadora.tapes.*`
+  controls as their own `<fieldset>` in the existing settings drawer:
+  `enabled` (checkbox, writes immediately), `maxGb`, `ratio`, `peerPort`. The
+  three numeric fields keep typed draft text and commit on blur or Enter, then
+  read the accepted value back from `tapeSettings`; empty or invalid text
+  reverts to the accepted value. Ratio and peer port carry "next start" hints
+  plus a group note; no restart path was built.
+- `MemberPanel.tsx` gains one mount line and `TapeDashboard` import;
+  `App.tsx` gains one group and import; `styles.css` gains the table and group
+  styles. The pipeline, queue, manifest format, playback switch, seeding
+  window, player, engine A/B and every Rust file are untouched. No dependency.
+- Choices the brief left open: state comes from the manifest rather than the
+  runtime queue snapshot, because the dashboard must show `ready`/`seeding`/
+  `failed`/`returned` rows the queue is not currently draining; `resolving`
+  reads as "verificando/checking" and `unverified` as "não verificada/
+  unverified"; a `returned` row is shown if a manifest still has one (a normal
+  return already deletes it); the ceiling is read once at mount from
+  `readTapeSettings().maxGb` and `0` prints "sem limite de espaço / no storage
+  limit"; the total is shown as-is even when above the ceiling (the dashboard
+  never deletes); the disclosure sentence is a product line, not a policy link.
+- Exact validation commands/results:
+  - `npx tsc -b`: exit 0.
+  - `npx vitest run test/tapeDashboard.test.tsx
+    test/tapeSettingsControls.test.tsx test/memberPanel.test.tsx`: 3 files,
+    29 tests passed.
+  - `npm run check`: exit 0; `tsc -b` clean; Test Files 55 passed (55), Tests
+    416 passed (416) — baseline was 53/399, so +2 files and +17 tests; Vite
+    built 204 modules with the existing chunk advisory only.
+- Mutation evidence, restored before commit: made `buildTapeDashboard` append a
+  tape that is not in the manifest. `npx vitest run
+  test/tapeDashboard.test.tsx` exited 1 (4 failed, 6 passed) at the row-count,
+  dash-count and total assertions; after restoring the file the same command
+  exited 0 (10 passed).
+- No browser/GUI automation, real torrent, real engine, manual visual or
+  playback verification was performed. No push, no history rewrite.
+- **Next task:** P7 — bundled stream and subtitle defaults for new profiles
+  (`docs/RENTED_TAPE_DOWNLOAD_AND_SEEDING_PLAN.md` §12): ship bare public
+  Stremio-compatible manifests seeded only into an empty media configuration,
+  keep D-003/D-011 overrides, default subtitles to the key-less `opensubs`
+  add-on, and prove an existing non-empty configuration is never overwritten.
+  Owner acceptance of P5/P6 still needs a real engine run: rent a movie, watch
+  the dashboard row and its uploaded figure appear, adjust the four controls,
+  then return the tape and confirm the row disappears.
 
 2026-10-19 D-034 rented tapes P5 enqueue wiring (movies):
 - `src/rentals/rentalTapePipeline.ts` (new) is the missing link between the

@@ -30,7 +30,14 @@ const tapes = vi.hoisted(() => ({
   releaseReturnedTape: vi.fn(),
 }));
 
+const tapePlatform = vi.hoisted(() => ({
+  readTapeManifest: vi.fn(),
+  requestTapeEngine: vi.fn(),
+  TAPE_ENGINE_ORIGIN: 'http://127.0.0.1:11472',
+}));
+
 vi.mock('../src/platform/nativeBridge', () => native);
+vi.mock('../src/platform/tape', () => tapePlatform);
 vi.mock('../src/locadora/localCache', () => cache);
 vi.mock('../src/rentals/rentalTapePipeline', () => tapes);
 
@@ -40,6 +47,8 @@ import { normalizeDiscoveryTitle } from '../src/domain/content';
 beforeEach(() => {
   cache.readAllSeriesProgress.mockResolvedValue([]);
   cache.readLocalSeriesEpisodes.mockResolvedValue(null);
+  tapePlatform.readTapeManifest.mockResolvedValue({ version: 1, tapes: [] });
+  tapePlatform.requestTapeEngine.mockResolvedValue({ status: 404, body: '{}', contentType: 'application/json' });
 });
 
 afterEach(() => {
@@ -202,6 +211,51 @@ describe('Locadora member panel', () => {
     await user.click(blocks.at(-1)!);
     expect(native.signOutMember).toHaveBeenCalledOnce();
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+  });
+
+  it('places the read-only tape dashboard after active rentals and before the collapsed history', async () => {
+    const item = { id: '11111111-1111-4111-8111-111111111111', tmdbId: 603, type: 'movie', name: 'The Matrix', year: 1999 };
+    native.readMemberSession.mockResolvedValue({ configured: true, signedIn: true, user: { id: 'user-1', username: 'will' } });
+    native.fetchMemberState.mockResolvedValue({
+      profile: { userId: 'user-1', username: 'will' },
+      activeRental: { id: 'rental-1', items: [item] },
+      collections: {},
+      history: [],
+    });
+    tapePlatform.readTapeManifest.mockResolvedValue({
+      version: 1,
+      tapes: [{
+        rentalId: 'rental-1',
+        contentId: 'movie:tmdb:603',
+        title: 'The Matrix',
+        infoHash: 'c'.repeat(40),
+        fileIdx: 0,
+        fileName: 'feature.mkv',
+        sizeBytes: 4 * 1024 ** 3,
+        descriptor: { sources: ['udp://tracker.invalid:80'], magnet: `magnet:?xt=urn:btih:${'c'.repeat(40)}` },
+        torrentBytesB64: null,
+        state: 'seeding',
+        addedAt: '2026-10-17T12:00:00.000Z',
+        completedAt: '2026-10-17T13:00:00.000Z',
+        lastPlayedAt: '2026-10-18T20:00:00.000Z',
+      }],
+    });
+    tapePlatform.requestTapeEngine.mockResolvedValue({
+      status: 200,
+      body: JSON.stringify({ uploaded: 2 * 1024 ** 3 }),
+      contentType: 'application/json',
+    });
+    render(<MemberPanel locale="pt-BR" onInspect={vi.fn()} />);
+
+    const active = await screen.findByRole('region', { name: 'Fitas alugadas' });
+    const dashboard = await screen.findByRole('region', { name: 'Fitas neste aparelho' });
+    const history = screen.getByRole('group', { name: 'Histórico da Locadora' });
+    expect(active.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(dashboard.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(dashboard).getByRole('row', { name: /The Matrix/ })).toHaveTextContent('compartilhando');
+    expect(within(dashboard).getByText('4 GB de 6 GB')).toBeInTheDocument();
+    // The dashboard has no return control; return stays with the active rentals.
+    expect(within(dashboard).queryAllByRole('button')).toHaveLength(0);
   });
 
   it('saves an inline username edit through the existing profile call', async () => {

@@ -17,6 +17,7 @@ import {
   updateMemberRentalLimit,
 } from '../platform/nativeBridge';
 import type { Locale } from '../locadora/catalog';
+import { TapeDashboard } from './TapeDashboard';
 import { TitleReviews } from './TitleReviews';
 
 interface MemberPanelProps {
@@ -453,6 +454,7 @@ export function MemberPanel({ locale, onInspect, knownTitles = EMPTY_TITLES }: M
               </li>)}
             </ul> : <p className="member-empty">{pt ? 'Nenhuma fita alugada agora.' : 'No tapes currently rented.'}</p>}
           </section>
+          <TapeDashboard locale={locale} onInspect={onInspect} knownTitles={knownTitles} />
           {reviewItem && (
             <section className="member-section return-review" aria-labelledby="member-return-review-heading">
               <h3 id="member-return-review-heading">{pt ? `Avaliação de ${reviewItem.name}` : `Review ${reviewItem.name}`}</h3>
