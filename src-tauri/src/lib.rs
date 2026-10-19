@@ -2,6 +2,7 @@ mod commands;
 mod embedded_surface;
 mod native_locale;
 mod streaming_engine;
+mod tape_download;
 mod tape_store;
 use tauri::Manager;
 
@@ -11,6 +12,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(commands::PlayerState::default())
         .manage(streaming_engine::EngineState::default())
+        .manage(tape_download::DownloadState::default())
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 embedded_surface::install(&window).map_err(std::io::Error::other)?;
@@ -24,6 +26,8 @@ pub fn run() {
             streaming_engine::streaming_engine_request,
             streaming_engine::tape_engine_ensure,
             streaming_engine::tape_engine_request,
+            tape_download::tape_download_start,
+            tape_download::tape_download_cancel,
             tape_store::tape_store_read,
             tape_store::tape_store_write,
             tape_store::tape_store_clear,
@@ -69,6 +73,7 @@ pub fn run() {
         .expect("failed to build Will's Locadora Player")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<tape_download::DownloadState>().cancel();
                 app.state::<streaming_engine::EngineState>().shutdown();
             }
         });

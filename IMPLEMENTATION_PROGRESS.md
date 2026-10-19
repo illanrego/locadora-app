@@ -1,10 +1,39 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: D-034 rented tapes P1 — native tape surface
-Status: P1 complete; automated native and JS gates passed
+Current milestone: D-034 rented tapes P2a — native download driver
+Status: P2a complete and verified locally after the delegated run hit its usage limit; next is P2b
 
 ## Resume checkpoint
+
+2026-10-19 D-034 rented tapes P2a native download driver:
+- `src-tauri/src/tape_download.rs` (new, 729 lines) adds
+  `tape_download_start(infoHash, fileIdx)` and `tape_download_cancel()`.
+  It opens the tape engine's own `http://127.0.0.1:11472/<hash>/<idx>`, reads to
+  EOF **discarding every byte** (the engine owns the piece data; the app never
+  writes media bytes), and emits at most one `tape-download-progress` event per
+  second carrying `infoHash`, `fileIdx`, `readBytes`, optional `totalBytes` and a
+  closed state. Failures map to a closed set (`engine-unavailable`,
+  `torrent-not-found`, `invalid-request`, `read-failed`, `too-large`,
+  `cancelled`); no URL ever enters a payload. One active download at a time;
+  `MAX_BYTES` is 16 GiB; connect 10 s, idle read 120 s, total 48 h.
+- The delegated run hit Codex's usage limit after writing the module and its
+  tests but before running the gates or committing. The work was finished and
+  verified here instead of being re-run: `cargo test` 52 passed / 2 ignored
+  (was 41/2), `clippy -D warnings` clean, `cargo fmt --check` clean,
+  `npm run check` 46 files / 291 tests.
+- Mutation checks (both reproduced and restored):
+  - guard removed (`if false && active.is_some()`): `single_active_download_...`
+    failed at `second active download accepted`;
+  - ceiling raised (`MAX_BYTES = u64::MAX - 1`): `size_ceiling_rejects_declared_
+    and_unannounced_excess` failed with `left: 18446744073709551614, right:
+    17179869184`.
+- **Next task:** P2b — manifest, admission and queue in TypeScript on top of
+  P1/P2a, per `docs/RENTED_TAPE_DOWNLOAD_AND_SEEDING_PLAN.md` §9/§21: admission
+  by `locadora.tapes.maxGb` and manifest total with `freeBytes` accepted as
+  unknown until a native `statvfs` call lands with the settings surface;
+  single-active queue driven by `tape_download_start` events, retry-once, and
+  cancellation on return.
 
 2026-10-19 D-034 rented tapes P1 native surface complete:
 - `EngineState` now supervises a second, independent `TapeEngine`, but only
