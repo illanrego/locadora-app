@@ -1,10 +1,64 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: series follow-up P5 — Carteirinha structure and continue watching
-Status: implementation complete; automated gate green; manual/GUI playback unverified
+Current milestone: series follow-up P6 — immersive episode picker placement and the watched marker
+Status: implementation complete; JS gate green; manual/GUI visual check unverified
 
 ## Resume checkpoint
+
+2026-10-19 series follow-up P6 complete:
+- The series episode picker no longer collides with the immersive header actions.
+  In immersive mode only, `.tape-episodes` is anchored below the header-actions
+  bar (`top: 4.6rem`, and `6.5rem` once the header chips wrap under 600px) and
+  its height is capped to `min(calc(50vh - 7rem), 520px)`, so it also stops
+  above the vertically centred stand controls. It stays `position: fixed`, keeps
+  `overflow: auto`, and keeps its DOM order, tab order and keyboard access. The
+  2D placement (`.tape-episodes { position: fixed; z-index: 5; top: 1rem; right:
+  clamp(4.5rem, 7vw, 6rem); ... }`) and its 900px/680px variants are unchanged;
+  `.is-immersive` outranks them by class count, so the immersive rule applies at
+  every width without touching the 2D numbers. A source guard asserts both.
+- A series case now shows a small watched marker when that series has local
+  progress. `App` reduces the rendered titles to one series-identity key and
+  calls the existing `readAllSeriesProgress()` once per shelf, not once per card,
+  then passes a watched-episode count to each `VhsTape`. A series with no local
+  record renders nothing at all. The marker is a sibling of the tape button, so
+  the inspect button keeps its exact accessible name and its single tab stop; it
+  is `role="img"` with a localized `aria-label` (`<title>: N episódios
+  assistidos` / `<title>: N episode(s) watched`), is not focusable, and is
+  `pointer-events: none` so no click target or hit region changes.
+- The marker's accessible name carries the watched-episode count rather than the
+  optional next-episode label (`T16E05`): that label needs the parsed episode
+  list, so it would add a per-series episode read beyond the single progress
+  read this part requires. It belongs with P7's episode context. No marker was
+  placed on the 3D cases: the packed rack/case geometry is out of scope and a
+  canvas case cannot carry an accessible label, so the accessible 2D tape is the
+  surface that marks progress.
+- No 3D geometry, web-scene module, native IPC command, progress writer, cache
+  implementation, series rule, member action or player behaviour changed, and no
+  dependency, new component file or new store was added. No decision entry was
+  needed: this is placement plus a read-only badge, not a contract change.
+- Focused check: `npm run typecheck` exited 0; `npx vitest run
+  test/shelfStands.test.tsx test/artworkCache.test.tsx` exited 0 — Test Files 2
+  passed (2), Tests 7 passed (7). The first focused run failed one assertion
+  (`readAllSeriesProgress` called 3 times for a single shelf) because the read
+  was keyed on the `pages` array, whose empty reset gives it a new identity on
+  mount; the key is now the rendered series-identity set and the same test
+  passes with one call.
+- Full gate: `npm run check` exited 0 — TypeScript passed; Test Files 45 passed
+  (45), Tests 266 passed (266); Vite production build passed with 192 modules
+  and the existing large-chunk advisory. The baseline before this part was 45
+  files / 262 tests, so the four new assertions are additive.
+- `git diff --check` passed. Only the JS gate was run: no cargo or tauri build
+  was started and no desktop binary was rebuilt, per the brief's scope. No
+  browser/GUI automation, manual visual check, real progress database or
+  playback validation was performed; the immersive visual check stays with the
+  owner.
+- **Next task:** implement series follow-up P7 from
+  `docs/SERIES_FOLLOWUP_PLAN.md` §10: an offer (never autoplay) for the next
+  episode after `ended`, resolving its source only when the offer is taken;
+  marking and unmarking a whole season with the same progress records; the
+  season-0 specials reveal; and bounded episode art/context (thumbnail,
+  overview, air date) that never stores the raw payload.
 
 2026-10-19 series follow-up P5 complete:
 - Carteirinha now follows the web account diagram while retaining the desktop

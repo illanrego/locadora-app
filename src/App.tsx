@@ -15,6 +15,7 @@ import { readMemberSession, readNativeCapabilities, updateMemberCollection, type
 import { readQuickWatchEnabled, writeQuickWatchEnabled } from './media/quickWatchPreference';
 import type { BoundedEpisode } from './media/seriesEpisodes';
 import { readImmersiveEnabled, writeImmersiveEnabled } from './locadora/immersive';
+import { readAllSeriesProgress } from './locadora/localCache';
 import { hasLocalSavedTitle, readLocalSavedCollections, setLocalSavedTitle, writeLocalSavedCollections, type SavedCollection } from './member/localSaved';
 import './styles.css';
 
@@ -109,6 +110,36 @@ export default function App() {
 
   const visiblePages = pages;
   const visibleTitles = useMemo(() => visiblePages.flatMap((page) => page.titles), [visiblePages]);
+  const [seriesProgress, setSeriesProgress] = useState<ReadonlyMap<string, number>>(() => new Map());
+  // The rendered series identities: one key per shelf, so a shelf of N cards
+  // still performs a single local progress read instead of one read per card.
+  const visibleSeriesKey = useMemo(() => visibleTitles
+    .flatMap((title) => title.identity.type === 'series' ? [externalId(title.identity, 'imdb')] : [])
+    .filter((seriesId): seriesId is string => Boolean(seriesId))
+    .sort()
+    .join('|'), [visibleTitles]);
+
+  useEffect(() => {
+    if (!visibleSeriesKey) return;
+    let current = true;
+    void readAllSeriesProgress().then((records) => {
+      if (!current) return;
+      setSeriesProgress((previous) => {
+        const next = new Map(records.map((record) => [record.seriesId, Object.keys(record.watched).length]));
+        const unchanged = next.size === previous.size
+          && [...next].every(([seriesId, count]) => previous.get(seriesId) === count);
+        return unchanged ? previous : next;
+      });
+    }).catch(() => { /* Local progress is optional; the shelf renders without its marker. */ });
+    return () => { current = false; };
+  }, [visibleSeriesKey]);
+
+  const watchedEpisodes = (title: DiscoveryTitle): number => {
+    if (title.identity.type !== 'series') return 0;
+    const imdbId = externalId(title.identity, 'imdb');
+    return imdbId ? seriesProgress.get(imdbId) ?? 0 : 0;
+  };
+
   const memberKnownTitles = useMemo(() => [...new Map([
     ...inspectedTitles,
     ...visibleTitles,
@@ -427,7 +458,7 @@ export default function App() {
                   </span>
                   <div className="shelf">
                     {page.titles.map((title) => (
-                      <VhsTape key={title.identity.canonicalKey} title={title} accent={genre.accent} locale={locale} onInspect={inspectTitle} />
+                      <VhsTape key={title.identity.canonicalKey} title={title} accent={genre.accent} locale={locale} watchedCount={watchedEpisodes(title)} onInspect={inspectTitle} />
                     ))}
                   </div>
                 </section>
