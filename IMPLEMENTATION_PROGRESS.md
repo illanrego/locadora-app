@@ -1,10 +1,56 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: series follow-up P3 — remove duplicated immersive browse controls
+Current milestone: series follow-up P4 — cache parsed episode lists
 Status: implementation complete; automated gate green; manual/GUI playback unverified
 
 ## Resume checkpoint
+
+2026-10-19 series follow-up P4 complete:
+- `fetchSeriesEpisodes()` now reads a parsed episode list from the existing
+  local catalogue cache before inspecting configured metadata add-ons. Its
+  signature, result union and typed failure reasons are unchanged. A successful
+  non-empty parse is cached; raw add-on payloads, empty lists, malformed
+  responses and failures are never written.
+- The IndexedDB schema advances from 2 to 3 and adds `seriesEpisodes` with
+  `keyPath: 'key'` plus the existing `savedAt` index convention. Keys are
+  `${CACHE_VERSION}:${seriesId}` and `CACHE_VERSION` remains 2, preserving all
+  current shelf/title records. Cached values are reconstructed only after
+  validating the bounded parsed shape, including ordered season/episode
+  identity, names and canonical release dates.
+- The new store retains at most 64 series and prunes the oldest record by
+  `savedAt`; its session fallback uses the same bound. The canonical
+  `clearLocalCache()` path clears parsed episode lists with shelves, titles and
+  progress. Empty results are deliberately not negative-cached so newly
+  published metadata can appear on a later inspection.
+- Focused cache/service check:
+  `git diff --check && npm test -- test/localCatalogueCache.test.ts
+  test/localCacheSchema.test.ts test/seriesEpisodeService.test.ts` exited 0 —
+  Test Files 3 passed (3), Tests 12 passed (12).
+- First full gate: `npm run check` exited 1 — Test Files 1 failed | 44 passed
+  (45), Tests 4 failed | 252 passed (256). The existing
+  `seriesEpisodePicker.test.tsx` whole-module cache mock did not expose the two
+  new internal cache functions, so its service call followed the typed add-on
+  failure path. Production code was unchanged by the repair.
+- Final affected check:
+  `git diff --check && npm test -- test/seriesEpisodePicker.test.tsx
+  test/localCatalogueCache.test.ts test/localCacheSchema.test.ts
+  test/seriesEpisodeService.test.ts` exited 0 — Test Files 4 passed (4),
+  Tests 16 passed (16).
+- Final full gate: `npm run check` exited 0 — TypeScript passed; Test Files 45
+  passed (45), Tests 256 passed (256); Vite production build passed with 192
+  modules and the existing large-chunk advisory.
+- Desktop rebuild: `npm run tauri -- build --no-bundle` exited 0 and refreshed
+  `src-tauri/target/release/wills-locadora-player` (release compilation 2m16s).
+  `git diff --check` passed. No browser/GUI automation, manual visual check,
+  real add-on response or playback validation was performed. No decision entry,
+  dependency, UI, player, progress-position, Rust, member or rental change was
+  made.
+- **Next task:** implement series follow-up P5 from
+  `docs/SERIES_FOLLOWUP_PLAN.md` §8: restructure Carteirinha using the web
+  block order while preserving the app styling/actions, and add the local-only
+  continue-watching preview beside watch-later and favourites. Keep absent web
+  counterparts absent rather than inventing provider or TV-pairing features.
 
 2026-10-19 series follow-up P3 complete:
 - The open immersive “Buscar fitas” panel no longer mounts the 2D genre picker

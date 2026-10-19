@@ -1,16 +1,24 @@
 import type { DiscoveryTitle } from '../domain/content';
-import { isSeriesImdbId, type BoundedEpisode } from '../media/seriesEpisodes';
+import {
+  isSeriesImdbId,
+  type BoundedEpisode,
+  type SeriesEpisodes,
+} from '../media/seriesEpisodes';
 import type { ShelfPage, ShelfQuery } from './discovery';
 
-type Store = 'shelves' | 'titles';
-const LIMITS: Record<Store, number> = { shelves: 96, titles: 4_000 };
-const DATABASE_VERSION = 2;
+type Store = 'shelves' | 'titles' | 'seriesEpisodes';
+const LIMITS: Record<Store, number> = { shelves: 96, titles: 4_000, seriesEpisodes: 64 };
+const DATABASE_VERSION = 3;
 const MAX_WATCHED_EPISODES = 500;
 // Bump when the cached shape changes. Records written by an earlier build then simply stop matching
 // their key, so a tape cached before a feature (for example the credits block with person ids) is
 // re-fetched instead of being rendered without it. Dropped records are pruned by the store limit.
 const CACHE_VERSION = 2;
-const session: Record<Store, Map<string, unknown>> = { shelves: new Map(), titles: new Map() };
+const session: Record<Store, Map<string, unknown>> = {
+  shelves: new Map(),
+  titles: new Map(),
+  seriesEpisodes: new Map(),
+};
 let database: Promise<IDBDatabase | null> | undefined;
 
 export interface ProgressRecord {
@@ -42,7 +50,7 @@ function openDatabase(): Promise<IDBDatabase | null> {
       if (typeof indexedDB === 'undefined') return null;
       const opening = indexedDB.open('wills-locadora-catalogue', DATABASE_VERSION);
       opening.onupgradeneeded = () => {
-        for (const name of ['shelves', 'titles']) {
+        for (const name of ['shelves', 'titles', 'seriesEpisodes']) {
           if (!opening.result.objectStoreNames.contains(name)) {
             opening.result.createObjectStore(name, { keyPath: 'key' }).createIndex('savedAt', 'savedAt');
           }
@@ -134,6 +142,67 @@ export function readLocalTitle(title: DiscoveryTitle, locale: ShelfQuery['locale
 
 export function cacheTitle(title: DiscoveryTitle, locale: ShelfQuery['locale']): Promise<void> {
   return write('titles', `${CACHE_VERSION}:${locale}:${title.identity.canonicalKey}`, title);
+}
+
+function seriesEpisodesKey(seriesId: string): string {
+  return `${CACHE_VERSION}:${seriesId}`;
+}
+
+function cachedReleaseDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function normalizedCachedEpisodes(value: unknown): SeriesEpisodes | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const rawSeasons = (value as { seasons?: unknown }).seasons;
+  if (!Array.isArray(rawSeasons) || rawSeasons.length === 0 || rawSeasons.length > 60) return null;
+
+  const seasons: SeriesEpisodes['seasons'] = [];
+  let previousSeason = -1;
+  let episodeCount = 0;
+  for (const rawGroup of rawSeasons) {
+    if (!rawGroup || typeof rawGroup !== 'object' || Array.isArray(rawGroup)) return null;
+    const group = rawGroup as { season?: unknown; episodes?: unknown };
+    if (typeof group.season !== 'number' || !Number.isSafeInteger(group.season)
+      || group.season < 0 || group.season <= previousSeason || !Array.isArray(group.episodes)
+      || group.episodes.length === 0) return null;
+
+    const episodes: BoundedEpisode[] = [];
+    let previousEpisode = 0;
+    for (const rawEpisode of group.episodes) {
+      if (!rawEpisode || typeof rawEpisode !== 'object' || Array.isArray(rawEpisode)) return null;
+      const candidate = rawEpisode as Partial<BoundedEpisode>;
+      if (candidate.season !== group.season || typeof candidate.episode !== 'number'
+        || !Number.isSafeInteger(candidate.episode) || candidate.episode <= previousEpisode) return null;
+      if (candidate.name !== undefined && (typeof candidate.name !== 'string'
+        || candidate.name.length === 0 || candidate.name.length > 120 || candidate.name.trim() !== candidate.name)) return null;
+      if (candidate.released !== undefined && !cachedReleaseDate(candidate.released)) return null;
+
+      const episode: BoundedEpisode = { season: group.season, episode: candidate.episode };
+      if (candidate.name !== undefined) episode.name = candidate.name;
+      if (candidate.released !== undefined) episode.released = candidate.released;
+      episodes.push(episode);
+      previousEpisode = candidate.episode;
+      episodeCount += 1;
+      if (episodeCount > 1_500) return null;
+    }
+    seasons.push({ season: group.season, episodes });
+    previousSeason = group.season;
+  }
+  return { seasons };
+}
+
+export async function readLocalSeriesEpisodes(seriesId: string): Promise<SeriesEpisodes | null> {
+  if (!isSeriesImdbId(seriesId)) return null;
+  return normalizedCachedEpisodes(await read('seriesEpisodes', seriesEpisodesKey(seriesId)));
+}
+
+export function cacheSeriesEpisodes(seriesId: string, episodes: SeriesEpisodes): Promise<void> {
+  if (!isSeriesImdbId(seriesId)) return Promise.resolve();
+  const normalized = normalizedCachedEpisodes(episodes);
+  return normalized ? write('seriesEpisodes', seriesEpisodesKey(seriesId), normalized) : Promise.resolve();
 }
 
 function progressKey(seriesId: string): string {
@@ -281,13 +350,15 @@ export async function clearAllSeriesProgress(): Promise<void> {
 export async function clearLocalCache(): Promise<void> {
   session.shelves.clear();
   session.titles.clear();
+  session.seriesEpisodes.clear();
   try {
     const db = await openDatabase();
     if (!db) return;
     await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(['shelves', 'titles', 'progress'], 'readwrite');
+      const tx = db.transaction(['shelves', 'titles', 'seriesEpisodes', 'progress'], 'readwrite');
       tx.objectStore('shelves').clear();
       tx.objectStore('titles').clear();
+      tx.objectStore('seriesEpisodes').clear();
       tx.objectStore('progress').clear();
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);

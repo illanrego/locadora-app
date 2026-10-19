@@ -2,11 +2,21 @@
 
 import '@testing-library/jest-dom/vitest';
 import 'fake-indexeddb/auto';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { normalizeDiscoveryTitle } from '../src/domain/content';
-import { cacheShelf, cacheTitle, readLocalShelf, readLocalTitle } from '../src/locadora/localCache';
+import {
+  cacheSeriesEpisodes,
+  cacheShelf,
+  cacheTitle,
+  clearLocalCache,
+  readLocalSeriesEpisodes,
+  readLocalShelf,
+  readLocalTitle,
+} from '../src/locadora/localCache';
+import type { SeriesEpisodes } from '../src/media/seriesEpisodes';
 
 afterEach(() => window.localStorage.clear());
+beforeEach(async () => clearLocalCache());
 
 const title = normalizeDiscoveryTitle({
   id: 603,
@@ -28,9 +38,9 @@ const query = {
 
 function writeRawTitleRecord(key: string, value: unknown): Promise<void> {
   return new Promise((resolve, reject) => {
-    const opening = indexedDB.open('wills-locadora-catalogue', 2);
+    const opening = indexedDB.open('wills-locadora-catalogue', 3);
     opening.onupgradeneeded = () => {
-      for (const name of ['shelves', 'titles']) {
+      for (const name of ['shelves', 'titles', 'seriesEpisodes']) {
         if (!opening.result.objectStoreNames.contains(name)) {
           opening.result.createObjectStore(name, { keyPath: 'key' }).createIndex('savedAt', 'savedAt');
         }
@@ -46,6 +56,24 @@ function writeRawTitleRecord(key: string, value: unknown): Promise<void> {
     };
     opening.onerror = () => reject(opening.error);
   });
+}
+
+function writeRawSeriesRecord(key: string, value: unknown): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const opening = indexedDB.open('wills-locadora-catalogue', 3);
+    opening.onsuccess = () => {
+      const db = opening.result;
+      const tx = db.transaction('seriesEpisodes', 'readwrite');
+      tx.objectStore('seriesEpisodes').put({ key, value, savedAt: Date.now() });
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => reject(tx.error);
+    };
+    opening.onerror = () => reject(opening.error);
+  });
+}
+
+function episodeList(episode = 1): SeriesEpisodes {
+  return { seasons: [{ season: 1, episodes: [{ season: 1, episode, name: `Episode ${episode}` }] }] };
 }
 
 describe('local catalogue cache', () => {
@@ -85,5 +113,41 @@ describe('local catalogue cache', () => {
 
     await cacheTitle(legacy, 'pt-BR');
     expect(await readLocalTitle(legacyTitle, 'pt-BR')).toEqual(legacy);
+  });
+
+  it('ignores parsed episode records written by an earlier cache version', async () => {
+    const legacySeriesId = 'tt9999901';
+    await writeRawSeriesRecord(`1:${legacySeriesId}`, episodeList());
+
+    expect(await readLocalSeriesEpisodes(legacySeriesId)).toBeNull();
+
+    await cacheSeriesEpisodes(legacySeriesId, episodeList(2));
+    expect(await readLocalSeriesEpisodes(legacySeriesId)).toEqual(episodeList(2));
+  });
+
+  it('ignores a malformed parsed episode record instead of trusting it', async () => {
+    const corruptSeriesId = 'tt9999902';
+    await writeRawSeriesRecord(`2:${corruptSeriesId}`, {
+      seasons: [{ season: 1, episodes: [{ season: 2, episode: 1, name: 'Wrong season' }] }],
+    });
+
+    expect(await readLocalSeriesEpisodes(corruptSeriesId)).toBeNull();
+  });
+
+  it('bounds parsed episode lists and evicts the oldest series by savedAt', async () => {
+    let savedAt = Date.parse('2026-10-19T12:00:00.000Z');
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => savedAt++);
+    const ids = Array.from({ length: 65 }, (_, index) => `tt${9_000_000 + index}`);
+    try {
+      for (let index = 0; index < ids.length; index += 1) {
+        await cacheSeriesEpisodes(ids[index], episodeList(index + 1));
+      }
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(await readLocalSeriesEpisodes(ids[0])).toBeNull();
+    expect(await readLocalSeriesEpisodes(ids[1])).toEqual(episodeList(2));
+    expect(await readLocalSeriesEpisodes(ids.at(-1)!)).toEqual(episodeList(65));
   });
 });

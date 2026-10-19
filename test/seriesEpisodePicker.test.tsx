@@ -5,12 +5,22 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { normalizeDiscoveryTitle } from '../src/domain/content';
 
-const mocks = vi.hoisted(() => ({ configuration: vi.fn(), fetcher: vi.fn(), readProgress: vi.fn(), setWatched: vi.fn(), clearProgress: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  configuration: vi.fn(),
+  fetcher: vi.fn(),
+  readEpisodes: vi.fn(),
+  cacheEpisodes: vi.fn(),
+  readProgress: vi.fn(),
+  setWatched: vi.fn(),
+  clearProgress: vi.fn(),
+}));
 vi.mock('../src/platform/nativeBridge', () => ({
   readMediaConfiguration: mocks.configuration,
   fetchConfiguredAddonResource: mocks.fetcher,
 }));
 vi.mock('../src/locadora/localCache', () => ({
+  readLocalSeriesEpisodes: mocks.readEpisodes,
+  cacheSeriesEpisodes: mocks.cacheEpisodes,
   readSeriesProgress: mocks.readProgress,
   setEpisodeWatched: mocks.setWatched,
   clearSeriesProgress: mocks.clearProgress,
@@ -24,6 +34,8 @@ beforeEach(() => {
   mocks.configuration.mockResolvedValue([
     { id: 'meta', name: 'Metadata', resources: ['meta'], supportsStreams: false, supportsSubtitles: false },
   ]);
+  mocks.readEpisodes.mockResolvedValue(null);
+  mocks.cacheEpisodes.mockResolvedValue(undefined);
   mocks.readProgress.mockResolvedValue(null);
   mocks.setWatched.mockResolvedValue(null);
   mocks.clearProgress.mockResolvedValue(undefined);

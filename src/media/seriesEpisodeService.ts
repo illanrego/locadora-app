@@ -3,6 +3,7 @@ import {
   type ConfiguredAddon,
 } from '../platform/nativeBridge';
 import type { Locale } from '../locadora/catalog';
+import { cacheSeriesEpisodes, readLocalSeriesEpisodes } from '../locadora/localCache';
 import { isSeriesImdbId, parseSeriesEpisodes, type SeriesEpisodes } from './seriesEpisodes';
 
 export type NoEpisodeListReason =
@@ -33,6 +34,8 @@ export async function fetchSeriesEpisodes(
   fetcher: typeof fetchConfiguredAddonResource = fetchConfiguredAddonResource,
 ): Promise<SeriesEpisodeListResult> {
   if (!isSeriesImdbId(imdbId)) return { status: 'no-episode-list', reason: 'no-imdb-id' };
+  const cached = await readLocalSeriesEpisodes(imdbId);
+  if (cached) return { status: 'available', episodes: cached };
   // The status summary exposes declared resource names. Native code checks the
   // manifest's series type and tt prefix for this exact request.
   const candidates = addons.filter((addon) => addon.resources.includes('meta'));
@@ -50,7 +53,10 @@ export async function fetchSeriesEpisodes(
         continue;
       }
       const episodes = parseSeriesEpisodes(payload);
-      if (episodes.seasons.length) return { status: 'available', episodes };
+      if (episodes.seasons.length) {
+        await cacheSeriesEpisodes(imdbId, episodes);
+        return { status: 'available', episodes };
+      }
       if (videos.length) {
         malformed = true;
         continue;

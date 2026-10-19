@@ -24,7 +24,7 @@ function createVersionOneDatabase(key: string, value: unknown): Promise<void> {
 }
 
 describe('local cache schema upgrade', () => {
-  it('adds progress without invalidating the catalogue cache-key version', async () => {
+  it('adds progress and parsed episode lists without invalidating the catalogue cache-key version', async () => {
     const title = normalizeDiscoveryTitle({ id: 603, type: 'movie', name: 'The Matrix', year: 1999 })!;
     const complete = { ...title, director: ['Lana Wachowski', 'Lilly Wachowski'] };
     await createVersionOneDatabase(`2:pt-BR:${title.identity.canonicalKey}`, complete);
@@ -34,5 +34,8 @@ describe('local cache schema upgrade', () => {
     expect(await cache.readLocalTitle(title, 'pt-BR')).toEqual(complete);
     await cache.setEpisodeWatched('tt0133093', { season: 1, episode: 1 }, true);
     expect(await cache.readSeriesProgress('tt0133093')).toMatchObject({ season: 1, episode: 1 });
+    const episodes = { seasons: [{ season: 1, episodes: [{ season: 1, episode: 1, name: 'Pilot' }] }] };
+    await cache.cacheSeriesEpisodes('tt0133093', episodes);
+    expect(await cache.readLocalSeriesEpisodes('tt0133093')).toEqual(episodes);
   });
 });
