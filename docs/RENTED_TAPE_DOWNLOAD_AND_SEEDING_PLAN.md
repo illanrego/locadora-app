@@ -337,11 +337,15 @@ open. So: *disk lifetime = rental*, *serving window = app session*.
   cap only pauses uploading — it never drops the torrent or its pieces. A cap
   remains available in settings as `STREMIO_MAX_SEED_RATIO` for anyone who wants
   one.
-- **Upload bandwidth is capped by default** (owner, 2026-10-19): a share of
-  *measured* upstream, default ~40%, because Brazilian upstream is a fraction of
-  downstream and seeding must never starve what the user is watching. Unlimited
-  upload is an explicit opt-in, not a default. The measurement is the app's own
-  observed throughput for that engine, not a hardcoded number.
+- **Upload bandwidth is capped by default — NOT IMPLEMENTABLE with the pinned
+  engine (verified in P4, 2026-10-19).** The engine exposes only
+  `seedingEnabled`: when false it pins the upload limiter to 1 byte/s, when true
+  it is unlimited. There is no upload-rate setting (`btDownloadSpeed*` are
+  download keys; `UploadSpeed` is a reported stat). The planned "~40% of measured
+  upstream" therefore ships as **on/off only**. No duty-cycling, no fake setting,
+  no binary patch. If a future engine exposes a real upload limiter, the
+  `locadora.tapes.uploadShare` key and the §22 measurement question become
+  live again; until then both are dormant.
 - Seeding runs while the app is open and the tape is rented — including while
   that tape is being watched from disk, including while another tape downloads,
   and including while the app sits idle on the shelf.
@@ -545,7 +549,9 @@ B wipe its root and watch the test fail.
 2. Peer port: **pinned**, 6881-class, configurable in settings.
 3. Disk budget: **unlimited in the engine**; the app owns admission, bounded by
    the smaller of the user's GB ceiling and free space minus a 2 GiB reserve.
-4. Upload cap: **~40% of measured upstream by default**, unlimited as an opt-in.
+4. Upload cap: **dormant — the pinned engine has no upload-rate limiter** (see
+   §11). Seeding is on or off; the 40% share returns only if an engine exposes
+   one.
 5. Ratio: **unlimited while rented**, optional cap available.
 6. Bundled public add-ons for every user, bare manifests only (§12).
 7. Seeding window: **while Locadora is open** (§11).
