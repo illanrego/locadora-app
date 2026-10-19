@@ -1,10 +1,108 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: D-034 rented tapes P2b — manifest, admission and queue in TypeScript
-Status: P2b complete and green; next is P3, the playback switch
+Current milestone: D-034 rented tapes P3 — finished-copy playback switch
+Status: P3 implemented and automated checks green; owner playback acceptance pending
 
 ## Resume checkpoint
+
+2026-10-19 D-034 rented tapes P3 playback switch:
+- Implementation commit: `c8a74b0` (`Play ready rental tapes through the persistent
+  engine`). Per the brief's ordering, this ledger was updated AFTER the one
+  implementation commit and remains the only uncommitted file. No push.
+- `src/media/tapePlayback.ts` reads and validates a manifest snapshot before
+  the existing WatchFlow stream-resolution work. Only the exact content's
+  `ready`/`seeding` row qualifies. After `ensureTapeEngine()` succeeds it returns
+  a direct URL candidate on fixed port 11472; no Quick Watch or add-on stream
+  resolution runs for that candidate. Missing/corrupt/invalid records, failed
+  lookups and engine startup failures silently return to the normal flow.
+- `WatchFlow.tsx` also falls back silently if the initial direct `video.load`
+  promise rejects. Closing during lookup/ensure cancels the continuation.
+  External subtitle resolution retains the selected episode; tape playback
+  starts before optional subtitle configuration is read. Embedded tracks keep
+  using the untouched mpv/ShellVideo track path. There are no job, rental,
+  seeding-setting or lastPlayedAt writes, and no new watched-marking logic.
+- IMPORTANT baseline discrepancy and choice: the P3 brief described 11471 as
+  already restricted to hash/index URLs. The actual baseline explicitly allowed
+  proxy paths, stats.json and normalized traversal, with positive tests. To
+  honor the overriding unchanged-RAM requirement, 11471's policy and tests stay
+  intact (the now-allowed 11472 negative case becomes 11473). ONLY 11472 gains
+  the strict raw `http://127.0.0.1:11472/<40-hex>/<digits>` predicate. It rejects
+  settings, proxy, stats, traversal including encoded/normalized dot segments,
+  alternate hosts/IP spellings, userinfo, other schemes/ports, query, fragment,
+  empty/malformed paths and oversized URLs. No engine-A restriction was added.
+- Other implementation choices left open by the brief:
+  - v1's existing contentId carries the movie canonical key (`movie:tmdb:N`)
+    or the exact D-031 episode video ID (`tt…:S:E`). No field/format changes.
+    A series-only key is deliberately insufficient; future tape writers must
+    use the episode key. A movie tape does not require an IMDb mapping.
+  - The first eligible validated row in manifest order wins; validation reuses
+    P2b bounds (lower-case hash, fileIdx 0..9999). Native playback accepts hex
+    in either case and digit-only indexes within its existing URL length cap.
+  - Ready/seeding is the existing completion authority: no extra disk/stat
+    probe, torrent registration or restart repair is introduced. The owner
+    still needs to verify live retained-file/restart playback. Later native
+    playback events retain their existing behavior; the additional silent
+    fallback covers lookup, ensure and initial load-promise rejection.
+  - A finished copy autoplays even when Quick Watch is disabled. Configuration
+    and subtitle failures cannot prevent its playback. The optional lookup
+    precedes the unchanged normal configuration/subtitle/stream/load calls.
+  - The URL candidate uses the existing direct-URL resume/subtitle-delay
+    fingerprint, distinct from the RAM torrent fingerprint. No resume records
+    are migrated or copied; no new persistence policy is introduced.
+  - Engine B ensure uses its current defaults; peer-port/settings application,
+    queue pumping, rehydration and seeding scheduling remain outside P3.
+- Exact validation commands/results (sequential; Rust never overlapped npm check):
+  - `npx vitest run test/watchFlow.test.tsx test/useStremioVideo.test.tsx`:
+    2 files, 66 tests passed.
+  - `cargo test --manifest-path src-tauri/Cargo.toml`: 52 passed, 0 failed,
+    2 ignored; main/doc tests 0. Initial sandbox attempt: 42 passed, 10 failed,
+    2 ignored due to blocked sockets; same command passed with socket permission.
+  - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`:
+    exit 0.
+  - `cargo fmt --check`, from `src-tauri/`, then from `crates/native-core/`:
+    both exit 0. Formatting applied with
+    `cargo fmt --manifest-path crates/native-core/Cargo.toml` before checks.
+  - `cargo test --manifest-path crates/native-core/Cargo.toml -- --test-threads=1`:
+    24 passed, 0 failed/ignored; doc tests 0. This separate suite is necessary
+    because Tauri's suite does not execute its dependency's player-policy tests.
+  - `npm run check`: exit 0; TypeScript passed; `Test Files 50 passed (50)`,
+    `Tests 370 passed (370)`; Vite built 197 modules, existing chunk advisory only.
+  - `npm run tauri -- build --no-bundle`: exit 0; refreshed
+    `src-tauri/target/release/wills-locadora-player`. Initial sandbox extraction
+    failed with `spawnSync tar EPERM`; same command succeeded with permission.
+  - `git diff --check` / `git diff --cached --check`: exit 0.
+- Mutation evidence, each restored before the commit:
+  - Replaced the two-port predicate with `url.port() != Some(11471)`.
+    `cargo test --manifest-path crates/native-core/Cargo.toml
+    player::tests::tape_service_accepts_only_direct_file_urls -- --exact` exited
+    101: 0 passed, 1 failed, 23 filtered, at the new `.is_ok()` assertion.
+    Restored: same command exited 0, 1 passed, 23 filtered.
+  - Replaced the ready/seeding condition with unconditional `true`.
+    `npx vitest run test/watchFlow.test.tsx -t 'keeps the normal calls'` exited 1:
+    6 failed, 7 passed, 39 skipped (52). Queued, resolving, downloading, failed,
+    returned and unverified incorrectly loaded the tape URL. Restored: same
+    command exited 0, 13 passed, 39 skipped (52).
+- Diff proof: `git diff --exit-code HEAD -- src-tauri
+  src/media/useStremioVideo.ts src/media/resolutionService.ts src/platform
+  src/rentals test/tapeManifest.test.ts test/tapeAdmission.test.ts
+  test/tapeQueue.test.ts test/tapePlatform.test.ts` returned 0 before commit.
+  Engine A's env, teardown, bridge and ensure/registration/stall code, plus
+  the driver, manifest, queue and their tests are textually unchanged. The
+  WatchFlow normal branch remains in place after the optional tape branch.
+- `git status --short` initially empty; staged implementation diff:
+  5 files, 309 insertions, 6 deletions. Clean immediately after commit;
+  final status is ` M IMPLEMENTATION_PROGRESS.md` for this requested handoff.
+- Walkthrough: an episode keyed `tt…:2:3` with a ready/seeding tape loads
+  its own 11472 hash/index without stream resolution. The same episode while
+  queued/downloading uses the existing episode add-on lookup and engine-A RAM
+  flow. A title never rented takes that same normal flow after an empty lookup.
+- No browser/GUI automation or visual/playback verification was performed;
+  that acceptance belongs to the owner. No dependency or UI was added.
+- **Next task:** P4 under the owner's next brief: seeding window/caps and
+  playback-priority queue scheduling from design §§11/20/21/22. Settle the
+  upstream measurement mechanism before implementing settings; preserve this
+  exact-content playback branch and the unchanged engine-A startup ordering.
 
 2026-10-19 D-034 rented tapes P2b pure-TypeScript layer:
 - `src/rentals/tapeManifest.ts` (new) is the app-owned manifest model. Its types

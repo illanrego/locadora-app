@@ -629,6 +629,13 @@ startup. `seedingEnabled` flips to `false` while the RAM path plays (§11).
 - Player URL policy accepts `http://127.0.0.1:11472/<40-hex>/<idx>` with exactly
   the rejections the 11471 shape has (`/settings`, `stats.json`, `proxy/`,
   userinfo, other hosts, other ports). No filesystem path is ever accepted.
+  **Correction from P3 (2026-10-19):** the implementation found that engine A's
+  predicate is deliberately permissive — it accepts every path under its origin,
+  including `proxy/` and `stats.json`, because Stremio Video owns that URL shape.
+  Changing engine A was out of scope, so the two policies differ on purpose:
+  **A keeps its existing permissive shape untouched, B is strict** — raw-spelling
+  `<40-hex>/<digits>` only, validated before `Url` can normalise dot segments or
+  alternative IPv4 spellings. B never needs anything else.
 
 **Queue states**
 
