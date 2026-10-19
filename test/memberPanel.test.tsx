@@ -25,8 +25,14 @@ const cache = vi.hoisted(() => ({
   readLocalSeriesEpisodes: vi.fn(),
 }));
 
+const tapes = vi.hoisted(() => ({
+  offerConfirmedRentalToTapes: vi.fn(),
+  releaseReturnedTape: vi.fn(),
+}));
+
 vi.mock('../src/platform/nativeBridge', () => native);
 vi.mock('../src/locadora/localCache', () => cache);
+vi.mock('../src/rentals/rentalTapePipeline', () => tapes);
 
 import { MemberPanel } from '../src/components/MemberPanel';
 import { normalizeDiscoveryTitle } from '../src/domain/content';
@@ -120,6 +126,7 @@ describe('Locadora member panel', () => {
     await user.click(await screen.findByRole('button', { name: 'Assisti' }));
 
     expect(native.returnMemberRental).toHaveBeenCalledWith(item.id, 'watched');
+    expect(tapes.releaseReturnedTape).toHaveBeenCalledWith(item.id);
     expect(await screen.findByText('Fita devolvida. Agora conta o que achou.')).toBeInTheDocument();
     expect(await screen.findByRole('region', { name: 'Avaliação de The Matrix' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Avalie esta fita' })).toBeInTheDocument();
@@ -127,6 +134,21 @@ describe('Locadora member panel', () => {
     await user.click(screen.getByRole('button', { name: 'Publicar avaliação' }));
     expect(native.writeMemberReview).toHaveBeenCalledWith('movie', 603, 5, 'Ainda funciona.');
     expect(screen.queryByRole('button', { name: 'Assisti' })).not.toBeInTheDocument();
+  });
+
+  it('never touches the tape pipeline when the return itself fails', async () => {
+    const item = { id: '11111111-1111-4111-8111-111111111111', tmdbId: 603, type: 'movie', name: 'The Matrix' };
+    native.readMemberSession.mockResolvedValue({ configured: true, signedIn: true, user: { id: 'user-1', username: 'will' } });
+    native.fetchMemberState
+      .mockResolvedValueOnce({ profile: { userId: 'user-1', username: 'will' }, activeRental: { id: 'rental-1', items: [item] }, collections: {}, history: [] });
+    native.returnMemberRental.mockRejectedValueOnce(new Error('offline'));
+    const user = userEvent.setup();
+    render(<MemberPanel locale="pt-BR" onInspect={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Assisti' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('offline');
+    expect(tapes.releaseReturnedTape).not.toHaveBeenCalled();
   });
 
   it('paginates and deduplicates member history by rental item ID', async () => {

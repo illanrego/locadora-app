@@ -12,7 +12,13 @@ const native = vi.hoisted(() => ({
   createMemberRental: vi.fn(),
 }));
 
+const tapes = vi.hoisted(() => ({
+  offerConfirmedRentalToTapes: vi.fn(),
+  releaseReturnedTape: vi.fn(),
+}));
+
 vi.mock('../src/platform/nativeBridge', () => native);
+vi.mock('../src/rentals/rentalTapePipeline', () => tapes);
 
 import { BasketPanel } from '../src/components/BasketPanel';
 
@@ -35,6 +41,7 @@ describe('Balcão checkout', () => {
     await user.click(screen.getByRole('button', { name: /^Alugar/ }));
 
     expect(native.createMemberRental).toHaveBeenCalledWith([{ tmdbId: 101, contentType: 'movie', name: 'Big Buck Bunny', year: 2008 }]);
+    expect(tapes.offerConfirmedRentalToTapes).toHaveBeenCalledWith({ rental: { id: 'rental-1' } }, [FIXTURE_TITLES[0]]);
     expect(native.fetchMemberState).toHaveBeenCalledTimes(2);
     expect(complete).toHaveBeenCalledWith([FIXTURE_TITLES[0]]);
     expect(await screen.findByText('Aluguel confirmado. Boa sessão!')).toBeInTheDocument();
@@ -65,6 +72,7 @@ it.each([1, 3, 10])('enforces the current account limit of %s at checkout', asyn
   await user.click(screen.getByRole('button', { name: /^Rent/ }));
   expect(await screen.findByRole('status')).toHaveTextContent(`Your limit is ${rentalLimit}`);
   expect(native.createMemberRental).not.toHaveBeenCalled();
+  expect(tapes.offerConfirmedRentalToTapes).not.toHaveBeenCalled();
 });
 
 it('allows a fourth rental when the member has chosen ten', async () => {

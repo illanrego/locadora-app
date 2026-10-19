@@ -3,6 +3,7 @@ import { externalId, type DiscoveryTitle } from '../domain/content';
 import { readAllSeriesProgress, readLocalSeriesEpisodes } from '../locadora/localCache';
 import { memberDiscoveryTitle, normalizeMemberHistoryPage, normalizeMemberState, type MemberState, type MemberTitle } from '../member/memberState';
 import { nextEpisode, type BoundedEpisode } from '../media/seriesEpisodes';
+import { releaseReturnedTape } from '../rentals/rentalTapePipeline';
 import {
   fetchMemberState,
   fetchMemberHistory,
@@ -249,6 +250,9 @@ export function MemberPanel({ locale, onInspect, knownTitles = EMPTY_TITLES }: M
     setNotice('');
     try {
       await returnMemberRental(item.id, watchedStatus);
+      // The single return hook: the rental is already closed, so the tape side
+      // may only clean up. It never reports back into this flow.
+      releaseReturnedTape(item.id);
       await loadState();
       if (watchedStatus === 'watched') {
         setReviewItem(item);

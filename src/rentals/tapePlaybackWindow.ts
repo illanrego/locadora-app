@@ -5,10 +5,13 @@
  * not the strict tape-copy URL is the RAM path: seeding is disabled and the
  * queue is paused until that playback ends, closes or errors. The coordinator
  * never starts either engine and deliberately swallows an unavailable B.
+ *
+ * P5 owns the one runtime queue (rental → tape wiring); this window pauses and
+ * resumes that instance, so a RAM stream also holds back rented-tape downloads.
  */
-import { createTapeDownloadDriver, isTapeEngineRunning, setTapeSeedingEnabled } from '../platform/tape';
-import { createTapeQueue, type TapeQueue } from './tapeQueue';
-import { readTapeSettings } from './tapeSettings';
+import { isTapeEngineRunning, setTapeSeedingEnabled } from '../platform/tape';
+import { pumpRentalTapes, rentalTapeQueue } from './rentalTapePipeline';
+import type { TapeQueue } from './tapeQueue';
 
 const TAPE_COPY_LOAD = /^http:\/\/127\.0\.0\.1:11472\/[0-9a-f]{40}\/\d{1,4}$/;
 
@@ -25,6 +28,11 @@ export interface TapePlaybackWindowDependencies {
   queue: Pick<TapeQueue, 'pause' | 'resume'>;
   engineRunning: () => Promise<boolean>;
   postSeedingEnabled: (enabled: boolean) => Promise<boolean | void>;
+  /**
+   * Called when a RAM stream ends and the app may use the network again. The
+   * queue itself still never auto-starts; the app's scheduler decides.
+   */
+  onNetworkAvailable?: () => void;
 }
 
 export interface TapePlaybackWindow {
@@ -62,8 +70,12 @@ class PlaybackWindow implements TapePlaybackWindow {
     if (this.state === next) return this.settingsChain;
     this.state = next;
     const seedingEnabled = next !== 'ram';
-    if (seedingEnabled) this.dependencies.queue.resume();
-    else this.dependencies.queue.pause();
+    if (seedingEnabled) {
+      this.dependencies.queue.resume();
+      this.dependencies.onNetworkAvailable?.();
+    } else {
+      this.dependencies.queue.pause();
+    }
 
     this.settingsChain = this.settingsChain.then(async () => {
       if (this.appliedSeeding === seedingEnabled) return;
@@ -85,15 +97,12 @@ export function createTapePlaybackWindow(
   return new PlaybackWindow(dependencies);
 }
 
-const settings = readTapeSettings();
-const runtimeQueue = createTapeQueue({
-  driver: createTapeDownloadDriver(),
-  enabled: settings.enabled,
-});
+const runtimeQueue = rentalTapeQueue();
 const runtimeWindow = createTapePlaybackWindow({
   queue: runtimeQueue,
   engineRunning: isTapeEngineRunning,
   postSeedingEnabled: setTapeSeedingEnabled,
+  onNetworkAvailable: pumpRentalTapes,
 });
 
 export function notifyTapePlaybackStarted(descriptor: string): void {

@@ -1,10 +1,93 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: D-034 rented tapes P4 — seeding window and spawn-time caps
-Status: P4 implemented and automated checks green; owner network/playback acceptance pending
+Current milestone: D-034 rented tapes P5 — a rented movie becomes a download
+Status: P5 implemented and automated checks green; owner engine/network acceptance pending
 
 ## Resume checkpoint
+
+2026-10-19 D-034 rented tapes P5 enqueue wiring (movies):
+- `src/rentals/rentalTapePipeline.ts` (new) is the missing link between the
+  rental service and the tape pipeline. It owns the single runtime
+  `TapeQueue` (built by `createTapeQueue` with the composite driver), the
+  manifest transitions and the two hook entry points. The direction is strictly
+  rental → tape: nothing in the module imports a rental mutation command.
+- A confirmed rental is read from the create response
+  (`{ rental: { id, items } }`) through the existing
+  `normalizeMemberState`, so item IDs and canonical keys use one normalizer.
+  Every **movie** item is offered; **series items are skipped** with
+  `series-out-of-scope` and a comment — which episode a series rental should
+  download is undecided, so nothing is guessed.
+- The order for one movie: `locadora.tapes.enabled` → the shipped evaluator
+  (`resolveTitleMedia` = `normalizeStreams` + `selectQuickWatch` movie-v1, one
+  winner, no second chooser) → `admitTape({ maxGb, freeBytes: null })` →
+  manifest row via `upsertTape` + `tape_store_write` → queue enqueue →
+  `tape_engine_ensure()` → `POST /<hash>/create` (body mirrors
+  `ensureTorrentStream`: `torrent.infoHash`, `guessFileIdx: false`,
+  `peerSearch.sources` only when trackers exist) → `tape_download_start` →
+  progress events → row `ready`.
+- Choices the brief left open, implemented consistently: no manifest row when
+  Quick Watch has no winner, when the winner is not a torrent, or when its file
+  index is unknown (a `failed` row would occupy an admission slot for a download
+  that was never attempted; §9 says such a tape stays stream-only) — the typed
+  attempt carries `no-qualifying-source` / `not-a-torrent` /
+  `unknown-file-index`; `maxCount` is not a persisted setting (P4 note) so
+  admission follows its documented rental-limit/ten-row default; `fileName` is
+  the add-on display label (the normalizer folds `behaviorHints.filename` into
+  `displayName`); `torrentBytesB64` is always `null` because no raw `.torrent`
+  reaches TypeScript; completion leaves the row `ready` (the committed native
+  driver emits no seeding signal); a return **deletes** the row per §8.
+- Removal uses `GET /<hash>/remove`, not POST: the frozen native bridge
+  (`tape_request_allowed`) accepts POST only on `/create` and `/settings`, and
+  the native allowlist tests GET remove explicitly. No Rust file changed.
+- `src/rentals/tapePlaybackWindow.ts` now pauses and resumes that one runtime
+  queue (previously it built a second, driver-only queue that no producer fed).
+  A RAM load therefore holds downloads back (§2.1) and a new optional
+  `onNetworkAvailable` callback pumps the queue when the RAM path ends; the
+  queue itself still never auto-starts.
+- Hooks are exactly two and both fire-and-forget:
+  `offerConfirmedRentalToTapes(rentalResponse, selected)` in
+  `BasketPanel.checkout` after `createMemberRental`, and
+  `releaseReturnedTape(item.id)` in `MemberPanel.returnTape` after
+  `returnMemberRental`. No UI, copy, layout or rental payload changed. A media
+  failure during a return is a typed reason (`engine-unavailable`,
+  `remove-rejected`) and never reaches the rental error path.
+- Manifest mutations (rent, progress-driven state, completion, return) are
+  serialized through one chain, so a read-modify-write cannot clobber another
+  row in flight. A refused admission performs no manifest write, no engine
+  ensure and no download start.
+- Exact validation commands/results:
+  - `npx vitest run test/rentalTapePipeline.test.ts`: 1 file, 12 tests passed.
+  - `npx vitest run test/rentalTapePipeline.test.ts test/memberPanel.test.tsx
+    test/basketPanel.test.tsx test/tapePlaybackWindow.test.ts`: 4 files, 35
+    tests passed.
+  - `npm run check`: exit 0; `tsc -b` clean; Test Files 53 passed (53), Tests
+    399 passed (399) — baseline was 52/386, so +1 file and +13 tests; Vite built
+    201 modules (one more than P4) with the existing chunk advisory only.
+- Mutation evidence, restored before commit: gated the enqueue's master-switch
+  check with `false &&`. `npx vitest run test/rentalTapePipeline.test.ts -t
+  'master switch'` exited 1 (1 failed, 11 skipped) at the
+  `readManifest`-not-called assertion; after restoring the file the same
+  command exited 0 (1 passed, 11 skipped).
+- Scope proof: the diff touches `BasketPanel.tsx` (one hook line + import),
+  `MemberPanel.tsx` (one hook line + import), `tapePlaybackWindow.ts` (shared
+  queue + `onNetworkAvailable`), the two component tests, and the new module
+  and test. `quickWatch.ts`, `normalization.ts`, `resolutionService.ts`,
+  `tapeQueue.ts`, `tapeManifest.ts`, `tapeAdmission.ts`, `tapeSettings.ts`,
+  `platform/tape.ts`, `WatchFlow`, `useStremioVideo`, `tapePlayback`, the
+  series code, the resume store and every Rust file are unchanged.
+- No browser/GUI automation, real torrent, real download, real seeding, manual
+  visual or playback verification was performed. No dependency was added. No
+  push, no history rewrite.
+- **Next task:** P6 — the tape dashboard and settings surface from
+  `docs/RENTED_TAPE_DOWNLOAD_AND_SEEDING_PLAN.md` §11.1/§20: per-tape rows
+  (state, size, last played, store total vs cap) read from
+  `readTapeManifest()` plus the new runtime queue snapshot
+  (`rentalTapePipeline().queue.snapshot()`), and the four persisted
+  `locadora.tapes.*` controls, without inventing the unavailable numeric upload
+  limiter. Owner acceptance of P5 still requires a real engine run: rent a
+  movie, watch the row go queued → resolving → downloading → ready, then return
+  it and confirm `GET /<hash>/remove` and the row deletion.
 
 2026-10-19 D-034 rented tapes P4 seeding window and spawn-time caps:
 - Implementation commit: `da55660` (`Pause tape seeding during RAM playback`).

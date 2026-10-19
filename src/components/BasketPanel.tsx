@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { externalId, type DiscoveryTitle } from '../domain/content';
 import { normalizeMemberState } from '../member/memberState';
 import { createMemberRental, fetchMemberState, readMemberSession } from '../platform/nativeBridge';
+import { offerConfirmedRentalToTapes } from '../rentals/rentalTapePipeline';
 import { copy, type Locale } from '../locadora/catalog';
 
 interface BasketPanelProps {
@@ -69,7 +70,11 @@ export function BasketPanel({ locale, basket, onRemove, onComplete, onOpenAccoun
         name: title.name,
         year: title.year,
       }));
-      await createMemberRental(titles);
+      const rentalResponse = await createMemberRental(titles);
+      // The single rental-success hook: a confirmed movie rental may now become
+      // a downloaded tape. It is fire-and-forget so the rental never waits on a
+      // source lookup, an engine start or a download (§5).
+      offerConfirmedRentalToTapes(rentalResponse, selected);
       await fetchMemberState();
       onComplete(selected);
       setComplete(true);
