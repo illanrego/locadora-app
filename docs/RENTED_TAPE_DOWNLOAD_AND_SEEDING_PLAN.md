@@ -673,8 +673,9 @@ owner's rule: `gpt-6-astra` high only where a mistake is expensive, otherwise
 | P2b | manifest + admission + queue in TypeScript on top of P1/P2a: descriptor persistence, GB ceiling, min(cap, free − 2 GiB) once free space is available, progress, retry-once, cancellation | sol high |
 | P3 | playback switch: 11472 in the player predicate, ready→local copy, otherwise RAM path untouched, rejection tests kept | sol high |
 | P4 | seeding window and caps: `seedingEnabled` two-state machine, queue pause during a RAM stream, upload share, ratio, pinned peer port, settings surface | sol high |
-| P5 | tape dashboard: per-tape rows, uploaded per tape and per session, store total vs cap, the plain-language line, Carteirinha placement | sol high |
-| P6 | bundled stream and subtitle defaults for new profiles (bare public manifests, empty-only seeding, override preserved) | sol medium |
+| P5 | **enqueue wiring (movies)**: on a successful rent, resolve the source with the existing movie Quick Watch rules, run admission, write the manifest row with its descriptor, then pump the P2b queue through the P2a driver; return cancels and removes. Series downloads are out of scope until the episode question is decided | sol high |
+| P6 | tape dashboard and settings surface: per-tape rows (state, size, uploaded, last played), store total vs cap, the plain-language line, and the four `locadora.tapes.*` controls | sol high |
+| P7 | bundled stream and subtitle defaults for new profiles (bare public manifests, empty-only seeding, override preserved) | sol medium |
 
 P1 first because everything else talks to B. P3 before P4 because you cannot
 serve a tape the player cannot open. P5 last but one so the numbers it displays
