@@ -25,8 +25,9 @@ Six parts, in dependency order:
 | P2 | wire series rules into playback | the rules from P1 are inert until the player uses them |
 | P3 | remove the duplicated genre/year picker in immersive mode | the 3D plaque and the "Buscar fitas" panel are two live copies |
 | P4 | cache the episode list | 366 KB re-fetched on every tape open |
-| P5 | episode UX in immersive mode, shelf entry point, watched state | the picker was only designed for 2D |
-| P6 | progress extras: next-episode, season marking, specials, episode art | the parts of "know where I am" that are still missing |
+| P5 | Carteirinha structure from the web version, app styling kept | the app's block layout is worse than the site's; the continue-watching block lands here |
+| P6 | episode UX in immersive mode and watched state on the tape | the picker was only designed for 2D |
+| P7 | progress extras: next-episode offer, season marking, specials, episode art | the parts of "know where I am" that are still missing |
 
 ## 2. Verified facts the parts must work from
 
@@ -86,7 +87,7 @@ Scope, pure TypeScript only:
    - per-episode preferred band 100 MB–500 MB;
    - a wider band for oversized episodes (proposed 500 MB–1 GB) as the second
      tier, and nothing above 1 GB is ever auto-selected;
-   - minimum seeders for episodes: **20** (owner, §10);
+   - minimum seeders for episodes: **20** (owner, §11);
    - `sourceOrder` identical to the movie list, The Pirate Bay first;
    - identical deterministic tie-break (seeders, source rank, smaller size,
      stable id).
@@ -155,25 +156,69 @@ oldest.
 
 **Model: gpt-5.6-sol high** (IndexedDB schema discipline).
 
-## 8. P5 — episode UX in 3D, and one entry point outside the tape
+## 8. P5 — Carteirinha structure (web layout, app styling)
+
+Owner direction: the web Locadora's Carteirinha is better *structurally* — how
+the blocks are grouped, ordered and nested. Keep the desktop app's palette,
+typography and visual style; take the web's diagram.
+
+Reference (read-only, do not edit, do not copy its CSS): the site's
+`account-dialog` markup in `/home/illan/Documents/coding/locadora/public/index.html`
+around lines 318-387. Its block order is the target:
+
+1. member card — monogram mark, username with an inline edit affordance, member
+   since;
+2. rental limit — select 1-10 plus its save action, the "applies to app and
+   website / lowering does not return tapes" hint, and a status line;
+3. a compact stats trio — rented tapes against the limit, recent records, saved
+   items;
+4. TV pairing action with its status line;
+5. personal shelves side by side — watch later and favourites, each with a
+   heading and an "open list" action;
+6. active rentals as their own labelled section, with the counter return action;
+7. history collapsed behind a disclosure, with a load-more action;
+8. default streamings as their own section, with the "all streamings" option;
+9. sign out last.
+
+Rules:
+
+- Structure, grouping, order and nesting come from the web; colours, fonts,
+  spacing tokens and dark-blue identity stay the app's.
+- The app has no provider filter and no TV pairing equivalent in this repo's
+  scope — keep the blocks that exist, and say in the proof block which web
+  blocks have no app counterpart rather than inventing one.
+- This part also carries the **continue-watching block** (owner, §11): a
+  "Continuar assistindo" shelf beside watch later and favourites, showing the
+  series and its next episode label, opening the tape inspection. It reads
+  local progress only and mutates nothing.
+- Accessibility and keyboard flow must survive the restructure; 2D remains the
+  required path.
+
+Exit criteria: the app's Carteirinha presents the same block order and grouping
+as the web reference; existing member actions (profile save, rental limit,
+returns, reviews, history, sign out) all still work; the continue block shows
+the right next episode for a series with progress and disappears when there is
+none; the layout tests covering the panel are updated in the same commit.
+
+**Model: gpt-5.6-sol high** (structural UI change on a live panel).
+
+## 9. P6 — episode UX in immersive mode and watched state on the tape
 
 - Verify and fix the picker's placement and collision in immersive mode
   (header actions, stand, plaque), keeping 2D unchanged and accessible.
-- One "continue watching" affordance in the Carteirinha, beside the existing
-  watch-later and favourite previews (owner, §10).
 - Watched state visible where the series appears, not only inside the picker
   (a small badge or marker on the tape/spine), without changing click targets or
   the packed-shelf geometry.
 
 **Model: gpt-5.6-sol high** (layout risk in the 3D scene).
 
-## 9. P6 — the rest of "know where I am"
+## 10. P7 — the rest of "know where I am"
 
-Each of these is independently scoped inside P6; the run may land them together
+Each of these is independently scoped inside P7; the run may land them together
 only if its checks stay green:
 
 - **Next-episode offer after `ended`** — offer, never autoplay, with the next
-  episode's source resolved only when the offer is taken (owner, §10).
+  episode's source resolved only when the offer is taken (owner, §11).
 - **Mark a whole season watched** (and unmark), writing the same records.
 - **Specials reveal**: season 0 stays hidden by default with an explicit way to
   show it.
@@ -182,7 +227,7 @@ only if its checks stay green:
 
 **Model: gpt-5.6-sol high.**
 
-## 10. Decided by the owner (2026-10-18)
+## 11. Decided by the owner (2026-10-18)
 
 1. **Minimum seeders for an episode: 20.** Stricter than the movie rule's 10,
    because episodes are small and plentiful.
@@ -194,12 +239,15 @@ only if its checks stay green:
    watch-later and favourite previews (D-020's preview pattern), not on the
    shelf.
 
-## 11. Delegation policy for this work
+## 12. Delegation policy for this work
 
 - One part per Codex run; never two runs against this repo at once.
-- Model tiers, per the owner: **astra high** only for P1 (ranking/alias changes
-  on a shared path); **gpt-5.6-sol high** for P2, P4, P5, P6;
-  **gpt-5.6-sol medium** for P3. No gpt-6 tier until the owner says otherwise.
+- Model tiers, per the owner: **`gpt-6-astra` at high reasoning effort** only
+  for P1 (ranking/alias changes on a shared path) and for anything else the
+  owner later calls demanding, tricky or risky; **`gpt-5.6-sol` high** for P2,
+  P4, P5, P6; **`gpt-5.6-sol` medium** for P3 (small and contained).
+  **`gpt-6-sol` is not used** — an early Part 1 run burned tokens on it and the
+  owner stopped it.
 - Every brief carries: read order, this document's relevant part, the frozen
   facts from §2, the must-not list, and a proof block (`npm run check` tail with
   real counts, `git status` before/after, `git diff --stat`, commit hash, a
@@ -207,7 +255,7 @@ only if its checks stay green:
 - Parts are sequential; a part starts only when the previous one's checks are
   green and its commit is in.
 
-## 12. Not in scope
+## 13. Not in scope
 
 - Episode-level resume position (D-005 still governs position).
 - Season-level rentals or packs as a rental unit.
