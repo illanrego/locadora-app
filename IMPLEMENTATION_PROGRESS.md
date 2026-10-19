@@ -1,10 +1,65 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: immersive search entry — remove the "Buscar fitas" middle panel
-Status: implementation complete; JS gate green; manual/GUI visual check unverified
+Current milestone: D-033 local resume positions
+Status: implementation complete; JS gate green; manual/GUI playback check unverified
 
 ## Resume checkpoint
+
+2026-10-19 D-033 local resume positions complete:
+- D-033 records the owner's approval and supersedes D-005's disabled resume
+  history plus D-031's unpersisted playback position. Resume data is desktop
+  local only: no Worker, Locadora API, analytics or synchronization path was
+  added. The store uses the same `videoDelayIdentity()` file/URL identity as
+  subtitle delay, never candidate rank, display copy or seeder metadata.
+- `src/media/resumePositionStore.ts` stores validated position/duration seconds,
+  integer write time and optional all-or-nothing series/season/episode context
+  under `locadora:resume:v1:`. It rejects malformed, negative, non-finite and
+  at/after-duration values; positions at or beyond 95% or within 30 seconds of
+  the end are finished and are cleared rather than resumed. Reads expire records
+  after 90 days. Every write also removes malformed, expired or finished rows
+  and caps the store at 300 rows by pruning the oldest write time first.
+- `WatchFlow` reads the record only after a concrete candidate supplies that
+  identity and passes its millisecond equivalent to `useStremioVideo`; the
+  load command and its stalled direct-route retry use the same start time. A
+  different release/file identity receives `0`. Once loaded, a resumed video
+  shows an accessible localized overlay for eight seconds with the resume time
+  and `Começar do início` / `Start from the beginning`; taking it seeks to zero
+  and clears that identity's record.
+- A started video writes at a five-second cadence, on the transition to pause,
+  on player close, on page hide and on component unmount. The writer requires
+  `loaded`, a positive reported time and duration, so a source that never starts
+  creates no resume record. Source switching persists the previous release
+  before resolving the next identity. Movies use the same store without series
+  context.
+- The episode auto-mark threshold still uses ended or at least 90%, but a
+  resumed episode cannot satisfy it until reported playback reaches at least 30
+  seconds beyond the resumed point. Auto-marking disables further persistence
+  for that loaded episode. Single-episode and whole-season watched writes clear
+  every matching release position; forgetting one series clears its positions,
+  clearing all series progress clears series positions but retains movies, and
+  `clearLocalCache()` clears all resume positions.
+- D-033 also clarifies the decision log's boundary: playback never changes a
+  rental or return watched status automatically; D-031/D-033's local episode
+  progress is independent. No quick-watch rule, episode cache, member panel,
+  engine, torrent behavior, buffering/decode option, Rust file or dependency
+  changed.
+- Focused checks: `npm run typecheck` exited 0; `npx vitest run
+  test/resumePositionStore.test.ts test/useStremioVideo.test.tsx
+  test/watchFlow.test.tsx test/seriesEpisodes.test.ts
+  test/localSeriesProgress.test.ts` exited 0 — Test Files 5 passed (5), Tests
+  66 passed (66).
+- Full gate: `npm run check` exited 0 — TypeScript passed; Test Files 46 passed
+  (46), Tests 291 passed (291); Vite production build passed with 193 modules
+  and the existing large-chunk advisory. The baseline was 45 files / 281 tests;
+  one focused store file and ten tests are additive, with none removed.
+- `git diff --check` passed before the full gate. Only the JS gate was run: no
+  cargo, Tauri build, browser/GUI automation or manual playback/visual check was
+  performed, per the brief.
+- **Next task:** owner rebuilds/runs the desktop app and manually verifies D-033
+  with one same-release reopen, a different-release reopen, the start-over
+  escape, a near-end position, and watched/forgotten-series clearing. The older
+  P7 and immersive-search visual acceptance items remain open on the owner side.
 
 2026-10-19 immersive search entry complete:
 - In immersive (3D) mode the header now exposes one search action

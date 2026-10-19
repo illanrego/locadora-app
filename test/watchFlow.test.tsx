@@ -7,6 +7,8 @@ import type { StremioVideoController, StremioVideoState } from '../src/media/use
 import type { MediaResolution } from '../src/media/resolutionService';
 import { normalizeDiscoveryTitle } from '../src/domain/content';
 import { normalizeStreams } from '../src/media/normalization';
+import { readResumePosition, writeResumePosition } from '../src/media/resumePositionStore';
+import { videoDelayIdentity } from '../src/media/subtitleDelayStore';
 
 const mocks = vi.hoisted(() => ({
   controller: null as unknown as StremioVideoController,
@@ -126,15 +128,55 @@ describe('cinema player interactions', () => {
     const user = userEvent.setup();
     mount();
     await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledTimes(1));
-    expect(mocks.controller.load).toHaveBeenCalledWith({ url: 'https://media.example.invalid/first' });
+    expect(mocks.controller.load).toHaveBeenCalledWith({ url: 'https://media.example.invalid/first' }, 0);
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Sources' }));
     const panel = screen.getByRole('complementary', { name: 'Available sources' });
     const sourceButtons = within(panel).getAllByRole('listitem').map((li) => within(li).getByRole('button'));
     expect(sourceButtons[0]).toBeDisabled();
     await user.click(sourceButtons[1]);
-    expect(mocks.controller.load).toHaveBeenLastCalledWith({ url: 'https://media.example.invalid/second' });
+    expect(mocks.controller.load).toHaveBeenLastCalledWith({ url: 'https://media.example.invalid/second' }, 0);
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+  });
+
+  it('resumes only the same release and offers an accessible start-over escape', async () => {
+    const firstIdentity = videoDelayIdentity(candidates[0])!;
+    writeResumePosition(firstIdentity, 750, 3_600);
+    const user = userEvent.setup();
+    mount();
+
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledWith(
+      { url: 'https://media.example.invalid/first' },
+      750_000,
+    ));
+    expect(screen.getByText('Playback resumed at 12:30')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Start from the beginning' }));
+    expect(mocks.controller.seekTo).toHaveBeenCalledWith(0);
+    expect(readResumePosition(firstIdentity)).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Sources' }));
+    const sourceButtons = within(screen.getByRole('complementary', { name: 'Available sources' }))
+      .getAllByRole('listitem').map((item) => within(item).getByRole('button'));
+    await user.click(sourceButtons[1]);
+    expect(mocks.controller.load).toHaveBeenLastCalledWith(
+      { url: 'https://media.example.invalid/second' },
+      0,
+    );
+  });
+
+  it('persists an actually started position on pause and unmount', async () => {
+    const firstIdentity = videoDelayIdentity(candidates[0])!;
+    const view = mount();
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalled());
+
+    mocks.controller.state = { ...initialState, paused: true, time: 25_000 };
+    view.rerender(<WatchFlow {...view.props} />);
+    await waitFor(() => expect(readResumePosition(firstIdentity)).toMatchObject({ positionSeconds: 25 }));
+
+    mocks.controller.state = { ...initialState, time: 40_000 };
+    view.rerender(<WatchFlow {...view.props} />);
+    view.unmount();
+    expect(readResumePosition(firstIdentity)).toMatchObject({ positionSeconds: 40 });
   });
 
   it('filters sources by resolution and keeps the selected source when switching filters', async () => {
@@ -148,7 +190,7 @@ describe('cinema player interactions', () => {
     expect(list).toHaveTextContent('720p');
     expect(mocks.controller.load).not.toHaveBeenCalled();
     await user.click(within(list).getByRole('button'));
-    expect(mocks.controller.load).toHaveBeenLastCalledWith({ url: 'https://media.example.invalid/second' });
+    expect(mocks.controller.load).toHaveBeenLastCalledWith({ url: 'https://media.example.invalid/second' }, 0);
   });
 
   it('reveals fullscreen controls on movement and retains them while options are open', async () => {
@@ -221,7 +263,7 @@ describe('cinema player interactions', () => {
   it('loads the series evaluator winner for an episode when Quick Watch is enabled', async () => {
     mocks.resolve.mockResolvedValue(seriesResolution);
     mount(true, 'en-US', { season: 16, episode: 5, name: 'Family Guy' }, seriesTitle);
-    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledWith({ url: 'https://media.example.invalid/first' }));
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledWith({ url: 'https://media.example.invalid/first' }, 0));
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     expect(mocks.resolve).toHaveBeenCalledWith(
       expect.anything(), expect.anything(),
@@ -278,6 +320,29 @@ describe('cinema player interactions', () => {
     mocks.controller.state = { ...initialState, time: 99_000, duration: 100_000 };
     view.rerender(<WatchFlow {...view.props} />);
     expect(mocks.setWatched).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not auto-mark from a resumed threshold until playback advances 30 seconds', async () => {
+    const firstIdentity = videoDelayIdentity(seriesCandidates[0])!;
+    writeResumePosition(firstIdentity, 890, 1_000, {
+      seriesId: 'tt0182576', season: 16, episode: 5,
+    });
+    mocks.resolve.mockResolvedValue(seriesResolution);
+    const view = mount(true, 'en-US', { season: 16, episode: 5 }, seriesTitle);
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledWith(
+      { url: 'https://media.example.invalid/first' },
+      890_000,
+    ));
+
+    mocks.controller.state = { ...initialState, time: 900_000, duration: 1_000_000 };
+    view.rerender(<WatchFlow {...view.props} />);
+    expect(mocks.setWatched).not.toHaveBeenCalled();
+
+    mocks.controller.state = { ...initialState, time: 920_000, duration: 1_000_000 };
+    view.rerender(<WatchFlow {...view.props} />);
+    await waitFor(() => expect(mocks.setWatched).toHaveBeenCalledWith(
+      'tt0182576', { season: 16, episode: 5 }, true,
+    ));
   });
 
   it('offers the next episode when one ends, and never starts it on its own', async () => {

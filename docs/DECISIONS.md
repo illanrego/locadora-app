@@ -479,11 +479,44 @@ Results keep the existing reason vocabulary and expose `rulesVersion:
 candidate exists, including incomplete or empty input. P2 owns UI explanation
 copy and player integration. This does not implement next-episode behavior.
 
+### D-033 — Local resume positions
+
+Accepted 2026-10-19 by owner decision. This supersedes D-005's disabled resume
+history and D-031's statement that playback position remains unpersisted.
+Resume positions are desktop-local media state: they never reach the Worker,
+Locadora API, analytics or synchronization. A position is keyed by the exact
+video/file identity returned by `videoDelayIdentity()`, matching D-014's
+subtitle-delay boundary; source rank and changing seeder descriptions never
+participate.
+
+Each localStorage record under `locadora:resume:v1:` contains a validated
+position and measured duration in seconds, its write time, and optional complete
+series/season/episode context. Records expire after 90 days, are capped at 300,
+and prune oldest-write-first on every write. Malformed, negative, non-finite or
+at/after-duration positions are never trusted. Positions at or beyond 95%, or
+within 30 seconds of the end, count as finished and are not resumed.
+
+Opening the same video identity resumes automatically and briefly shows a
+localized, accessible start-from-beginning action. Taking it seeks to zero and
+clears that identity's record. Playback writes at a bounded cadence and on
+pause or exit, but only after playback has actually advanced. Marking an
+episode watched clears every retained release position for that episode;
+marking a season clears its episodes; forgetting series progress clears every
+position carrying that series id; clearing the local cache clears all resume
+positions. Movies use the same store without episode context.
+
+The existing episode auto-mark rule (ended or at least 90%) gains a resume
+guard: after a resumed load, it cannot mark the episode until reported playback
+has advanced at least 30 seconds beyond the resumed point. Merely reopening
+near the watched threshold is never enough. Resume state remains independent
+from rentals, returns, reviews, collections and donations.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,
   torrent, subtitle, debrid, or Stremio-account implementation.
 - No secret-bearing manifest or playback URL may enter logs, fixtures, crash
   reports, analytics, screenshots, or Locadora services.
-- Playback never changes a rental or watched state automatically.
+- Playback never changes a rental or return watched status automatically;
+  local episode progress follows D-031 and D-033.
 - Normal accessible browsing remains fully functional without WebGL.

@@ -7,6 +7,12 @@ import { toStremioPlayableStream } from '../media/stremioStream';
 import { resolveTitleSubtitles, type StremioExtraSubtitleTrack } from '../media/subtitleResolution';
 import { normalizeSubtitleLanguage } from '../media/subtitles';
 import { readSubtitleDelay, writeSubtitleDelay, videoDelayIdentity } from '../media/subtitleDelayStore';
+import {
+  clearResumePosition,
+  readResumePosition,
+  writeResumePosition,
+  type ResumeEpisodeContext,
+} from '../media/resumePositionStore';
 import { useStremioVideo } from '../media/useStremioVideo';
 import { readLocalSeriesEpisodes, readSeriesProgress, setEpisodeWatched } from '../locadora/localCache';
 import { externalId } from '../domain/content';
@@ -23,6 +29,11 @@ import { Modal } from './Modal';
 import { PlayerIcon } from './PlayerIcon';
 
 type SelectedEpisode = Pick<BoundedEpisode, 'season' | 'episode' | 'name'>;
+
+interface ResumePrompt {
+  videoIdentity: string;
+  positionMilliseconds: number;
+}
 
 interface WatchFlowProps {
   title: DiscoveryTitle;
@@ -109,6 +120,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
   const [showOtherSubtitles, setShowOtherSubtitles] = useState(false);
   const [subtitlesLoading, setSubtitlesLoading] = useState(true);
   const [seekDraft, setSeekDraft] = useState<number | null>(null);
+  const [resumePrompt, setResumePrompt] = useState<ResumePrompt | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const externalSubtitlesRef = useRef<StremioExtraSubtitleTrack[]>([]);
   const tracksButtonRef = useRef<HTMLButtonElement>(null);
@@ -118,6 +130,26 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
   // been offered: the offer is derived state, never an automatic action.
   const loadedEpisode = useRef<string | null>(null);
   const offeredEpisodes = useRef(new Set<string>());
+  const activeResumeIdentity = useRef<string | null>(null);
+  const activeResumeContext = useRef<ResumeEpisodeContext | undefined>(undefined);
+  const resumedFromMilliseconds = useRef<number | null>(null);
+  const playbackStarted = useRef(false);
+  const playbackSnapshot = useRef(video.state);
+  playbackSnapshot.current = video.state;
+
+  const persistCurrentPosition = useCallback(() => {
+    const identity = activeResumeIdentity.current;
+    const snapshot = playbackSnapshot.current;
+    if (!identity || !playbackStarted.current || !snapshot.loaded
+      || typeof snapshot.time !== 'number' || snapshot.time <= 0
+      || typeof snapshot.duration !== 'number' || snapshot.duration <= 0) return;
+    writeResumePosition(
+      identity,
+      snapshot.time / 1_000,
+      snapshot.duration / 1_000,
+      activeResumeContext.current,
+    );
+  }, []);
 
   useEffect(() => {
     setActiveEpisode((current) => (current?.season === episode?.season
@@ -132,19 +164,72 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
       setManualVisible(true);
       return;
     }
+    persistCurrentPosition();
+    const resumeIdentity = videoDelayIdentity(candidate);
+    const seriesId = activeEpisode ? externalId(title.identity, 'imdb') : null;
+    const context = activeEpisode && seriesId ? {
+      seriesId,
+      season: activeEpisode.season,
+      episode: activeEpisode.episode,
+    } : undefined;
+    const stored = resumeIdentity ? readResumePosition(resumeIdentity) : null;
+    const startTimeMilliseconds = stored ? Math.round(stored.positionSeconds * 1_000) : 0;
+    activeResumeIdentity.current = resumeIdentity;
+    activeResumeContext.current = context;
+    resumedFromMilliseconds.current = stored ? startTimeMilliseconds : null;
+    playbackStarted.current = false;
+    setResumePrompt(stored && resumeIdentity ? {
+      videoIdentity: resumeIdentity,
+      positionMilliseconds: startTimeMilliseconds,
+    } : null);
     setCandidateId(candidate.stableId);
     setManualVisible(false);
     setSeekDraft(null);
     setLookupError(null);
     try {
-      await video.load(stream);
+      await video.load(stream, startTimeMilliseconds);
       loadedEpisode.current = activeEpisode ? episodeKey(activeEpisode) : null;
       video.addExtraSubtitlesTracks(externalSubtitlesRef.current);
     } catch (error) {
+      setResumePrompt(null);
       setLookupError(error instanceof Error ? error.message : String(error));
       setManualVisible(true);
     }
-  }, [activeEpisode, video.addExtraSubtitlesTracks, video.load]);
+  }, [activeEpisode, persistCurrentPosition, title.identity, video.addExtraSubtitlesTracks, video.load]);
+
+  useEffect(() => {
+    if (activeResumeIdentity.current && video.state.loaded
+      && typeof video.state.time === 'number' && video.state.time > 0) playbackStarted.current = true;
+  }, [candidateId, video.state.loaded, video.state.time]);
+
+  useEffect(() => {
+    if (!candidateId) return;
+    const timer = window.setInterval(persistCurrentPosition, 5_000);
+    return () => window.clearInterval(timer);
+  }, [candidateId, persistCurrentPosition]);
+
+  const previousPaused = useRef(video.state.paused);
+  useEffect(() => {
+    if (video.state.paused && !previousPaused.current) persistCurrentPosition();
+    previousPaused.current = video.state.paused;
+  }, [persistCurrentPosition, video.state.paused]);
+
+  const persistOnExit = useRef(persistCurrentPosition);
+  persistOnExit.current = persistCurrentPosition;
+  useEffect(() => {
+    const onPageHide = () => persistOnExit.current();
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      persistOnExit.current();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!resumePrompt || !video.state.loaded) return;
+    const timer = window.setTimeout(() => setResumePrompt(null), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [resumePrompt, video.state.loaded]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -194,9 +279,10 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
 
   const close = useCallback(() => {
     abortRef.current?.abort();
+    persistCurrentPosition();
     video.unload();
     onClose();
-  }, [onClose, video.unload]);
+  }, [onClose, persistCurrentPosition, video.unload]);
 
   const candidates = resolution?.manualCandidates ?? [];
   const filteredCandidates = filterSources(candidates, resolutionFilter);
@@ -292,12 +378,16 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
     if (video.state.ended && video.state.fullscreen) video.setFullscreen(false);
   }, [video.setFullscreen, video.state.ended, video.state.fullscreen]);
   useEffect(() => {
-    if (!candidateId || !activeEpisode || !shouldMarkEpisodeWatched(video.state)) return;
+    if (!candidateId || !activeEpisode
+      || !shouldMarkEpisodeWatched(video.state, resumedFromMilliseconds.current)) return;
     const seriesId = externalId(title.identity, 'imdb');
     if (!seriesId) return;
     const key = episodeKey(activeEpisode);
     if (autoMarkedEpisodes.current.has(key)) return;
     autoMarkedEpisodes.current.add(key);
+    if (activeResumeIdentity.current) clearResumePosition(activeResumeIdentity.current);
+    activeResumeIdentity.current = null;
+    activeResumeContext.current = undefined;
     void setEpisodeWatched(seriesId, activeEpisode, true);
   }, [candidateId, activeEpisode, title.identity, video.state]);
 
@@ -351,6 +441,13 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
     setManualVisible(false);
     setLookupState('loading');
   }, [nextEpisodeOffer]);
+  const startFromBeginning = useCallback(() => {
+    if (!resumePrompt) return;
+    clearResumePosition(resumePrompt.videoIdentity);
+    resumedFromMilliseconds.current = null;
+    setResumePrompt(null);
+    video.seekTo(0);
+  }, [resumePrompt, video.seekTo]);
   const playerError = video.state.error ?? lookupError;
   const phase = lookupState === 'loading'
     ? 'loading-streams'
@@ -459,6 +556,12 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
           {video.state.loaded && phase === 'buffering' && <div className="cinema-rebuffer" role="status">
             <strong>{pt ? 'Carregando buffer…' : 'Buffering…'}</strong>
             <span>{pt ? 'Aguardando mais vídeo para continuar.' : 'Waiting for more video before continuing.'}</span>
+          </div>}
+          {resumePrompt && <div className="cinema-resume" role="status">
+            <span>{pt ? 'Reprodução retomada em' : 'Playback resumed at'} {clockTime(resumePrompt.positionMilliseconds)}</span>
+            <button type="button" onClick={startFromBeginning}>
+              {pt ? 'Começar do início' : 'Start from the beginning'}
+            </button>
           </div>}
         </div>
         {panelOpen && <aside className="cinema-panel" id="cinema-options" aria-label={tracksVisible ? (pt ? 'Áudio e legendas' : 'Audio and subtitles') : (pt ? 'Fontes disponíveis' : 'Available sources')}>

@@ -79,6 +79,21 @@ describe('series episodes', () => {
     expect(shouldMarkEpisodeWatched(state)).toBe(expected);
   });
 
+  it('requires 30 seconds of advancement after a resumed position before auto-marking', () => {
+    expect(shouldMarkEpisodeWatched(
+      { time: 900_000, duration: 1_000_000, ended: false },
+      890_000,
+    )).toBe(false);
+    expect(shouldMarkEpisodeWatched(
+      { time: 919_999, duration: 1_000_000, ended: true },
+      890_000,
+    )).toBe(false);
+    expect(shouldMarkEpisodeWatched(
+      { time: 920_000, duration: 1_000_000, ended: false },
+      890_000,
+    )).toBe(true);
+  });
+
   it('composes only bounded episode ids with a confirmed series IMDb id', () => {
     expect(episodeVideoId('tt0182576', { season: 16, episode: 5 })).toBe('tt0182576:16:5');
     expect(episodeVideoId('tt0182576', { season: 0, episode: 1 })).toBe('tt0182576:0:1');

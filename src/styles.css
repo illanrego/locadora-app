@@ -402,6 +402,9 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .cinema-placeholder.is-loading .brand-logo { animation: locadora-loading 1.6s ease-in-out infinite; }
 @keyframes locadora-loading { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .cinema-placeholder.is-loading .brand-logo { animation: none; } }
+.cinema-resume { position: absolute; z-index: 3; top: 16px; left: 50%; display: flex; align-items: center; gap: .75rem; max-width: calc(100% - 32px); padding: .55rem .7rem; border: 1px solid #eac57999; border-radius: 8px; color: #f5ead2; background: #09111ee8; box-shadow: 0 8px 24px #0008; font-size: .78rem; transform: translateX(-50%); }
+.cinema-resume span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cinema-resume button { flex: none; padding: .4rem .6rem; border-color: #eac57999; color: #f5ead2; background: #22324a; }
 .cinema-panel { min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 18px; border-left: 1px solid #ffffff15; background: #101c2c; scrollbar-width: thin; scrollbar-color: #40536c #101c2c; }
 .cinema-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: 1rem; }
 .cinema-panel h3 { margin: 0; font-size: .9rem; font-weight: 600; }

@@ -119,7 +119,10 @@ export function shouldMarkEpisodeWatched(state: {
   time: number | null;
   duration: number | null;
   ended: boolean;
-}): boolean {
+}, resumedFromMilliseconds: number | null = null): boolean {
+  if (resumedFromMilliseconds !== null && (!Number.isFinite(resumedFromMilliseconds)
+    || resumedFromMilliseconds < 0 || typeof state.time !== 'number'
+    || !Number.isFinite(state.time) || state.time < resumedFromMilliseconds + 30_000)) return false;
   if (state.ended) return true;
   return typeof state.time === 'number' && Number.isFinite(state.time) && state.time >= 0
     && typeof state.duration === 'number' && Number.isFinite(state.duration) && state.duration > 0

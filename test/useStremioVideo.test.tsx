@@ -117,6 +117,27 @@ describe('native subtitle coordination', () => {
     await waitFor(() => expect(mocks.fullscreen).toHaveBeenCalledWith(true));
   });
 
+  it('passes a requested resume position to every load route and otherwise starts at zero', async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useStremioVideo('0.35.1'));
+      Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });
+      await act(async () => { await result.current.load({ infoHash: 'f'.repeat(40), fileIdx: 2, announce: [] }, 750_000); });
+      const loads = () => mocks.dispatch.mock.calls
+        .filter(([action]) => action.commandName === 'load')
+        .map(([action]) => action.commandArgs.time);
+      expect(loads()).toEqual([750_000]);
+      await act(async () => { await vi.advanceTimersByTimeAsync(26_000); });
+      expect(loads()).toEqual([750_000, 750_000]);
+
+      mocks.dispatch.mockClear();
+      await act(async () => { await result.current.load({ url: 'https://media.example.invalid/different' }); });
+      expect(loads()).toEqual([0]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('measures the stable outer frame even when the upstream subtitle host collapses', async () => {
     const { result } = renderHook(() => useStremioVideo('0.35.1'));
     const host = document.createElement('div');

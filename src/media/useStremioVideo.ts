@@ -106,7 +106,7 @@ export interface StremioVideoController {
   viewportRef: RefObject<HTMLDivElement | null>;
   containerRef: RefObject<HTMLDivElement | null>;
   state: StremioVideoState;
-  load: (stream: StremioPlayableStream) => Promise<void>;
+  load: (stream: StremioPlayableStream, startTimeMilliseconds?: number) => Promise<void>;
   unload: () => void;
   setPaused: (paused: boolean) => void;
   seekRelative: (seconds: number) => void;
@@ -269,7 +269,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     };
   }, [reportedMpvVersion]);
 
-  const load = useCallback(async (stream: StremioPlayableStream) => {
+  const load = useCallback(async (stream: StremioPlayableStream, startTimeMilliseconds = 0) => {
     const generation = ++loadGeneration.current;
     subtitleGeneration.current += 1;
     selectedExtra.current = null;
@@ -281,6 +281,9 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
     const containerElement = containerRef.current;
     if (!video || !transport || !containerElement) throw new Error('Stremio video is not ready');
     const usesTorrent = 'infoHash' in stream;
+    const startTime = Number.isFinite(startTimeMilliseconds) && startTimeMilliseconds > 0
+      ? Math.round(startTimeMilliseconds)
+      : 0;
     loadedRef.current = false;
     if (loadStallTimer.current !== null) {
       window.clearTimeout(loadStallTimer.current);
@@ -314,7 +317,7 @@ export function useStremioVideo(reportedMpvVersion: string | null): StremioVideo
         commandArgs: {
           stream,
           platform: 'linux',
-          time: 0,
+          time: startTime,
           hardwareDecoding: true,
           gpuVideoProcessing: false,
           assSubtitlesStyling: true,

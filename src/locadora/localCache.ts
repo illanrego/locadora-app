@@ -6,6 +6,12 @@ import {
   type SeriesEpisodes,
 } from '../media/seriesEpisodes';
 import type { ShelfPage, ShelfQuery } from './discovery';
+import {
+  clearAllResumePositions,
+  clearAllSeriesResumePositions,
+  clearEpisodeResumePositions,
+  clearSeriesResumePositions,
+} from '../media/resumePositionStore';
 
 type Store = 'shelves' | 'titles' | 'seriesEpisodes';
 const LIMITS: Record<Store, number> = { shelves: 96, titles: 4_000, seriesEpisodes: 64 };
@@ -305,6 +311,7 @@ export async function setEpisodeWatched(
     updatedAt: timestamp,
   };
   await writeSeriesProgress(next);
+  if (watched) clearEpisodeResumePositions(seriesId, episode.season, episode.episode);
   return next;
 }
 
@@ -343,11 +350,15 @@ export async function setSeasonWatched(
     updatedAt: timestamp,
   };
   await writeSeriesProgress(next);
+  if (watched) {
+    for (const episode of ordered) clearEpisodeResumePositions(seriesId, season, episode.episode);
+  }
   return next;
 }
 
 export async function clearSeriesProgress(seriesId: string): Promise<void> {
   if (!isSeriesImdbId(seriesId)) return;
+  clearSeriesResumePositions(seriesId);
   try {
     const db = await openDatabase();
     if (!db) return;
@@ -385,6 +396,7 @@ export async function writeAllSeriesProgress(records: readonly ProgressRecord[])
 }
 
 export async function clearAllSeriesProgress(): Promise<void> {
+  clearAllSeriesResumePositions();
   try {
     const db = await openDatabase();
     if (!db) return;
@@ -396,6 +408,7 @@ export async function clearLocalCache(): Promise<void> {
   session.shelves.clear();
   session.titles.clear();
   session.seriesEpisodes.clear();
+  clearAllResumePositions();
   try {
     const db = await openDatabase();
     if (!db) return;

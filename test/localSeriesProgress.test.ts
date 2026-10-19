@@ -13,8 +13,10 @@ import {
   writeAllSeriesProgress,
   writeSeriesProgress,
 } from '../src/locadora/localCache';
+import { readResumePosition, writeResumePosition } from '../src/media/resumePositionStore';
 
 const seriesId = 'tt0182576';
+const resumeIdentity = (index: number) => `url:${index.toString(16).padStart(8, '0')}`;
 
 beforeEach(async () => {
   await clearLocalCache();
@@ -22,7 +24,9 @@ beforeEach(async () => {
 
 describe('local series progress', () => {
   it('persists progress in IndexedDB across a module remount', async () => {
+    writeResumePosition(resumeIdentity(1), 40, 100, { seriesId, season: 16, episode: 5 });
     await setEpisodeWatched(seriesId, { season: 16, episode: 5 }, true, new Date('2026-10-18T12:00:00.000Z'));
+    expect(readResumePosition(resumeIdentity(1))).toBeNull();
     vi.resetModules();
     const restored = await import('../src/locadora/localCache');
 
@@ -53,21 +57,29 @@ describe('local series progress', () => {
     expect(stored?.watched).not.toHaveProperty('1:2');
     expect(await readAllSeriesProgress()).toHaveLength(1);
 
+    writeResumePosition(resumeIdentity(2), 40, 100, { seriesId, season: 2, episode: 1 });
     await clearSeriesProgress(seriesId);
     expect(await readSeriesProgress(seriesId)).toBeNull();
+    expect(readResumePosition(resumeIdentity(2))).toBeNull();
     await writeAllSeriesProgress([{
       seriesId, season: 1, episode: 1,
       watched: { '1:1': '2026-10-18T12:00:00.000Z' }, updatedAt: '2026-10-18T12:00:00.000Z',
     }]);
+    writeResumePosition(resumeIdentity(4), 40, 100, { seriesId, season: 1, episode: 1 });
+    writeResumePosition(resumeIdentity(5), 40, 100);
     expect(await readAllSeriesProgress()).toHaveLength(1);
     await clearAllSeriesProgress();
     expect(await readAllSeriesProgress()).toEqual([]);
+    expect(readResumePosition(resumeIdentity(4))).toBeNull();
+    expect(readResumePosition(resumeIdentity(5))).not.toBeNull();
   });
 
   it('clears progress through the canonical local-cache clear path', async () => {
     await setEpisodeWatched(seriesId, { season: 1, episode: 1 }, true);
+    writeResumePosition(resumeIdentity(3), 40, 100);
     await clearLocalCache();
     expect(await readSeriesProgress(seriesId)).toBeNull();
+    expect(readResumePosition(resumeIdentity(3))).toBeNull();
   });
 
   it('writes one record for a whole season and removes the same records on unmark', async () => {
@@ -75,6 +87,9 @@ describe('local series progress', () => {
     const second = new Date('2026-10-19T13:00:00.000Z');
     const seasonTwo = [1, 2, 3].map((episode) => ({ season: 2, episode }));
     await setEpisodeWatched(seriesId, { season: 1, episode: 9 }, true, first);
+    seasonTwo.forEach(({ season, episode }, index) => {
+      writeResumePosition(resumeIdentity(10 + index), 40, 100, { seriesId, season, episode });
+    });
 
     const marked = await setSeasonWatched(seriesId, 2, seasonTwo, true, second);
     expect(marked).toEqual({
@@ -92,6 +107,7 @@ describe('local series progress', () => {
     // One stored record, not one per episode.
     expect(await readAllSeriesProgress()).toHaveLength(1);
     expect(await readSeriesProgress(seriesId)).toEqual(marked);
+    seasonTwo.forEach((_, index) => expect(readResumePosition(resumeIdentity(10 + index))).toBeNull());
 
     const unmarked = await setSeasonWatched(seriesId, 2, [...seasonTwo].reverse(), false, second);
     expect(Object.keys(unmarked?.watched ?? {})).toEqual(['1:9']);
