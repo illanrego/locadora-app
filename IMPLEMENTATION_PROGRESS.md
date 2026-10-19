@@ -1,10 +1,39 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: series follow-up P2 — wire episode Quick Watch into playback
+Current milestone: series follow-up P3 — remove duplicated immersive browse controls
 Status: implementation complete; automated gate green; manual/GUI playback unverified
 
 ## Resume checkpoint
+
+2026-10-19 series follow-up P3 complete:
+- The open immersive “Buscar fitas” panel no longer mounts the 2D genre picker
+  or year machine. The title-search action remains available there, while the
+  existing sort selector is unchanged. The 3D plaque remains the owner of its
+  genre, year and sort controls and still applies them through `onConfigure`.
+- The 2D `browse-controls` path is unchanged: it still mounts the genre select,
+  year picker/form and sort select. Regression coverage proves a 2D genre
+  interaction causes one shelf request, choosing a draft year causes none, and
+  submitting that year causes one request with the current genre and year.
+- No `aria-controls` reference targeted the removed copies. The “Buscar fitas”
+  trigger remains focused and keyboard-operable when it opens the panel; no
+  plaque, `ImmersiveShelf`, shelf-loading or apply-path code changed.
+- Focused check:
+  `npm test -- test/appTitleSearchImmersive.test.tsx test/app.test.tsx` exited 0
+  — Test Files 2 passed (2), Tests 15 passed (15).
+- Full gate: `npm run check` exited 0 — TypeScript passed; Test Files 45 passed
+  (45), Tests 251 passed (251); Vite production build passed with 192 modules
+  and the existing large-chunk advisory.
+- Desktop rebuild: `npm run tauri -- build --no-bundle` exited 0 and refreshed
+  `src-tauri/target/release/wills-locadora-player`.
+- `git diff --check` passed. No browser/GUI automation, manual visual check,
+  real add-on response, playback or plaque-interaction validation was performed.
+  No decision entry was needed for this mode-specific duplication fix.
+- **Next task:** implement series follow-up P4 from
+  `docs/SERIES_FOLLOWUP_PLAN.md` §7: add a bounded, version-invalidated cache of
+  parsed episode lists keyed by IMDb series id, read it before fetching, retain
+  a good cached entry on fetch failure, and cover cache hits, corrupt/versioned
+  records and oldest-entry eviction.
 
 2026-10-19 series follow-up P2 complete (D-032):
 - `WatchFlow` now accepts a playable winner from the series evaluator for a

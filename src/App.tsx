@@ -283,48 +283,50 @@ export default function App() {
 
         <div className="browse-controls" hidden={immersiveEnabled && !immersiveFiltersOpen}>
           {immersiveEnabled && <button type="button" className="browse-title-search" onClick={() => setTitleSearchOpen(true)}>{locale === 'pt-BR' ? 'Buscar título' : 'Search titles'}</button>}
-          <label>
-            <span>{t.genre}</span>
-            <select className="genre-picker" value={genreIndex} onChange={(event) => chooseGenre(Number(event.target.value))}>
-              {GENRES.map((item, index) => <option key={item.id} value={index}>{item.label[locale]}</option>)}
-            </select>
-          </label>
-          <form className="year-machine" onSubmit={(event) => { event.preventDefault(); applyYear(); }}>
-            <span>{t.year}</span>
-            <button type="button" onClick={() => setYearDraft((value) => clampYear(value - 1))} aria-label={locale === 'pt-BR' ? 'Ano anterior' : 'Previous year'}>−</button>
-            <div className="year-picker" ref={yearPickerRef}>
-              <button
-                type="button"
-                className="year-picker-trigger"
-                aria-label={t.year}
-                aria-haspopup="listbox"
-                aria-expanded={yearPickerOpen}
-                onClick={() => setYearPickerOpen((open) => !open)}
-              >
-                {yearDraft}
-              </button>
-              {yearPickerOpen && (
-                <div className="year-picker-options" role="listbox" aria-label={t.year}>
-                  {YEAR_OPTIONS.map((option) => (
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={option === yearDraft}
-                      key={option}
-                      onClick={() => {
-                        setYearDraft(option);
-                        setYearPickerOpen(false);
-                      }}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button type="button" onClick={() => setYearDraft((value) => clampYear(value + 1))} aria-label={locale === 'pt-BR' ? 'Próximo ano' : 'Next year'}>+</button>
-            <button type="submit">{t.go}</button>
-          </form>
+          {!immersiveEnabled && <>
+            <label>
+              <span>{t.genre}</span>
+              <select className="genre-picker" value={genreIndex} onChange={(event) => chooseGenre(Number(event.target.value))}>
+                {GENRES.map((item, index) => <option key={item.id} value={index}>{item.label[locale]}</option>)}
+              </select>
+            </label>
+            <form className="year-machine" onSubmit={(event) => { event.preventDefault(); applyYear(); }}>
+              <span>{t.year}</span>
+              <button type="button" onClick={() => setYearDraft((value) => clampYear(value - 1))} aria-label={locale === 'pt-BR' ? 'Ano anterior' : 'Previous year'}>−</button>
+              <div className="year-picker" ref={yearPickerRef}>
+                <button
+                  type="button"
+                  className="year-picker-trigger"
+                  aria-label={t.year}
+                  aria-haspopup="listbox"
+                  aria-expanded={yearPickerOpen}
+                  onClick={() => setYearPickerOpen((open) => !open)}
+                >
+                  {yearDraft}
+                </button>
+                {yearPickerOpen && (
+                  <div className="year-picker-options" role="listbox" aria-label={t.year}>
+                    {YEAR_OPTIONS.map((option) => (
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={option === yearDraft}
+                        key={option}
+                        onClick={() => {
+                          setYearDraft(option);
+                          setYearPickerOpen(false);
+                        }}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button type="button" onClick={() => setYearDraft((value) => clampYear(value + 1))} aria-label={locale === 'pt-BR' ? 'Próximo ano' : 'Next year'}>+</button>
+              <button type="submit">{t.go}</button>
+            </form>
+          </>}
           <label className="sort-picker">
             <span>{locale === 'pt-BR' ? 'Ordenar por' : 'Sort by'}</span>
             <select value={sortDraft} onChange={(event) => setSortDraft(event.target.value as ShelfSort)}>
