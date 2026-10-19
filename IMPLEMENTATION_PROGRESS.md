@@ -1,10 +1,92 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: D-034 rented tapes P3 — finished-copy playback switch
-Status: P3 implemented and automated checks green; owner playback acceptance pending
+Current milestone: D-034 rented tapes P4 — seeding window and spawn-time caps
+Status: P4 implemented and automated checks green; owner network/playback acceptance pending
 
 ## Resume checkpoint
+
+2026-10-19 D-034 rented tapes P4 seeding window and spawn-time caps:
+- Implementation commit: `da55660` (`Pause tape seeding during RAM playback`).
+  Per the brief, this ledger was updated AFTER the one implementation commit
+  and is the only uncommitted file. No push.
+- `src/rentals/tapePlaybackWindow.ts` owns the two-state scheduling rule. Its
+  raw-spelling predicate recognizes only the strict finished-copy URL on 11472.
+  A non-tape load is the RAM path: it pauses the queue and requests
+  `POST /settings` with `{"seedingEnabled":false}` once. End, close, load error,
+  native failure and a switch to a finished tape resume the queue and request
+  `{"seedingEnabled":true}` once. Repeated lifecycle notifications are
+  idempotent. Engine-off readiness returns normally with no settings POST and
+  no user-visible error. The shell transport only reports load/stop/end/error
+  lifecycle; stream selection, loading and player commands are unchanged.
+- `src/rentals/tapeQueue.ts` now owns a pause bit. A paused queue cannot start a
+  job. Pausing an active drain first frees its queue slot, returns the job to
+  FIFO as `queued`, rolls back the intentionally interrupted attempt, and calls
+  driver cancellation. Its eventual cancelled rejection cannot fail either the
+  queued job or a newer resumed run. Resume makes `startNext()` available again;
+  it deliberately does not auto-pump, preserving P2b's explicit-start rule.
+  A queue constructed with the master switch off cannot be resumed or run.
+- `src/rentals/tapeSettings.ts` is the requested local-only four-key typed
+  store: `locadora.tapes.enabled` (default true), `maxGb` (6), `ratio` (0,
+  unlimited) and `peerPort` (6881, with 0 accepted as random). Invalid values
+  fall back to their safe defaults; writes persist one normalized snapshot.
+  P4 chose `maxGb` as the fourth enforceable/storage key because admission
+  already owns it. `maxCount` remains a typed P2b admission input pending its UI
+  wiring. The frozen `upstreamMbps`/`uploadShare` values are not written because
+  the pinned engine has no numeric upload limiter.
+- Engine B samples `STREMIO_MAX_SEED_RATIO` and `BT_LISTEN_PORT` from those
+  settings at lazy spawn. A live B remains unchanged until its next start; no
+  restart path was added. The tape download command carries the same values to
+  its idempotent ensure, avoiding a default-setting restart race. The master
+  switch is checked before both direct B ensure and driver start, so false means
+  neither command is invoked by the application.
+- The tape request bridge adds only exact raw `/settings` POSTs whose JSON is a
+  one-key boolean `seedingEnabled` object. GET, extra keys, non-booleans, dot-
+  segment spellings, foreign origins and every existing bounded-body rejection
+  remain denied. A read-only tape-engine status command allows the frontend to
+  skip the POST while B is off. No URL or infohash-bearing descriptor is logged.
+- **Known engine limitation:** the pinned v0.16.1 engine exposes no numeric
+  upload-rate setting. `seedingEnabled=false` pins its existing limiter to one
+  byte per second, but the design's approximately 40% upstream cap cannot be
+  enforced today. P4 does not duty-cycle, patch the vendored binary, persist a
+  decorative upload limit, or claim that the cap exists.
+- Exact validation commands/results (sequential; Rust never overlapped npm):
+  - `npx vitest run test/tapeSettings.test.ts test/tapeQueue.test.ts
+    test/tapePlatform.test.ts test/tapePlaybackWindow.test.ts
+    test/stremioShellTransport.test.ts`: 5 files, 49 tests passed.
+  - `cargo test --manifest-path src-tauri/Cargo.toml`: 54 passed, 0 failed,
+    2 ignored; main/doc tests 0.
+  - `cargo test --manifest-path crates/native-core/Cargo.toml --
+    --test-threads=1`: 24 passed, 0 failed/ignored; doc tests 0.
+  - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --
+    -D warnings`: exit 0.
+  - `cargo fmt --manifest-path src-tauri/Cargo.toml --check` and
+    `cargo fmt --manifest-path crates/native-core/Cargo.toml --check`: exit 0.
+  - `npm run check`: exit 0; TypeScript passed; Test Files 52 passed (52),
+    Tests 386 passed (386); Vite built 200 modules, existing chunk advisory only.
+  - `npm run tauri -- build --no-bundle`: exit 0; verified/prepared the pinned
+    engine, built 200 frontend modules and refreshed
+    `src-tauri/target/release/wills-locadora-player`.
+  - `git diff --check` and `git diff --cached --check`: exit 0.
+- Mutation evidence, restored before commit: changed the player-state branch
+  from `next !== 'ram'` to `next === 'ram'`. `npx vitest run
+  test/tapePlaybackWindow.test.ts -t 'posts false once'` exited 1: 3 failed,
+  3 skipped, with the expected false/true sequence missing. After restoration,
+  the same command exited 0: 3 passed, 3 skipped.
+- Scope proof: `git diff --exit-code HEAD -- crates/native-core
+  src/components/WatchFlow.tsx src/media/useStremioVideo.ts
+  src/media/tapePlayback.ts src/platform/stremioService.ts
+  src-tauri/src/commands.rs` exited 0 before commit. The 11471 constants, env,
+  `Engine` lifecycle/ephemeral teardown, readiness logic, request validator and
+  request command are unchanged. Native player policy remains 24/24 green.
+  The implementation diff was 13 files, 711 insertions and 22 deletions.
+- No browser/GUI automation, real torrent, real seeding, manual visual or
+  playback verification was performed. No dependency, UI, manifest format,
+  rental state, return state, collection, review or donation path changed.
+- **Next task:** P5 under the owner's next brief: wire the canonical tape queue
+  and manifest transitions into the tape dashboard, showing per-tape/session
+  upload and store-vs-cap data without inventing the unavailable numeric upload
+  limiter; preserve P4's lifecycle coordinator and explicit-start queue rule.
 
 2026-10-19 D-034 rented tapes P3 playback switch:
 - Implementation commit: `c8a74b0` (`Play ready rental tapes through the persistent
