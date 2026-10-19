@@ -1,10 +1,87 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: D-034 rented tapes P2a — native download driver
-Status: P2a complete and verified locally after the delegated run hit its usage limit; next is P2b
+Current milestone: D-034 rented tapes P2b — manifest, admission and queue in TypeScript
+Status: P2b complete and green; next is P3, the playback switch
 
 ## Resume checkpoint
+
+2026-10-19 D-034 rented tapes P2b pure-TypeScript layer:
+- `src/rentals/tapeManifest.ts` (new) is the app-owned manifest model. Its types
+  mirror `tape-store.json` v1 and its validation copies the bounds in
+  `src-tauri/src/tape_store.rs` one for one: ten rows, `version` exactly 1, no
+  unknown fields on the document, the row or the descriptor, lower-case 40-hex
+  infohash, `fileIdx` 0..9999, size 1..=Number.MAX_SAFE_INTEGER, bounded UTF-8
+  text without control characters, `descriptor.sources` at most 64 × 2048 bytes,
+  a `magnet:` prefix, a base64 `.torrent` at most 8 MiB decoded and a 16 MiB
+  encoded manifest. `normalizeManifest` reads corrupt storage as the empty
+  manifest (§8) and drops a malformed row whole instead of trusting half of it;
+  `upsertTape`/`touchTape` return `null` rather than a manifest the native writer
+  would reject, and `totalBytes` saturates at the safe integer.
+- `src/rentals/tapeAdmission.ts` (new) admits by the smaller of the GB ceiling
+  (`locadora.tapes.maxGb`, default 6, `0` = no ceiling) and
+  `freeBytes - 2 GiB`. `freeBytes` is optional and may be `null`: P2b admits by
+  the ceiling alone until a native `statvfs` call lands with the settings
+  surface. `tapeCountCap` follows the rental limit when `maxCount` is `0` and
+  never lets a separate cap exceed it or the ten-row store ceiling. The closed
+  refusal set is `unknown-size`, `cap-exceeded`, `space-exceeded`,
+  `count-exceeded`, checked in that order. A refusal is a pure function of its
+  input, so it cannot mutate a manifest or delete a tape.
+- `src/rentals/tapeQueue.ts` (new) is the state machine:
+  `queued → resolving → downloading → ready`, plus `failed`, `returned` and
+  `unverified`. One active download, FIFO by rent time with ties in enqueue
+  order. The driver is injected (`{ start, cancel }`), so the tests run with no
+  shell and no real download. A `reading` event promotes `resolving` to
+  `downloading` and updates bytes monotonically; only the active job's matching
+  hash **and** file index may move at all. Failure is classified from the
+  driver's rejection (`readTapeFailureCode`) and retried at most once per tape
+  per app session (`MAX_TAPE_ATTEMPTS_PER_SESSION = 2`); a retried tape returns
+  to its rent-time position and the queue never starts a download by itself, so
+  a retry can never become a tight loop. `torrent-not-found` marks the tape
+  `unverified` instead of retrying (§8); `too-large`, `invalid-request` and
+  `cancelled` never retry. `cancelForReturn` frees the slot, calls the driver's
+  `cancel` and leaves every other job untouched.
+- `src/platform/tape.ts` (new) wraps `tape_engine_ensure`,
+  `tape_engine_request`, `tape_store_read`/`write`/`clear`,
+  `tape_download_start`/`cancel` and the `tape-download-progress` event, with no
+  policy beyond marshalling and the allowlist checks the native bridge already
+  enforces. Every rejection becomes a `TapePlatformError` carrying one of the
+  six native codes, malformed progress payloads are dropped instead of
+  forwarded, a lossy manifest write is refused instead of truncated, and
+  `createTapeDownloadDriver()` is the native implementation of the queue's
+  injected driver.
+- Nothing is wired in: `App.tsx`, the player, the inspector, the member panel,
+  the Quick Watch evaluator, the resume store and every Rust file are untouched.
+  No dependency was added and nothing was pushed.
+- Checks: `npm run check` exited 0 — TypeScript passed; Test Files 50 passed
+  (50), Tests 346 passed (346) (was 46/291); Vite built 193 modules with only the
+  existing large-chunk advisory.
+- Mutation checks (each reproduced and restored):
+  - ceiling comparison `>` → `>=`: three admission tests failed
+    (`expected { allowed: false, …(1) } to deeply equal { allowed: true }`);
+  - `MAX_TAPE_ATTEMPTS_PER_SESSION = 3`: three queue tests failed (retry-once,
+    synchronous-throw retry, retry-goes-to-the-back);
+  - infohash pattern widened to `[0-9a-fA-F]`: six tests failed across the
+    manifest and platform suites;
+  - single-active guard removed: `keeps exactly one download active` failed.
+- Choices this part made where the plan was silent, recorded so a later part can
+  reverse them deliberately: refusal order is size → ceiling → space → count; a
+  corrupt `maxGb` falls back to 6 GB instead of disabling the ceiling; a retried
+  tape goes to the back of the FIFO rather than being retried immediately; the
+  queue never auto-pumps after a completion, a failure or a cancellation;
+  `failed` and `unverified` rows still occupy a count slot and their declared
+  size still counts against the ceiling; timestamps are ISO strings compared
+  lexicographically.
+- **Next task:** P3 — playback switch. Accept
+  `http://127.0.0.1:11472/<40-hex>/<idx>` in the player URL predicate next to
+  the existing 11471 check, play the tape engine's copy when the manifest row is
+  `ready`/`seeding` and the file is present, and otherwise keep the RAM path
+  byte-for-byte. The wiring P2b deliberately left out: read `readTapeManifest()`,
+  build jobs from rows with `createTapeDownloadDriver()` in `createTapeQueue`,
+  persist transitions through `touchTape` + `writeTapeManifest`, admit with
+  `admitTape` (`freeBytes: null` until a native `statvfs` command exists), and on
+  return call `cancelForReturn`, remove the engine torrent, then the manifest
+  row.
 
 2026-10-19 D-034 rented tapes P2a native download driver:
 - `src-tauri/src/tape_download.rs` (new, 729 lines) adds
