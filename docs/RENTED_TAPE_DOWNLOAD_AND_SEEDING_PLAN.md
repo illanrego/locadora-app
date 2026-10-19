@@ -620,6 +620,12 @@ startup. `seedingEnabled` flips to `false` while the RAM path plays (§11).
   `^/[0-9a-f]{40}(/\d{1,4})?(/(stats\.json|create|remove))?$`, body bounded.
 - `tape_store_read()`, `tape_store_write(manifest)` (bounded, validated),
   `tape_store_clear()`.
+- `tape_download_start(hash, fileIdx)` / `tape_download_cancel()` — the
+  download driver. **The bounded JSON request bridge cannot carry a movie**
+  (its response body is text and capped at 2 MiB), so the drain is native: open
+  the tape engine's `/<hash>/<idx>` on the fixed origin, read to EOF discarding
+  bytes, emit bounded progress events, and stop on cancel or engine error.
+  Piece data lands in the engine's own store; the app never writes media bytes.
 - Player URL policy accepts `http://127.0.0.1:11472/<40-hex>/<idx>` with exactly
   the rejections the 11471 shape has (`/settings`, `stats.json`, `proxy/`,
   userinfo, other hosts, other ports). No filesystem path is ever accepted.
@@ -650,7 +656,8 @@ owner's rule: `gpt-6-astra` high only where a mistake is expensive, otherwise
 | part | scope | tier |
 |---|---|---|
 | P1 | **native tape surface**: engine role split (11472, durable store, lazy start, never wipe on drop, fail-closed), the allowlisted `tape_engine_request` bridge, and the `tape_store_*` file I/O — so P2 can be pure TypeScript | astra high |
-| P2 | manifest + admission + queue: descriptor persistence, GB ceiling, min(cap, free−2 GiB), drain-to-complete, progress, retry-once, cancellation | sol high |
+| P2a | **native download driver**: `tape_download_start/cancel`, drain the engine URL to EOF, bounded progress events, cancellation, engine-error mapping — the JSON bridge cannot carry a movie | astra high |
+| P2b | manifest + admission + queue in TypeScript on top of P1/P2a: descriptor persistence, GB ceiling, min(cap, free − 2 GiB) once free space is available, progress, retry-once, cancellation | sol high |
 | P3 | playback switch: 11472 in the player predicate, ready→local copy, otherwise RAM path untouched, rejection tests kept | sol high |
 | P4 | seeding window and caps: `seedingEnabled` two-state machine, queue pause during a RAM stream, upload share, ratio, pinned peer port, settings surface | sol high |
 | P5 | tape dashboard: per-tape rows, uploaded per tape and per session, store total vs cap, the plain-language line, Carteirinha placement | sol high |
