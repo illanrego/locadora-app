@@ -1,10 +1,60 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: series follow-up P7 — next-episode offer, season marking, specials reveal and episode context
+Current milestone: immersive search entry — remove the "Buscar fitas" middle panel
 Status: implementation complete; JS gate green; manual/GUI visual check unverified
 
 ## Resume checkpoint
+
+2026-10-19 immersive search entry complete:
+- In immersive (3D) mode the header now exposes one search action
+  (`Buscar título` / `Search titles`) that opens the existing `TitleSearch`
+  window directly, the same window the 2D button opens. The intermediate
+  "Buscar fitas" panel is gone: its toggle button, the `immersiveFiltersOpen`
+  state and the panel's own copy of the title-search button were removed rather
+  than left inert. Nothing about the sort control was relocated: the 3D plaque
+  already owns genre, year and sort, and this was verified by reading
+  `ImmersiveShelf.tsx` before any edit — the plaque passes
+  `onConfigure(index, draft.year, draft.sort)` with `sortLabel` and
+  `sortChoices` ([relevance, year, rating]), and `App.configureImmersive`
+  applies all three (draft plus committed sort, persisted to `locadora.sort`).
+- The `browse-controls` block is now rendered only when immersive mode is off.
+  Removing the `hidden` attribute and the immersive branch left three dead CSS
+  rules, which were deleted in the same commit: `.browse-controls
+  .browse-title-search` (the removed immersive button's class),
+  `.browse-controls[hidden]`, and the `.browse-controls` half of
+  `.is-immersive .browse-controls, .is-immersive .settings-drawer` (the
+  `.is-immersive .settings-drawer` half is kept). The shared
+  `.browse-controls` layout, picker and 900px/680px media rules stay: they
+  still serve 2D.
+- 2D mode is unchanged: genre, year and sort are mounted together in
+  `browse-controls`, genre applies immediately, the year draft costs nothing
+  and the transactional apply stays on `Ir` (`applyYear` commits year and sort
+  together, one shelf request), and the 2D `Buscar título` button keeps
+  opening the same title-search window.
+- Tests updated in `test/appTitleSearchImmersive.test.tsx`: the immersive case
+  now asserts the search action exists, that `Buscar fitas` is gone, that no
+  `.browse-controls`, no `.sort-picker` and no genre/year/sort control exist in
+  immersive, and that clicking the action opens the search dialog with its
+  searchbox directly. The 2D case now also asserts all three controls live
+  inside `browse-controls`, that picking a sort draft alone triggers no load,
+  and that `Ir` sends one request carrying the chosen genre, year and sort.
+- No 3D scene, `ImmersiveShelf`, plaque control, shelf loading/filtering,
+  series/quick-watch, member-panel or Rust file changed; no dependency and no
+  new component was added. No decision entry was needed.
+- Focused check: `npm test -- test/appTitleSearchImmersive.test.tsx
+  test/app.test.tsx` exited 0 — Test Files 2 passed (2), Tests 15 passed (15).
+- Full gate: `npm run check` exited 0 — TypeScript passed; Test Files 45 passed
+  (45), Tests 281 passed (281); Vite production build passed with 192 modules
+  and the existing large-chunk advisory. The 45/281 counts match the stated
+  baseline exactly: the same two tests were rewritten, none added or removed.
+- `git diff --check` passed. Only the JS gate was run: no cargo or tauri build
+  was started, no desktop binary was rebuilt. No browser/GUI automation and no
+  manual visual check was performed; the owner does the immersive visual check.
+- **Next task:** owner visually verifies the immersive header's single search
+  action on the rebuilt desktop build and names the next milestone. The
+  previous P7 manual acceptance (next-episode offer, season mark/unmark,
+  specials reveal, episode context) is still open on the owner's side.
 
 2026-10-19 series follow-up P7 complete:
 - A finished episode now *offers* the next one and never autoplays. `WatchFlow`

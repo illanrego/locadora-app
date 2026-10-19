@@ -68,7 +68,6 @@ export default function App() {
   const [quickWatchEnabled, setQuickWatchEnabled] = useState(readQuickWatchEnabled);
   const [immersiveEnabled, setImmersiveEnabled] = useState(readImmersiveEnabled);
   const [immersiveStand, setImmersiveStand] = useState(0);
-  const [immersiveFiltersOpen, setImmersiveFiltersOpen] = useState(false);
   const [immersiveReady, setImmersiveReady] = useState(false);
   const [immersiveError, setImmersiveError] = useState('');
   const shelfRequestRef = useRef(0);
@@ -337,13 +336,12 @@ export default function App() {
             <span>{t.tagline}</span>
           </a>
           <nav className="header-actions" aria-label={locale === 'pt-BR' ? 'Ações da loja' : 'Store actions'}>
-            {!immersiveEnabled && <button type="button" onClick={() => setTitleSearchOpen(true)}>{locale === 'pt-BR' ? 'Buscar título' : 'Search titles'}</button>}
+            <button type="button" onClick={() => setTitleSearchOpen(true)}>{locale === 'pt-BR' ? 'Buscar título' : 'Search titles'}</button>
             <button type="button" onClick={() => setPanel('saved')}>{locale === 'pt-BR' ? 'Salvos' : 'Saved'}</button>
             <button type="button" onClick={() => setPanel('account')}>{t.account}</button>
             <button type="button" aria-pressed={immersiveEnabled} onClick={toggleImmersive}>
               {immersiveEnabled ? (locale === 'pt-BR' ? 'Modo 2D' : '2D mode') : (locale === 'pt-BR' ? 'Modo imersivo' : 'Immersive mode')}
             </button>
-            {immersiveEnabled && <button type="button" aria-expanded={immersiveFiltersOpen} onClick={() => setImmersiveFiltersOpen((value) => !value)}>{locale === 'pt-BR' ? 'Buscar fitas' : 'Find tapes'}</button>}
             <button type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}>{t.settings}</button>
             <button type="button" className="basket-button" onClick={() => setPanel('basket')}>
               {t.basket}<span aria-label={`${basket.length} / 10`}>{basket.length}</span>
@@ -351,9 +349,8 @@ export default function App() {
           </nav>
         </div>
 
-        <div className="browse-controls" hidden={immersiveEnabled && !immersiveFiltersOpen}>
-          {immersiveEnabled && <button type="button" className="browse-title-search" onClick={() => setTitleSearchOpen(true)}>{locale === 'pt-BR' ? 'Buscar título' : 'Search titles'}</button>}
-          {!immersiveEnabled && <>
+        {!immersiveEnabled && (
+          <div className="browse-controls">
             <label>
               <span>{t.genre}</span>
               <select className="genre-picker" value={genreIndex} onChange={(event) => chooseGenre(Number(event.target.value))}>
@@ -396,16 +393,16 @@ export default function App() {
               <button type="button" onClick={() => setYearDraft((value) => clampYear(value + 1))} aria-label={locale === 'pt-BR' ? 'Próximo ano' : 'Next year'}>+</button>
               <button type="submit">{t.go}</button>
             </form>
-          </>}
-          <label className="sort-picker">
-            <span>{locale === 'pt-BR' ? 'Ordenar por' : 'Sort by'}</span>
-            <select value={sortDraft} onChange={(event) => setSortDraft(event.target.value as ShelfSort)}>
-              <option value="relevance">{locale === 'pt-BR' ? 'Relevância' : 'Relevance'}</option>
-              <option value="year">{locale === 'pt-BR' ? 'Ano' : 'Year'}</option>
-              <option value="rating">{locale === 'pt-BR' ? 'Avaliação' : 'Rating'}</option>
-            </select>
-          </label>
-        </div>
+            <label className="sort-picker">
+              <span>{locale === 'pt-BR' ? 'Ordenar por' : 'Sort by'}</span>
+              <select value={sortDraft} onChange={(event) => setSortDraft(event.target.value as ShelfSort)}>
+                <option value="relevance">{locale === 'pt-BR' ? 'Relevância' : 'Relevance'}</option>
+                <option value="year">{locale === 'pt-BR' ? 'Ano' : 'Year'}</option>
+                <option value="rating">{locale === 'pt-BR' ? 'Avaliação' : 'Rating'}</option>
+              </select>
+            </label>
+          </div>
+        )}
 
         {settingsOpen && (
           <section className="settings-drawer" aria-label={t.settings}>
