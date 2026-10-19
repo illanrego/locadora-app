@@ -9,11 +9,17 @@ import { normalizeDiscoveryTitle } from '../src/domain/content';
 import { normalizeStreams } from '../src/media/normalization';
 import { readResumePosition, writeResumePosition } from '../src/media/resumePositionStore';
 import { videoDelayIdentity } from '../src/media/subtitleDelayStore';
+import type { TapeRecord } from '../src/rentals/tapeManifest';
 
 const mocks = vi.hoisted(() => ({
   controller: null as unknown as StremioVideoController,
   resolve: vi.fn(), subtitles: vi.fn(), configuration: vi.fn(), setWatched: vi.fn(),
   readEpisodes: vi.fn(), readProgress: vi.fn(),
+  tapeRead: vi.fn(), tapeEnsure: vi.fn(),
+}));
+vi.mock('../src/platform/tape', () => ({
+  readTapeManifest: mocks.tapeRead, ensureTapeEngine: mocks.tapeEnsure,
+  TAPE_ENGINE_ORIGIN: 'http://127.0.0.1:11472',
 }));
 vi.mock('../src/media/useStremioVideo', () => ({ useStremioVideo: () => mocks.controller }));
 vi.mock('../src/media/resolutionService', () => ({ resolveTitleMedia: mocks.resolve }));
@@ -73,6 +79,8 @@ beforeEach(() => {
   mocks.subtitles.mockResolvedValue([]);
   mocks.readEpisodes.mockResolvedValue(null);
   mocks.readProgress.mockResolvedValue(null);
+  mocks.tapeRead.mockResolvedValue({ version: 1, tapes: [] });
+  mocks.tapeEnsure.mockResolvedValue('http://127.0.0.1:11472');
   mocks.controller = {
     viewportRef: { current: null }, containerRef: { current: null }, state: { ...initialState }, load: vi.fn().mockResolvedValue(undefined),
     unload: vi.fn(), setPaused: vi.fn(), seekRelative: vi.fn(), seekTo: vi.fn(), setFullscreen: vi.fn(),
@@ -88,6 +96,108 @@ function mount(quickWatchEnabled = true, locale: 'pt-BR' | 'en-US' = 'en-US', ep
   const props = { title: selectedTitle, locale, mpvVersion: null, quickWatchEnabled, episode, onClose };
   return { ...render(<WatchFlow {...props} />), onClose, props };
 }
+
+const syntheticTape: TapeRecord = {
+  rentalId: 'synthetic-rental', contentId: title.identity.canonicalKey, title: 'Synthetic tape',
+  infoHash: 'a'.repeat(40), fileIdx: 7, fileName: 'synthetic.mkv', sizeBytes: 1000,
+  descriptor: { sources: [], magnet: 'magnet:?xt=urn:btih:synthetic' },
+  torrentBytesB64: null, state: 'ready', addedAt: '2026-10-19', completedAt: '2026-10-19', lastPlayedAt: null,
+};
+
+describe('finished tape playback branch', () => {
+  it.each(['ready', 'seeding'] as const)('plays an exact %s episode without stream resolution or Quick Watch', async (state) => {
+    const episode = { season: 2, episode: 3 };
+    const manifest = { version: 1, tapes: [{ ...syntheticTape, contentId: 'tt0182576:2:3', state }] };
+    const before = structuredClone(manifest);
+    mocks.tapeRead.mockResolvedValue(manifest);
+    mount(false, 'en-US', episode, seriesTitle);
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledExactlyOnceWith(
+      { url: `http://127.0.0.1:11472/${syntheticTape.infoHash}/7` }, 0,
+    ));
+    expect(mocks.resolve).not.toHaveBeenCalled();
+    expect(mocks.tapeEnsure).toHaveBeenCalledTimes(1);
+    expect(mocks.tapeEnsure.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(mocks.controller.load).mock.invocationCallOrder[0]);
+    await waitFor(() => expect(mocks.subtitles).toHaveBeenCalledWith(seriesTitle, [], {
+      signal: expect.any(AbortSignal), episode,
+    }));
+    expect(mocks.setWatched).not.toHaveBeenCalled();
+    expect(manifest).toEqual(before);
+  });
+
+  it('plays a movie copy even without an IMDb mapping or stream configuration', async () => {
+    mocks.tapeRead.mockResolvedValue({ version: 1, tapes: [syntheticTape] });
+    mocks.configuration.mockRejectedValueOnce(new Error('Unavailable'));
+    mount(false);
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledExactlyOnceWith(
+      { url: `http://127.0.0.1:11472/${syntheticTape.infoHash}/7` }, 0,
+    ));
+    expect(mocks.resolve).not.toHaveBeenCalled();
+    expect(screen.queryByText('Unavailable')).not.toBeInTheDocument();
+  });
+
+  it.each(['absent', 'queued', 'resolving', 'downloading', 'failed', 'returned', 'unverified',
+    'corrupt', 'invalid-hash', 'invalid-index', 'other-title', 'lookup-failure', 'engine-failure'])(
+    'keeps the normal calls for %s', async (condition) => {
+      let value: unknown = { version: 1, tapes: [{ ...syntheticTape, state: condition }] };
+      if (condition === 'absent') value = null;
+      if (condition === 'corrupt') value = { version: 2, tapes: [syntheticTape] };
+      if (condition === 'invalid-hash') value = { version: 1, tapes: [{ ...syntheticTape, infoHash: 'invalid' }] };
+      if (condition === 'invalid-index') value = { version: 1, tapes: [{ ...syntheticTape, fileIdx: -1 }] };
+      if (condition === 'other-title') value = { version: 1, tapes: [{ ...syntheticTape, contentId: 'movie:tmdb:999' }] };
+      if (condition === 'engine-failure') value = { version: 1, tapes: [syntheticTape] };
+      mocks.tapeRead.mockResolvedValue(value);
+      if (condition === 'lookup-failure') mocks.tapeRead.mockRejectedValueOnce(new Error('Private lookup failure'));
+      if (condition === 'engine-failure') mocks.tapeEnsure.mockRejectedValueOnce(new Error('Private engine failure'));
+      mount();
+      await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledExactlyOnceWith(
+        { url: 'https://media.example.invalid/first' }, 0,
+      ));
+      expect(mocks.configuration).toHaveBeenCalledTimes(1);
+      expect(mocks.subtitles).toHaveBeenCalledExactlyOnceWith(title, [], { signal: expect.any(AbortSignal), episode: null });
+      expect(mocks.resolve).toHaveBeenCalledExactlyOnceWith(title, [], { signal: expect.any(AbortSignal), episode: null });
+      const calls = [mocks.configuration, mocks.subtitles, mocks.resolve, vi.mocked(mocks.controller.load)]
+        .map((mock) => mock.mock.invocationCallOrder[0]);
+      expect(calls).toEqual([...calls].sort((a, b) => a - b));
+      expect(mocks.tapeEnsure).toHaveBeenCalledTimes(condition === 'engine-failure' ? 1 : 0);
+      expect(screen.queryByText(/Private .* failure/)).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(['tt0182576:2:4', 'tt0182576:3:3', 'tt9999999:2:3', 'series:tmdb:2'])(
+    'never substitutes the episode with a tape identified as %s', async (contentId) => {
+      const episode = { season: 2, episode: 3 };
+      mocks.tapeRead.mockResolvedValue({ version: 1, tapes: [{ ...syntheticTape, contentId }] });
+      mount(true, 'en-US', episode, seriesTitle);
+      await waitFor(() => expect(mocks.resolve).toHaveBeenCalledExactlyOnceWith(seriesTitle, [], {
+        signal: expect.any(AbortSignal), episode,
+      }));
+      expect(mocks.tapeEnsure).not.toHaveBeenCalled();
+    },
+  );
+
+  it('silently uses the normal stream if the direct tape load rejects', async () => {
+    mocks.tapeRead.mockResolvedValue({ version: 1, tapes: [syntheticTape] });
+    vi.mocked(mocks.controller.load).mockRejectedValueOnce(new Error('Private tape load failure'));
+    mount();
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenLastCalledWith(
+      { url: 'https://media.example.invalid/first' }, 0,
+    ));
+    expect(mocks.resolve).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Private tape load failure')).not.toBeInTheDocument();
+  });
+
+  it('does not load or resolve streams after closing during tape engine startup', async () => {
+    let finish!: () => void;
+    mocks.tapeRead.mockResolvedValue({ version: 1, tapes: [syntheticTape] });
+    mocks.tapeEnsure.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const view = mount();
+    await waitFor(() => expect(mocks.tapeEnsure).toHaveBeenCalled());
+    view.unmount();
+    await act(async () => finish());
+    expect(mocks.controller.load).not.toHaveBeenCalled();
+    expect(mocks.resolve).not.toHaveBeenCalled();
+  });
+});
 
 describe('cinema player interactions', () => {
   it('scopes native video transparency to the player lifetime', async () => {

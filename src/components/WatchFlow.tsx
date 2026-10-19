@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import type { DiscoveryTitle } from '../domain/content';
 import type { Locale } from '../locadora/catalog';
 import { resolveTitleMedia, type MediaResolution } from '../media/resolutionService';
+import { resolveReadyTape } from '../media/tapePlayback';
 import type { StreamCandidate } from '../media/types';
 import { toStremioPlayableStream } from '../media/stremioStream';
 import { resolveTitleSubtitles, type StremioExtraSubtitleTrack } from '../media/subtitleResolution';
@@ -158,7 +159,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
     setNextEpisodeOffer(null);
   }, [episode]);
 
-  const play = useCallback(async (candidate: StreamCandidate) => {
+  const play = useCallback(async (candidate: StreamCandidate, optionalTape = false) => {
     const stream = toStremioPlayableStream(candidate);
     if (!stream) {
       setManualVisible(true);
@@ -190,8 +191,10 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
       await video.load(stream, startTimeMilliseconds);
       loadedEpisode.current = activeEpisode ? episodeKey(activeEpisode) : null;
       video.addExtraSubtitlesTracks(externalSubtitlesRef.current);
+      return true;
     } catch (error) {
       setResumePrompt(null);
+      if (optionalTape) return false;
       setLookupError(error instanceof Error ? error.message : String(error));
       setManualVisible(true);
     }
@@ -236,6 +239,27 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
     abortRef.current = controller;
     void (async () => {
       try {
+        const tape = await resolveReadyTape(title, activeEpisode, controller.signal);
+        if (controller.signal.aborted) return;
+        if (tape && await play(tape, true)) {
+          if (controller.signal.aborted) return;
+          setResolution({ status: 'resolved', imdbId: externalId(title.identity, 'imdb'),
+            candidates: [tape], manualCandidates: [tape], quickWatch: null, diagnostics: [] });
+          setLookupState('ready');
+          // Subtitle configuration is optional for a finished copy. Keep the
+          // exact episode identity and native embedded-track path in use.
+          try {
+            const addons = await readMediaConfiguration();
+            if (controller.signal.aborted) return;
+            const subtitles = await resolveTitleSubtitles(title, addons, { signal: controller.signal, episode: activeEpisode });
+            if (controller.signal.aborted) return;
+            externalSubtitlesRef.current = subtitles;
+            video.addExtraSubtitlesTracks(subtitles);
+          } catch { /* Subtitle failure must not stop a local screening. */ }
+          if (!controller.signal.aborted) setSubtitlesLoading(false);
+          return;
+        }
+        if (controller.signal.aborted) return;
         const addons = await readMediaConfiguration();
         if (controller.signal.aborted) return;
         setSubtitlesLoading(true);

@@ -36,6 +36,44 @@ beforeEach(() => { vi.clearAllMocks(); mocks.listeners.clear(); });
 afterEach(cleanup);
 
 describe('native subtitle coordination', () => {
+  it('loads a tape URL directly without engine A and receives embedded mpv tracks', async () => {
+    const { result } = renderHook(() => useStremioVideo('0.35.1'));
+    Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });
+    const stream = { url: `http://127.0.0.1:11472/${'a'.repeat(40)}/7` };
+    await act(async () => { await result.current.load(stream); });
+    expect(mocks.ensure).not.toHaveBeenCalled();
+    expect(mocks.torrent).not.toHaveBeenCalled();
+    expect(mocks.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      commandName: 'load', commandArgs: expect.objectContaining({ stream, streamingServerURL: null, nativePlayer: true }),
+    }), expect.anything());
+    const tracks = [{ id: 'EMBEDDED_1', lang: 'por', label: 'Português' }];
+    act(() => mocks.listeners.get('propChanged')?.('subtitlesTracks', tracks));
+    expect(result.current.state.subtitlesTracks).toEqual(tracks);
+  });
+
+  it('preserves engine A ensure, registration, load and one bounded stall retry in order', async () => {
+    vi.useFakeTimers();
+    try {
+      const calls: string[] = [];
+      mocks.ensure.mockImplementationOnce(async () => { calls.push('ensure'); });
+      mocks.torrent.mockImplementationOnce(async () => { calls.push('register'); });
+      mocks.dispatch.mockImplementation((action) => { if (action.commandName) calls.push(action.commandName); });
+      const { result } = renderHook(() => useStremioVideo('0.35.1'));
+      Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });
+      await act(async () => { await result.current.load({ infoHash: 'a'.repeat(40), fileIdx: 7, announce: [] }); });
+      expect(calls).toEqual(['unload', 'ensure', 'register', 'load']);
+      await act(async () => { await vi.advanceTimersByTimeAsync(24_999); });
+      expect(calls).toEqual(['unload', 'ensure', 'register', 'load']);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(calls).toEqual(['unload', 'ensure', 'register', 'load', 'load']);
+      await act(async () => { await vi.advanceTimersByTimeAsync(25_000); });
+      expect(calls).toEqual(['unload', 'ensure', 'register', 'load', 'load']);
+    } finally {
+      mocks.dispatch.mockImplementation(() => undefined);
+      vi.useRealTimers();
+    }
+  });
+
   it('preserves native fullscreen across source changes, failures and retry until the window exits', async () => {
     const { result } = renderHook(() => useStremioVideo('0.35.1'));
     Object.defineProperty(result.current.containerRef, 'current', { configurable: true, value: document.createElement('div') });

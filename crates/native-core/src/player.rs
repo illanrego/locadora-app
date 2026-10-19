@@ -327,13 +327,12 @@ fn public_remote_url(value: &str) -> Result<(), PlayerError> {
     }
 }
 
-/// Locadora's bundled compatible streaming engine is the only loopback endpoint the
-/// player may load from.
+/// Locadora's bundled engines are the only loopback endpoints the player may load.
 ///
 /// Stremio Video owns the shape of the URLs it hands the shell (torrent info
 /// hashes, proxied direct streams, and whatever it adds next), so this checks
 /// the origin and the bounds instead of re-deriving that contract. Every path
-/// under the official origin is reachable; anything else is not.
+/// under engine A's origin is reachable. Engine B only serves finished tape files.
 fn stremio_service_stream_url(value: &str) -> Result<(), PlayerError> {
     if value.len() > 16_384 {
         return Err(PlayerError::InvalidDescriptor);
@@ -341,12 +340,28 @@ fn stremio_service_stream_url(value: &str) -> Result<(), PlayerError> {
     let url = Url::parse(value).map_err(|_| PlayerError::InvalidDescriptor)?;
     if url.scheme() != "http"
         || url.host_str() != Some("127.0.0.1")
-        || url.port() != Some(11471)
+        || !matches!(url.port(), Some(11471 | 11472))
         || !url.username().is_empty()
         || url.password().is_some()
         || url.fragment().is_some()
     {
         return Err(PlayerError::InvalidDescriptor);
+    }
+    if url.port() == Some(11472) {
+        // Validate the raw spelling: Url::parse normalizes dot segments and
+        // alternate IPv4 spellings before we can reject them.
+        let path = value
+            .strip_prefix("http://127.0.0.1:11472/")
+            .ok_or(PlayerError::InvalidDescriptor)?;
+        let (hash, index) = path.split_once('/').ok_or(PlayerError::InvalidDescriptor)?;
+        if hash.len() != 40
+            || !hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || index.is_empty()
+            || !index.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            return Err(PlayerError::InvalidDescriptor);
+        }
+        return Ok(());
     }
     let segments = url
         .path_segments()
@@ -872,7 +887,7 @@ mod tests {
         for value in [
             format!("http://localhost:11471/{hash}/7"),
             format!("http://127.0.0.1:11470/{hash}/7"),
-            format!("http://127.0.0.1:11472/{hash}/7"),
+            format!("http://127.0.0.1:11473/{hash}/7"),
             "https://127.0.0.1:11471/stream".to_string(),
             "http://127.0.0.1:11471/".to_string(),
             format!("http://user:password@127.0.0.1:11471/{hash}/7"),
@@ -883,6 +898,76 @@ mod tests {
                 "accepted {value}"
             );
         }
+    }
+
+    #[test]
+    fn tape_service_accepts_only_direct_file_urls() {
+        for hash in ["a".repeat(40), "A".repeat(40)] {
+            for index in ["0", "7", "9999"] {
+                assert!(
+                    stremio_service_stream_url(&format!("http://127.0.0.1:11472/{hash}/{index}"))
+                        .is_ok()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tape_service_rejects_other_origins_and_non_file_paths() {
+        let hash = "a".repeat(40);
+        for origin in [
+            "http://localhost:11472",
+            "http://[::1]:11472",
+            "http://127.0.0.2:11472",
+            "http://2130706433:11472",
+            "http://127.1:11472",
+            "https://127.0.0.1:11472",
+            "ftp://127.0.0.1:11472",
+            "http://127.0.0.1:11470",
+            "http://127.0.0.1:11473",
+            "http://user:password@127.0.0.1:11472",
+            "http://user@127.0.0.1:11472",
+            "http://@127.0.0.1:11472",
+        ] {
+            assert!(stremio_service_stream_url(&format!("{origin}/{hash}/7")).is_err());
+        }
+        for path in [
+            String::new(),
+            "settings".into(),
+            "proxy/video.mkv".into(),
+            "subtitles.vtt".into(),
+            "stats.json".into(),
+            hash.clone(),
+            format!("{hash}/7/stats.json"),
+            format!("{hash}/7/"),
+            format!("{hash}/"),
+            format!("{hash}/-1"),
+            format!("{hash}/1.0"),
+            format!("{hash}/+1"),
+            format!("{hash}/%37"),
+            format!("{hash}/７"),
+            format!("{hash}/7?tr=synthetic"),
+            format!("{hash}/7#fragment"),
+            format!("{hash}/../settings"),
+            format!("./{hash}/7"),
+            format!("other/../{hash}/7"),
+            format!("%2e/{hash}/7"),
+            format!("other/%2e%2e/{hash}/7"),
+            format!("{hash}/./7"),
+            format!("{hash}\\7"),
+            format!("{}/7", "a".repeat(39)),
+            format!("{}/7", "a".repeat(41)),
+            format!("{}/7", "g".repeat(40)),
+        ] {
+            assert!(stremio_service_stream_url(&format!("http://127.0.0.1:11472/{path}")).is_err());
+        }
+        assert!(
+            stremio_service_stream_url(&format!(
+                "http://127.0.0.1:11472/{hash}/{}",
+                "1".repeat(16_384)
+            ))
+            .is_err()
+        );
     }
 
     #[test]
