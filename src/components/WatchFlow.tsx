@@ -11,7 +11,8 @@ import { useStremioVideo } from '../media/useStremioVideo';
 import { setEpisodeWatched } from '../locadora/localCache';
 import { externalId } from '../domain/content';
 import { markNativePlayerHiccup, readMediaConfiguration } from '../platform/nativeBridge';
-import { filterSources, type ResolutionFilter } from '../media/sourcePicker';
+import { defaultResolutionFilter, filterSources, type ResolutionFilter } from '../media/sourcePicker';
+import { SERIES_QUICK_WATCH_V1 } from '../media/quickWatch';
 import { shouldMarkEpisodeWatched, type BoundedEpisode } from '../media/seriesEpisodes';
 import { Modal } from './Modal';
 import { PlayerIcon } from './PlayerIcon';
@@ -42,8 +43,26 @@ function clockTime(milliseconds: number | null): string {
   return `${Math.floor(seconds / 3600) ? `${Math.floor(seconds / 3600)}:` : ''}${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-function explanation(resolution: MediaResolution | null, locale: Locale): string {
+function explanation(resolution: MediaResolution | null, locale: Locale, episode: boolean): string {
   if (!resolution) return locale === 'pt-BR' ? 'Encontrando uma fonte para sua sessão.' : 'Finding a source for your screening.';
+  if (episode && resolution.quickWatch?.rulesVersion === SERIES_QUICK_WATCH_V1.version) {
+    if (resolution.quickWatch.winner) {
+      return locale === 'pt-BR'
+        ? 'As regras de episódio do Quick Watch selecionaram uma fonte.'
+        : 'Quick Watch episode rules selected a source.';
+    }
+    const seasonPacksOnly = resolution.manualCandidates.length > 0
+      && resolution.manualCandidates.every((candidate) => candidate.sizeBytes !== null
+        && candidate.sizeBytes > SERIES_QUICK_WATCH_V1.maximumBytes);
+    if (seasonPacksOnly) {
+      return locale === 'pt-BR'
+        ? 'Nenhuma fonte adequada para este episódio: somente pacotes de temporada. Selecione uma fonte.'
+        : 'No episode-appropriate source was found: only season packs are available. Select a source.';
+    }
+    return locale === 'pt-BR'
+      ? 'As regras de episódio do Quick Watch não encontraram nenhuma fonte utilizável. Selecione uma fonte.'
+      : 'Quick Watch episode rules found nothing usable. Select a source.';
+  }
   const messages: Record<MediaResolution['status'], { 'pt-BR': string; 'en-US': string }> = {
     resolved: { 'pt-BR': 'Sua fonte está pronta.', 'en-US': 'Your source is ready.' },
     'manual-selection-required': { 'pt-BR': 'Quick Watch não escolheu com segurança. Selecione uma fonte.', 'en-US': 'Quick Watch could not choose safely. Select a source.' },
@@ -62,7 +81,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
     return () => document.documentElement.classList.remove('player-open');
   }, []);
   const [resolution, setResolution] = useState<MediaResolution | null>(null);
-  const [resolutionFilter, setResolutionFilter] = useState<ResolutionFilter>('all');
+  const [resolutionFilter, setResolutionFilter] = useState<ResolutionFilter>(() => defaultResolutionFilter(Boolean(episode)));
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsFocused = useRef(false);
@@ -119,15 +138,15 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
         setResolution(result);
         setLookupState('ready');
         const winner = result.quickWatch?.winner;
-        // D-006: series episodes stay manual. The movie size/seeders ladder is
-        // not valid for an episode, so Quick Watch never autoplays one.
-        if (quickWatchEnabled && !episode && winner && toStremioPlayableStream(winner)) {
+        // D-032 supersedes D-006's episode source-selection half: a selected
+        // episode may autoplay only the series evaluator's playable winner.
+        if (quickWatchEnabled && winner && toStremioPlayableStream(winner)) {
           await play(winner);
         } else if (result.status === 'manual-selection-required' || winner) {
           setManualVisible(true);
         } else if (!['cancelled'].includes(result.status)) {
           setLookupState('failed');
-          setLookupError(explanation(result, locale));
+          setLookupError(explanation(result, locale, Boolean(episode)));
         }
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -141,6 +160,10 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
       if (abortRef.current === controller) abortRef.current = null;
     };
   }, [episode, locale, play, quickWatchEnabled, title, video.addExtraSubtitlesTracks]);
+
+  useEffect(() => {
+    setResolutionFilter(defaultResolutionFilter(Boolean(episode)));
+  }, [episode?.episode, episode?.season]);
 
   const close = useCallback(() => {
     abortRef.current?.abort();
@@ -469,7 +492,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
           {lookupState === 'loading' && <button type="button" onClick={close}>{pt ? 'Cancelar' : 'Cancel'}</button>}
         </div>
         {(playerError || !candidateId && lookupState !== 'loading') && <div className="cinema-feedback" role={playerError ? 'alert' : 'status'}>
-          <p>{playerError ?? explanation(resolution, locale)}</p>
+          <p>{playerError ?? explanation(resolution, locale, Boolean(episode))}</p>
           {playerError && current && <button type="button" onClick={() => void play(current)}>{pt ? 'Tentar novamente' : 'Try again'}</button>}
         </div>}
         <div className="cinema-timeline" style={{ '--played': percent(position), '--buffered': percent(video.state.buffered ?? 0) } as CSSProperties}>

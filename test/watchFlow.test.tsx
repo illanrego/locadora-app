@@ -29,6 +29,25 @@ const resolution: MediaResolution = {
   status: 'resolved', imdbId: null, candidates, manualCandidates: candidates, diagnostics: [],
   quickWatch: { winner: candidates[0], tier: 1, reason: 'selected-preferred-1080p', rulesVersion: 'movie-v1', consideredCandidateIds: candidates.map((candidate) => candidate.stableId), manualCandidateIds: [] },
 };
+const seriesCandidates = [
+  { ...candidates[0], sourceName: 'The Pirate Bay', sizeBytes: 350 * 1024 ** 2, seeders: 40 },
+  { ...candidates[0], stableId: 'series-larger-1080p', sourceName: 'RARBG', sizeBytes: 700 * 1024 ** 2, seeders: 200 },
+  { ...candidates[1], stableId: 'series-720p-fallback', sourceName: 'The Pirate Bay', sizeBytes: 300 * 1024 ** 2, seeders: 500 },
+];
+const seriesResolution: MediaResolution = {
+  ...resolution, candidates: seriesCandidates, manualCandidates: seriesCandidates,
+  quickWatch: { winner: seriesCandidates[0], tier: 1, reason: 'selected-preferred-1080p', rulesVersion: 'series-v1', consideredCandidateIds: [seriesCandidates[0].stableId], manualCandidateIds: seriesCandidates.map((candidate) => candidate.stableId) },
+};
+const seasonPackCandidate = { ...candidates[0], sizeBytes: 3 * 1024 ** 3 };
+const seasonPackResolution: MediaResolution = {
+  status: 'manual-selection-required', imdbId: 'tt0182576', candidates: [seasonPackCandidate], manualCandidates: [seasonPackCandidate], diagnostics: [],
+  quickWatch: { winner: null, tier: null, reason: 'series-requires-manual-selection', rulesVersion: 'series-v1', consideredCandidateIds: [seasonPackCandidate.stableId], manualCandidateIds: [seasonPackCandidate.stableId] },
+};
+const unusableEpisodeCandidate = { ...candidates[0], sizeBytes: null, parseConfidence: 'partial' as const };
+const unusableEpisodeResolution: MediaResolution = {
+  status: 'manual-selection-required', imdbId: 'tt0182576', candidates: [unusableEpisodeCandidate], manualCandidates: [unusableEpisodeCandidate], diagnostics: [],
+  quickWatch: { winner: null, tier: null, reason: 'series-requires-manual-selection', rulesVersion: 'series-v1', consideredCandidateIds: [], manualCandidateIds: [unusableEpisodeCandidate.stableId] },
+};
 const initialState: StremioVideoState = {
   loaded: true, paused: false, buffering: false, time: 10_000, duration: 120_000, buffered: 40_000,
   subtitleLoading: false, subtitleError: null, audioTracks: [], selectedAudioTrackId: null,
@@ -100,6 +119,7 @@ describe('cinema player interactions', () => {
     const user = userEvent.setup();
     mount();
     await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledTimes(1));
+    expect(mocks.controller.load).toHaveBeenCalledWith({ url: 'https://media.example.invalid/first' });
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Sources' }));
     const panel = screen.getByRole('complementary', { name: 'Available sources' });
@@ -114,6 +134,7 @@ describe('cinema player interactions', () => {
     const user = userEvent.setup();
     mount(false, 'pt-BR');
     const filter = await screen.findByRole('combobox', { name: 'Resolução' });
+    expect(filter).toHaveValue('all');
     await user.selectOptions(filter, '720');
     const list = screen.getByRole('list', { name: 'Fontes disponíveis' });
     expect(within(list).getAllByRole('listitem')).toHaveLength(1);
@@ -190,21 +211,55 @@ describe('cinema player interactions', () => {
     expect(screen.getByRole('dialog')).toHaveClass('fullscreen-controls-visible');
   });
 
-  it('never autoplays a series episode, even with Quick Watch enabled', async () => {
-    mount(true, 'en-US', { season: 16, episode: 5, name: 'Family Guy' });
-    await screen.findByRole('list', { name: 'Available sources' });
-    expect(mocks.controller.load).not.toHaveBeenCalled();
+  it('loads the series evaluator winner for an episode when Quick Watch is enabled', async () => {
+    mocks.resolve.mockResolvedValue(seriesResolution);
+    mount(true, 'en-US', { season: 16, episode: 5, name: 'Family Guy' }, seriesTitle);
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledWith({ url: 'https://media.example.invalid/first' }));
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     expect(mocks.resolve).toHaveBeenCalledWith(
       expect.anything(), expect.anything(),
       expect.objectContaining({ episode: { season: 16, episode: 5, name: 'Family Guy' } }),
     );
   });
 
+  it.each([
+    ['en-US', 'Available sources', 'Resolution', 'No episode-appropriate source was found: only season packs are available. Select a source.'],
+    ['pt-BR', 'Fontes disponíveis', 'Resolução', 'Nenhuma fonte adequada para este episódio: somente pacotes de temporada. Selecione uma fonte.'],
+  ] as const)('opens the picker without loading when an episode has only a season pack (%s)', async (locale, listName, filterName, message) => {
+    mocks.resolve.mockResolvedValue(seasonPackResolution);
+    mount(true, locale, { season: 16, episode: 5 }, seriesTitle);
+    await screen.findByRole('list', { name: listName });
+    expect(mocks.controller.load).not.toHaveBeenCalled();
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: filterName })).toHaveValue('1080');
+  });
+
+  it.each([
+    ['en-US', 'Resolution', 'Quick Watch episode rules selected a source.'],
+    ['pt-BR', 'Resolução', 'As regras de episódio do Quick Watch selecionaram uma fonte.'],
+  ] as const)('keeps every returned resolution reachable from an episode picker (%s)', async (locale, filterName, message) => {
+    mocks.resolve.mockResolvedValue(seriesResolution);
+    mount(false, locale, { season: 16, episode: 5 }, seriesTitle);
+    const filter = await screen.findByRole('combobox', { name: filterName });
+    expect(filter).toHaveValue('1080');
+    expect(within(filter).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)).toEqual(['all', '1080', '720']);
+    expect(screen.getByText(message)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['en-US', 'Available sources', 'Quick Watch episode rules found nothing usable. Select a source.'],
+    ['pt-BR', 'Fontes disponíveis', 'As regras de episódio do Quick Watch não encontraram nenhuma fonte utilizável. Selecione uma fonte.'],
+  ] as const)('explains an unusable episode result and keeps the picker as the fallback (%s)', async (locale, listName, message) => {
+    mocks.resolve.mockResolvedValue(unusableEpisodeResolution);
+    mount(true, locale, { season: 16, episode: 5 }, seriesTitle);
+    await screen.findByRole('list', { name: listName });
+    expect(mocks.controller.load).not.toHaveBeenCalled();
+    expect(screen.getByText(message)).toBeInTheDocument();
+  });
+
   it('auto-marks at the threshold only once per episode player session', async () => {
-    const user = userEvent.setup();
     const view = mount(true, 'en-US', { season: 16, episode: 5 }, seriesTitle);
-    const sources = await screen.findByRole('list', { name: 'Available sources' });
-    await user.click(within(sources).getAllByRole('button')[0]);
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalled());
 
     mocks.controller.state = { ...initialState, time: 89_000, duration: 100_000 };
     view.rerender(<WatchFlow {...view.props} />);

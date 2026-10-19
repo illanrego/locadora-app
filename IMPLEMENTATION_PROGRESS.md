@@ -1,12 +1,48 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: series follow-up P1 — source normalization and episode Quick Watch
-Status: pure TypeScript rules implemented and desktop rebuilt; full gate has one obsolete integration assertion; test-only scope clarification and commit pending
+Current milestone: series follow-up P2 — wire episode Quick Watch into playback
+Status: implementation complete; automated gate green; manual/GUI playback unverified
 
 ## Resume checkpoint
 
-2026-10-19 owner priority change — series follow-up P1 (D-032):
+2026-10-19 series follow-up P2 complete (D-032):
+- `WatchFlow` now accepts a playable winner from the series evaluator for a
+  selected episode. This removes the temporary D-006 episode guard exactly as
+  D-032 requires; title-level series streams remain outside this flow.
+- Every no-winner result still opens the manual picker. An all-over-1 GB manual
+  set gets the season-pack explanation; every other series-v1 no-winner result
+  gets the generic unusable-episode explanation. Both messages and the selected
+  episode-source explanation exist in PT-BR and English. Movie copy is unchanged.
+- Episode pickers default to `SERIES_QUICK_WATCH_V1.preferredResolution` (1080p).
+  `Todas/All`, each returned fallback resolution and unknown resolution remain
+  available; films continue to default to all resolutions.
+- Replaced the obsolete never-autoplay assertion with episode-winner playback,
+  pack-only fallback/no-load, bilingual explanation, resolution availability and
+  default coverage. The existing movie winner assertion now verifies the same
+  playable source still loads. The watched-threshold test follows the automatic
+  episode load instead of manually choosing the same source first.
+- First focused run after wiring:
+  `git diff --check && npm test -- test/watchFlow.test.tsx test/sourcePicker.test.ts test/resolutionService.test.ts`
+  exited 1 — Test Files 1 failed | 2 passed (3), Tests 1 failed | 28 passed
+  (29), because the watched-threshold setup still expected the obsolete picker.
+- Final focused run with the completed localized cases: the same command exited
+  0 — Test Files 3 passed (3), Tests 32 passed (32).
+- Full gate: `npm run check` exited 0 — TypeScript passed; Test Files 45 passed
+  (45), Tests 250 passed (250); Vite production build passed with 192 modules
+  and the existing large-chunk advisory.
+- Desktop rebuild: `npm run tauri -- build --no-bundle` exited 0 and refreshed
+  `src-tauri/target/release/wills-locadora-player`.
+- `git diff --check` passed. No browser/GUI, real add-on response, real source,
+  playback or visual validation was performed. No Quick Watch rule, alias,
+  ranking, cache, progress-store, engine, Rust or dependency change was made.
+- **Next task:** implement series follow-up P3 from
+  `docs/SERIES_FOLLOWUP_PLAN.md` §6: in immersive mode remove the duplicated
+  genre and year controls from the open “Buscar fitas” panel while keeping title
+  search there; preserve all three controls and the transactional apply path in
+  2D, and update the mode-specific layout tests in the same commit.
+
+2026-10-19 owner priority change — series follow-up P1 complete (D-032, `d72a539`):
 - Owner prioritizes episode autoplay by its own rules and correct The Pirate Bay
   naming ahead of the prior manual episode-flow acceptance handoff. P1 implements
   only normalization and the pure evaluator from `docs/SERIES_FOLLOWUP_PLAN.md`.
@@ -32,15 +68,11 @@ Status: pure TypeScript rules implemented and desktop rebuilt; full gate has one
   under the sandbox; the same command passed with build permissions (exit 0),
   refreshing `src-tauri/target/release/wills-locadora-player`.
 - No browser/GUI, real add-on response or playback validation performed.
-- **Next task:** resolve the owner's test-only scope clarification for
-  `test/resolutionService.test.ts:40`, then update that obsolete assertion,
-  rerun `npm run check`, and commit P1 once green. Production service and player
-  code stay untouched. The pending assertion expects manual selection for a
-  1080p / 1 GB / 100-seeder series result; D-032 now chooses it in tier 2.
-- After P1 is green and committed, P2 wires the episode evaluator into
-  `WatchFlow`, preserves manual fallback, updates episode source-filter defaults
-  and localized explanations, and replaces the never-autoplay episode test.
-  P1 does not activate autoplay. No P1 commit exists yet.
+- Owner approved the test-only scope clarification for
+  `test/resolutionService.test.ts`; the obsolete assertion was updated without a
+  service change. Final `npm run check` exited 0 — Test Files 45 passed (45),
+  Tests 243 passed (243), with TypeScript and the Vite production build passing.
+  P1 was committed as `d72a539`; P2 above fulfills its playback handoff.
 
 
 2026-10-18 owner follow-ups after Part 3 (D-031):
@@ -1198,7 +1230,7 @@ Do not claim visual or playback acceptance until the user reports it.
   - [ ] Meet all Phase 5 exit criteria.
 - [ ] Phase 6 — Linux packaging
 - [ ] Phase 7 — Windows shell and installer
-- [ ] Phase 8 — series Quick Watch (P1 rules approved by D-032; P2 integration pending)
+- [ ] Phase 8 — series Quick Watch (P1 rules and P2 integration complete; real playback acceptance pending)
 
 ## Working decisions
 
@@ -1541,8 +1573,9 @@ when they need user or real-environment confirmation.
 - Torrent playback uses the bundled compatible engine on port 11471 (D-018).
   Real peer transfer, clean installation and final distribution-license/source
   acceptance remain open; a running external Stremio is not required.
-- Series Quick Watch rules are approved by D-032; playback wiring and acceptance
-  remain pending in P2.
+- Series Quick Watch rules and P2 playback wiring are complete under D-032.
+  Automated coverage is green; real configured-source and playback acceptance
+  remains pending with the owner.
 - Public release licensing must be re-reviewed after the final native/player
   dependency graph is locked.
 - Phase 2 contract/UI tests use synthetic data; a real member login, account

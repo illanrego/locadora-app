@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { filterSources } from '../src/media/sourcePicker';
+import { defaultResolutionFilter, filterSources } from '../src/media/sourcePicker';
 import { normalizeStreams } from '../src/media/normalization';
 
 describe('manual source resolution filter', () => {
+  it('defaults films to every resolution and episodes to the series preference', () => {
+    expect(defaultResolutionFilter(false)).toBe('all');
+    expect(defaultResolutionFilter(true)).toBe('1080');
+  });
+
   it('filters independently of Quick Watch tiers and sorts seeds descending with unknown last', () => {
     const candidates = normalizeStreams([
       { name: 'Low', resolution: 1080, seeders: 2 },
