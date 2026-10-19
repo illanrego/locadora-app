@@ -5,10 +5,10 @@ import type { StreamCandidate } from './types';
 const { MEBIBYTE, GIBIBYTE } = byteUnits;
 
 export interface QuickWatchConfig {
-  version: 'movie-v1';
+  version: 'movie-v1' | 'series-v1';
   preferredResolution: 1080;
   fallbackResolution: 720;
-  minimumSeeders: 10;
+  minimumSeeders: 10 | 20;
   preferredMinimumBytes: number;
   preferredMaximumBytes: number;
   maximumBytes: number;
@@ -24,6 +24,16 @@ export const MOVIE_QUICK_WATCH_V1: QuickWatchConfig = Object.freeze({
   preferredMaximumBytes: 2 * GIBIBYTE,
   maximumBytes: 5 * GIBIBYTE,
   sourceOrder: ['The Pirate Bay', 'RARBG', 'YTS/YIFY', '1337x'],
+});
+
+export const SERIES_QUICK_WATCH_V1: QuickWatchConfig = Object.freeze({
+  ...MOVIE_QUICK_WATCH_V1,
+  version: 'series-v1',
+  minimumSeeders: 20,
+  preferredMinimumBytes: 100 * MEBIBYTE,
+  preferredMaximumBytes: 500 * MEBIBYTE,
+  maximumBytes: GIBIBYTE,
+  sourceOrder: [...MOVIE_QUICK_WATCH_V1.sourceOrder],
 });
 
 export type QuickWatchReason =
@@ -44,11 +54,22 @@ export interface QuickWatchResult {
 }
 
 function sourceRank(candidate: StreamCandidate, config: QuickWatchConfig): number {
+  if (config.version === 'series-v1'
+    && (!candidate.sourceName.trim() || candidate.sourceName.trim().toLowerCase() === 'other')) {
+    return config.sourceOrder.length + 1;
+  }
   const index = config.sourceOrder.indexOf(candidate.sourceName);
   return index === -1 ? config.sourceOrder.length : index;
 }
 
 function compareWithinTier(a: StreamCandidate, b: StreamCandidate, config: QuickWatchConfig): number {
+  // Episode rules put unnamed sources behind every named source in this bucket,
+  // regardless of seeders. Preserve the established movie seeder-first ladder.
+  if (config.version === 'series-v1') {
+    const aUnnamed = sourceRank(a, config) > config.sourceOrder.length;
+    const bUnnamed = sourceRank(b, config) > config.sourceOrder.length;
+    if (aUnnamed !== bUnnamed) return Number(aUnnamed) - Number(bUnnamed);
+  }
   return (b.seeders! - a.seeders!)
     || (sourceRank(a, config) - sourceRank(b, config))
     || (a.sizeBytes! - b.sizeBytes!)
@@ -71,20 +92,11 @@ export function selectQuickWatch(
   candidates: StreamCandidate[],
   config: QuickWatchConfig = MOVIE_QUICK_WATCH_V1,
 ): QuickWatchResult {
+  // A caller passing the movie config must never relax the episode size ceiling.
+  if (contentType === 'series') config = SERIES_QUICK_WATCH_V1;
   const manualCandidateIds = candidates
     .filter((candidate) => candidate.transportType !== 'unsupported')
     .map((candidate) => candidate.stableId);
-
-  if (contentType === 'series') {
-    return {
-      rulesVersion: config.version,
-      winner: null,
-      tier: null,
-      reason: 'series-requires-manual-selection',
-      consideredCandidateIds: [],
-      manualCandidateIds,
-    };
-  }
 
   const normalized = candidates.filter(confident);
   if (!normalized.length) {
@@ -92,7 +104,7 @@ export function selectQuickWatch(
       rulesVersion: config.version,
       winner: null,
       tier: null,
-      reason: 'no-confident-candidates',
+      reason: contentType === 'series' ? 'series-requires-manual-selection' : 'no-confident-candidates',
       consideredCandidateIds: [],
       manualCandidateIds,
     };
@@ -147,7 +159,7 @@ export function selectQuickWatch(
     rulesVersion: config.version,
     winner: null,
     tier: null,
-    reason: 'no-candidate-met-autoplay-rules',
+    reason: contentType === 'series' ? 'series-requires-manual-selection' : 'no-candidate-met-autoplay-rules',
     consideredCandidateIds: normalized.map((candidate) => candidate.stableId),
     manualCandidateIds,
   };

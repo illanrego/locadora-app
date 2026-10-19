@@ -55,18 +55,51 @@ describe('stream normalization', () => {
 
   it.each([
     ['TPB', 'The Pirate Bay'],
+    ['ThePirateBay', 'The Pirate Bay'],
+    ['The-Pirate-Bay', 'The Pirate Bay'],
+    ['piratebay', 'The Pirate Bay'],
     ['The Pirate Bay', 'The Pirate Bay'],
     ['RARBG', 'RARBG'],
     ['YTS', 'YTS/YIFY'],
     ['YIFY', 'YTS/YIFY'],
     ['ytfs', 'YTS/YIFY'],
     ['1337x', '1337x'],
+    ['EZTV', 'EZTV'],
+    ['TorrentGalaxy', 'TorrentGalaxy'],
+    ['Torrent Galaxy', 'TorrentGalaxy'],
+    ['Torrent-Galaxy', 'TorrentGalaxy'],
+    ['LimeTorrents', 'LimeTorrents'],
+    ['Lime Torrents', 'LimeTorrents'],
+    ['Lime-Torrents', 'LimeTorrents'],
   ])('normalizes %s to %s', (input, expected) => {
-    expect(normalizeSourceName('', input)).toBe(expected);
+    for (const spelling of [input, input.toLowerCase(), input.toUpperCase()]) {
+      expect(normalizeSourceName('', `Torrentio 1080p · 🏷️ ${spelling}`)).toBe(expected);
+      expect(normalizeSourceName(spelling, '')).toBe(expected);
+    }
   });
 
   it('does not accept privileged local-file playback', () => {
     const candidate = normalizeStream({ name: '1080p 1 GB Seeders: 20', url: 'file:///home/user/video.mkv' }, 'addon');
     expect(candidate.transportType).toBe('unsupported');
+  });
+});
+
+
+describe('source name fallback', () => {
+  it.each(['UnlistedSource', 'NotThePirateBay', 'TPBextra', 'RARBGish', 'MYTS',
+    'YIFYish', '1337xyz', 'EZTVextra', 'TorrentGalaxyish', 'LimeTorrentsish'])
+  ('preserves %s without matching an alias substring', (name) => {
+    expect(normalizeSourceName(undefined, name)).toBe(name);
+    expect(normalizeSourceName(name, 'Unrecognized display')).toBe(name);
+  });
+
+  it.each(['', '   '])('uses the generic name only for absent text (%j)', (empty) => {
+    expect(normalizeSourceName(empty, empty)).toBe('Other');
+  });
+
+  it('does not mistake a generated display label for a supplied source name', () => {
+    expect(normalizeStream({}, 'synthetic')).toMatchObject({
+      sourceName: 'Other', displayName: 'Source 1',
+    });
   });
 });

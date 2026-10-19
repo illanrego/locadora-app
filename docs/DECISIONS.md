@@ -447,6 +447,38 @@ for episode bookkeeping. Playback position remains unpersisted. D-006 still
 requires manual series source selection; this decision creates no series Quick
 Watch or autoplay rules.
 
+### D-032 — Named sources and episode Quick Watch v1
+
+Accepted 2026-10-19 by owner priority change for series follow-up P1. This
+supersedes the episode source-selection half of D-006: episode candidates may
+be selected automatically under `SERIES_QUICK_WATCH_V1`. D-031 identity and
+progress contracts stay unchanged; playback wiring is the next P2 milestone.
+
+The source alias table recognizes ThePirateBay, The-Pirate-Bay, piratebay, TPB
+and The Pirate Bay case-insensitively, retaining RARBG, YTS/YIFY (including
+D-001's ytfs) and 1337x. EZTV, TorrentGalaxy and LimeTorrents are also named,
+with word boundaries and bounded spacing/hyphen variants. Unknown names retain
+the trimmed structured source, otherwise the supplied display text. Only absent
+source/display text becomes Other; generated display labels are not source
+names. Thus the unknown bucket no longer swallows named sources.
+
+`SERIES_QUICK_WATCH_V1` uses the existing config/result shapes and the movie
+ladder: 1080p at 100–500 MB inclusive, then above 500 MB through 1 GB inclusive,
+then 720p with those same two size buckets. All tiers require 20 seeders.
+MB/GB retain the existing binary byte convention (1024 squared/cubed). Nothing
+above 1 GB qualifies, including when a caller passes a movie config; this
+rejects multi-GB season packs without inspecting pack names. Source order is
+identical to movies: The Pirate Bay, RARBG, YTS/YIFY, 1337x, then other named
+sources. Inside each episode tier/size bucket, unnamed sources come last at
+any seeder count; named candidates use seeders, source rank, smaller size,
+then stable ID. Unnamed candidates remain eligible when no named candidate is
+available in that bucket. The movie comparator and thresholds are unchanged.
+
+Results keep the existing reason vocabulary and expose `rulesVersion:
+'series-v1'`; `series-requires-manual-selection` means no episode-appropriate
+candidate exists, including incomplete or empty input. P2 owns UI explanation
+copy and player integration. This does not implement next-episode behavior.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

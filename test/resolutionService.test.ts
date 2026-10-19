@@ -37,10 +37,22 @@ describe('configured media resolution', () => {
     expect(JSON.stringify(result.diagnostics)).not.toContain('never-show');
   });
 
-  it('requires the manual picker for series regardless of candidate quality', async () => {
+  it('applies the series episode rules instead of always asking for the manual picker', async () => {
     const series = normalizeDiscoveryTitle({ id: 2, imdbId: 'tt0903747', type: 'series', name: 'Series', year: 2008 })!;
     const fetcher: ConfiguredResourceFetcher = async () => ({
       streams: [{ name: '1080p 1 GB Seeders: 100', url: 'https://media.example.invalid/episode.mp4' }],
+    });
+    const result = await resolveTitleMedia(series, addons.slice(0, 1), { fetcher });
+    expect(result.status).toBe('resolved');
+    expect(result.quickWatch?.winner).toMatchObject({ resolution: 1080 });
+    expect(result.quickWatch?.rulesVersion).toBe('series-v1');
+    expect(result.manualCandidates).toHaveLength(1);
+  });
+
+  it('still requires the manual picker when a series offers only a season pack', async () => {
+    const series = normalizeDiscoveryTitle({ id: 2, imdbId: 'tt0903747', type: 'series', name: 'Series', year: 2008 })!;
+    const fetcher: ConfiguredResourceFetcher = async () => ({
+      streams: [{ name: '1080p 3 GB Seeders: 100 Season Pack', url: 'https://media.example.invalid/pack.mp4' }],
     });
     const result = await resolveTitleMedia(series, addons.slice(0, 1), { fetcher });
     expect(result.status).toBe('manual-selection-required');

@@ -11,10 +11,13 @@ const MEBIBYTE = 1024 ** 2;
 const GIBIBYTE = 1024 ** 3;
 
 const SOURCE_ALIASES: Array<[RegExp, string]> = [
-  [/\b(?:the\s+pirate\s+bay|tpb)\b/i, 'The Pirate Bay'],
+  [/\b(?:(?:the[\s-]{0,3})?pirate[\s-]{0,3}bay|tpb)\b/i, 'The Pirate Bay'],
   [/\brarbg\b/i, 'RARBG'],
   [/\b(?:yts|yify|ytfs)\b/i, 'YTS/YIFY'],
   [/\b1337x\b/i, '1337x'],
+  [/\beztv\b/i, 'EZTV'],
+  [/\btorrent[\s-]{0,3}galaxy\b/i, 'TorrentGalaxy'],
+  [/\blime[\s-]{0,3}torrents\b/i, 'LimeTorrents'],
 ];
 
 function text(value: unknown): string {
@@ -65,7 +68,10 @@ export function normalizeSourceName(structured: unknown, display: string): strin
   for (const [pattern, canonical] of SOURCE_ALIASES) {
     if (pattern.test(combined)) return canonical;
   }
-  return text(structured) || 'Other';
+  // Preserve an unrecognized add-on name/display instead of calling it Other:
+  // that fallback used to swallow named sources such as Torrentio's ThePirateBay.
+  // Other is reserved for input with no source or display text at all.
+  return text(structured) || text(display) || 'Other';
 }
 
 function normalizePlaybackDescriptor(raw: RawAddonStream): {
@@ -129,13 +135,14 @@ function normalizePlaybackDescriptor(raw: RawAddonStream): {
 }
 
 export function normalizeStream(raw: RawAddonStream, addonId: string, index = 0): StreamCandidate {
-  const displayName = [text(raw.name), text(raw.title), text(raw.description), text(raw.behaviorHints?.filename)]
+  const sourceDisplay = [text(raw.name), text(raw.title), text(raw.description), text(raw.behaviorHints?.filename)]
     .filter(Boolean)
-    .join(' · ') || `Source ${index + 1}`;
+    .join(' · ');
+  const displayName = sourceDisplay || `Source ${index + 1}`;
   const resolution = parseResolution(raw.resolution, displayName);
   const sizeBytes = parseSize(raw.behaviorHints?.videoSize, displayName);
   const seeders = parseSeeders(raw.seeders, displayName);
-  const sourceName = normalizeSourceName(raw.source, displayName);
+  const sourceName = normalizeSourceName(raw.source, sourceDisplay);
   const playback = normalizePlaybackDescriptor(raw);
   const rejectionReasons: string[] = [];
 

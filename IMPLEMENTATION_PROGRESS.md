@@ -1,10 +1,47 @@
 # Implementation progress
 
-Last updated: 2026-10-18
-Current milestone: series episode tracking, closed out with owner-facing fixes
-Status: episode lists, playback and local progress complete; metadata default now applies to any configuration that cannot answer `meta`; checks green
+Last updated: 2026-10-19
+Current milestone: series follow-up P1 — source normalization and episode Quick Watch
+Status: pure TypeScript rules implemented and desktop rebuilt; full gate has one obsolete integration assertion; test-only scope clarification and commit pending
 
 ## Resume checkpoint
+
+2026-10-19 owner priority change — series follow-up P1 (D-032):
+- Owner prioritizes episode autoplay by its own rules and correct The Pirate Bay
+  naming ahead of the prior manual episode-flow acceptance handoff. P1 implements
+  only normalization and the pure evaluator from `docs/SERIES_FOLLOWUP_PLAN.md`.
+- The starting tree had ` M docs/SERIES_FOLLOWUP_PLAN.md`; that owner edit remains
+  untouched by P1 and was committed separately as `1187fa8` during this run.
+  It is excluded from this milestone commit. Only the desktop repo is
+  changed. No player, UI, resolution service, cache, episode parser or Rust edits.
+- Added bounded TPB variants plus EZTV, TorrentGalaxy and LimeTorrents. Unknown
+  structured source/display text is preserved; only empty input uses Other.
+- `SERIES_QUICK_WATCH_V1` mirrors the movie ladder using binary 100–500 MB,
+  >500 MB–1 GB, 20 seeders and the same source order. Named sources beat unnamed
+  ones within an episode tier/size bucket; movie ranking stays unchanged. Result
+  reasons retain their shape and `rulesVersion` identifies series-v1. See D-032
+  for all implementation choices and how it supersedes D-006's episode rule.
+- Baseline: `npm test` exit 0 — Test Files 45 passed (45), Tests 187 passed (187).
+- Focused: `npm test -- test/normalization.test.ts test/quickWatch.test.ts`
+  exit 0 — Test Files 2 passed (2), Tests 78 passed (78).
+- First full gate: `npm run check` exit 1 — Test Files 1 failed | 44 passed
+  (45), Tests 1 failed | 241 passed (242). The existing resolution-service test
+  expects unconditional series manual selection for a qualifying 1 GB episode;
+  clarification is pending to update only that test, without service changes.
+- `npm run tauri -- build --no-bundle` initially failed at `spawnSync tar EPERM`
+  under the sandbox; the same command passed with build permissions (exit 0),
+  refreshing `src-tauri/target/release/wills-locadora-player`.
+- No browser/GUI, real add-on response or playback validation performed.
+- **Next task:** resolve the owner's test-only scope clarification for
+  `test/resolutionService.test.ts:40`, then update that obsolete assertion,
+  rerun `npm run check`, and commit P1 once green. Production service and player
+  code stay untouched. The pending assertion expects manual selection for a
+  1080p / 1 GB / 100-seeder series result; D-032 now chooses it in tier 2.
+- After P1 is green and committed, P2 wires the episode evaluator into
+  `WatchFlow`, preserves manual fallback, updates episode source-filter defaults
+  and localized explanations, and replaces the never-autoplay episode test.
+  P1 does not activate autoplay. No P1 commit exists yet.
+
 
 2026-10-18 owner follow-ups after Part 3 (D-031):
 - Owner asked for the two fixes that stood between the milestone and using it.
@@ -1161,7 +1198,7 @@ Do not claim visual or playback acceptance until the user reports it.
   - [ ] Meet all Phase 5 exit criteria.
 - [ ] Phase 6 — Linux packaging
 - [ ] Phase 7 — Windows shell and installer
-- [ ] Phase 8 — series Quick Watch (blocked on product rules)
+- [ ] Phase 8 — series Quick Watch (P1 rules approved by D-032; P2 integration pending)
 
 ## Working decisions
 
@@ -1504,7 +1541,8 @@ when they need user or real-environment confirmation.
 - Torrent playback uses the bundled compatible engine on port 11471 (D-018).
   Real peer transfer, clean installation and final distribution-license/source
   acceptance remain open; a running external Stremio is not required.
-- Series Quick Watch rules are deliberately undefined.
+- Series Quick Watch rules are approved by D-032; playback wiring and acceptance
+  remain pending in P2.
 - Public release licensing must be re-reviewed after the final native/player
   dependency graph is locked.
 - Phase 2 contract/UI tests use synthetic data; a real member login, account
