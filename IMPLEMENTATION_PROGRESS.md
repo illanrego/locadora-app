@@ -1,10 +1,24 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: D-033 local resume positions
-Status: implementation complete; JS gate green; manual/GUI playback check unverified
+Current milestone: D-034 rented tapes P1 — native tape surface
+Status: implementation in progress; native and JS checks pending
 
 ## Resume checkpoint
+
+2026-10-19 owner priority change — rented tapes P1:
+- Owner: “Start the rented-tape milestone (design is settled in the plan).”
+  D-034 records the ten settled decisions and weak-connection constraint.
+  This takes priority over the previous owner-side resume/visual acceptance.
+- Native surface only: independent lazy tape engine at 11472, durable private
+  store, separate bounded request bridge, and atomic validated manifest I/O.
+  Engine A's implementation, frontend, player policy and existing tests stay
+  unchanged. No new dependency, push, GUI automation or playback claims.
+- Pre-existing work: ` M docs/RENTED_TAPE_DOWNLOAD_AND_SEEDING_PLAN.md`;
+  preserve it without staging or editing it.
+- **Next task:** finish P1 native implementation and run the required serial
+  gates plus the teardown mutation check, then commit the milestone once.
+
 
 2026-10-19 D-033 local resume positions complete:
 - D-033 records the owner's approval and supersedes D-005's disabled resume

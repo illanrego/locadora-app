@@ -511,6 +511,45 @@ has advanced at least 30 seconds beyond the resumed point. Merely reopening
 near the watched threshold is never enough. Resume state remains independent
 from rentals, returns, reviews, collections and donations.
 
+### D-034 — Rented tapes and an independent persistent engine
+
+Accepted 2026-10-19 by the owner's Rental tapes P1 brief: “Start the
+rented-tape milestone (design is settled in the plan).”
+`docs/RENTED_TAPE_DOWNLOAD_AND_SEEDING_PLAN.md` §§18/20 govern delivery:
+
+1. Finished-copy playback uses Option A, the tape engine's HTTP URL.
+2. The peer port is pinned, default 6881, configurable in settings.
+3. Engine disk budget is unlimited; app admission uses the smaller of the
+   user's GB ceiling and free space minus a 2 GiB reserve.
+4. Default upload cap is about 40% of measured upstream; unlimited is opt-in.
+   P4 still owns the measurement mechanism.
+5. Seed ratio is unlimited while rented, with an optional cap.
+6. Public add-ons are bundled for every user as bare manifests only.
+7. Seeding runs only while Locadora is open.
+8. Rental disk ceiling defaults to 6 GB, configurable; 0 means no ceiling.
+9. Tape count follows the rental limit by default; an optional separate cap
+   cannot exceed that limit.
+10. A master switch disables downloading and keeping tapes; default is on.
+
+The standing weak-connection constraint (§2.1) is binding: target a modest
+laptop and a weak-to-medium Brazilian residential connection. Schedule one
+substantial network activity at a time, playback > queue download > seeding;
+no concurrent queue, prefetch, background catalogue refresh or eager per-title
+metadata during streaming. Upload allowance is a fraction of available upstream;
+small contributions are successful. Progress and wait estimates must reflect
+actual throughput.
+
+P1 supplies only the native surface. Engine A keeps its port 11471, RAM cache,
+30-second reclaim, ephemeral session and teardown unchanged, including D-030
+buffering. Engine B uses the same pinned D-018 artifact in a separate process
+on fixed port 11472, starts only on explicit `tape_engine_ensure`, stores pieces
+in private app data and never deletes that store on shutdown. Only its bounded,
+independently allowlisted request bridge can request per-tape removal. Startup
+sets unlimited disk cache and seeding on through native-only `/settings`.
+The private v1 manifest is app-owned, atomically replaced, and never logged.
+Player policy, queue/manifest lifecycle logic, UI and seeding scheduling remain
+later parts; playback never mutates rentals or returns.
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

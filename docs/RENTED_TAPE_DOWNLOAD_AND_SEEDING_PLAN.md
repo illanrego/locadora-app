@@ -649,7 +649,7 @@ owner's rule: `gpt-6-astra` high only where a mistake is expensive, otherwise
 
 | part | scope | tier |
 |---|---|---|
-| P1 | tape engine supervisor: role split, 11472, durable store, lazy start, never wipe on drop, fail-closed reservation, no-wipe test | astra high |
+| P1 | **native tape surface**: engine role split (11472, durable store, lazy start, never wipe on drop, fail-closed), the allowlisted `tape_engine_request` bridge, and the `tape_store_*` file I/O — so P2 can be pure TypeScript | astra high |
 | P2 | manifest + admission + queue: descriptor persistence, GB ceiling, min(cap, free−2 GiB), drain-to-complete, progress, retry-once, cancellation | sol high |
 | P3 | playback switch: 11472 in the player predicate, ready→local copy, otherwise RAM path untouched, rejection tests kept | sol high |
 | P4 | seeding window and caps: `seedingEnabled` two-state machine, queue pause during a RAM stream, upload share, ratio, pinned peer port, settings surface | sol high |
