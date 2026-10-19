@@ -9,6 +9,7 @@ import {
   readAllSeriesProgress,
   readSeriesProgress,
   setEpisodeWatched,
+  setSeasonWatched,
   writeAllSeriesProgress,
   writeSeriesProgress,
 } from '../src/locadora/localCache';
@@ -66,6 +67,44 @@ describe('local series progress', () => {
   it('clears progress through the canonical local-cache clear path', async () => {
     await setEpisodeWatched(seriesId, { season: 1, episode: 1 }, true);
     await clearLocalCache();
+    expect(await readSeriesProgress(seriesId)).toBeNull();
+  });
+
+  it('writes one record for a whole season and removes the same records on unmark', async () => {
+    const first = new Date('2026-10-19T12:00:00.000Z');
+    const second = new Date('2026-10-19T13:00:00.000Z');
+    const seasonTwo = [1, 2, 3].map((episode) => ({ season: 2, episode }));
+    await setEpisodeWatched(seriesId, { season: 1, episode: 9 }, true, first);
+
+    const marked = await setSeasonWatched(seriesId, 2, seasonTwo, true, second);
+    expect(marked).toEqual({
+      seriesId,
+      season: 2,
+      episode: 3,
+      watched: {
+        '2:1': '2026-10-19T13:00:00.000Z',
+        '2:2': '2026-10-19T13:00:00.000Z',
+        '2:3': '2026-10-19T13:00:00.000Z',
+        '1:9': '2026-10-19T12:00:00.000Z',
+      },
+      updatedAt: '2026-10-19T13:00:00.000Z',
+    });
+    // One stored record, not one per episode.
+    expect(await readAllSeriesProgress()).toHaveLength(1);
+    expect(await readSeriesProgress(seriesId)).toEqual(marked);
+
+    const unmarked = await setSeasonWatched(seriesId, 2, [...seasonTwo].reverse(), false, second);
+    expect(Object.keys(unmarked?.watched ?? {})).toEqual(['1:9']);
+    expect(unmarked).toMatchObject({ season: 2, episode: 1 });
+    expect(await readAllSeriesProgress()).toHaveLength(1);
+  });
+
+  it('refuses a season write that mixes seasons or has no episodes', async () => {
+    await expect(setSeasonWatched(seriesId, 2, [{ season: 1, episode: 1 }], true)).resolves.toBeNull();
+    await expect(setSeasonWatched(seriesId, 2, [], true)).resolves.toBeNull();
+    // Season 0 (specials) is outside the progress key grammar.
+    await expect(setSeasonWatched(seriesId, 0, [{ season: 0, episode: 1 }], true)).resolves.toBeNull();
+    await expect(setSeasonWatched('not-an-id', 2, [{ season: 2, episode: 1 }], true)).resolves.toBeNull();
     expect(await readSeriesProgress(seriesId)).toBeNull();
   });
 });

@@ -13,9 +13,9 @@ import { PersonView } from './components/PersonView';
 import { TitleSearch } from './components/TitleSearch';
 import { readMemberSession, readNativeCapabilities, updateMemberCollection, type NativeCapabilities } from './platform/nativeBridge';
 import { readQuickWatchEnabled, writeQuickWatchEnabled } from './media/quickWatchPreference';
-import type { BoundedEpisode } from './media/seriesEpisodes';
 import { readImmersiveEnabled, writeImmersiveEnabled } from './locadora/immersive';
-import { readAllSeriesProgress } from './locadora/localCache';
+import { readAllSeriesProgress, readLocalSeriesEpisodes } from './locadora/localCache';
+import { episodeLabel, nextEpisode, type BoundedEpisode } from './media/seriesEpisodes';
 import { hasLocalSavedTitle, readLocalSavedCollections, setLocalSavedTitle, writeLocalSavedCollections, type SavedCollection } from './member/localSaved';
 import './styles.css';
 
@@ -111,6 +111,9 @@ export default function App() {
   const visiblePages = pages;
   const visibleTitles = useMemo(() => visiblePages.flatMap((page) => page.titles), [visiblePages]);
   const [seriesProgress, setSeriesProgress] = useState<ReadonlyMap<string, number>>(() => new Map());
+  // The next-episode label per series, from the cached episode list only. It is
+  // a read of the local cache, never a fetch: no list means no label.
+  const [seriesNextEpisode, setSeriesNextEpisode] = useState<ReadonlyMap<string, string>>(() => new Map());
   // The rendered series identities: one key per shelf, so a shelf of N cards
   // still performs a single local progress read instead of one read per card.
   const visibleSeriesKey = useMemo(() => visibleTitles
@@ -121,16 +124,39 @@ export default function App() {
 
   useEffect(() => {
     if (!visibleSeriesKey) return;
+    const renderedSeriesIds = new Set(visibleSeriesKey.split('|'));
     let current = true;
-    void readAllSeriesProgress().then((records) => {
-      if (!current) return;
-      setSeriesProgress((previous) => {
-        const next = new Map(records.map((record) => [record.seriesId, Object.keys(record.watched).length]));
-        const unchanged = next.size === previous.size
-          && [...next].every(([seriesId, count]) => previous.get(seriesId) === count);
-        return unchanged ? previous : next;
-      });
-    }).catch(() => { /* Local progress is optional; the shelf renders without its marker. */ });
+    void (async () => {
+      try {
+        const records = await readAllSeriesProgress();
+        if (!current) return;
+        setSeriesProgress((previous) => {
+          const next = new Map(records.map((record) => [record.seriesId, Object.keys(record.watched).length]));
+          const unchanged = next.size === previous.size
+            && [...next].every(([seriesId, count]) => previous.get(seriesId) === count);
+          return unchanged ? previous : next;
+        });
+        const labels = new Map<string, string>();
+        for (const record of records.filter((entry) => renderedSeriesIds.has(entry.seriesId))) {
+          const episodes = await readLocalSeriesEpisodes(record.seriesId).catch(() => null);
+          if (!current) return;
+          if (!episodes) continue;
+          const episode = nextEpisode(
+            episodes,
+            new Set(Object.keys(record.watched)),
+            { season: record.season, episode: record.episode },
+          );
+          if (!episode) continue;
+          labels.set(record.seriesId, episodeLabel(episode));
+        }
+        if (!current) return;
+        setSeriesNextEpisode((previous) => {
+          const unchanged = previous.size === labels.size
+            && [...labels].every(([seriesId, label]) => previous.get(seriesId) === label);
+          return unchanged ? previous : labels;
+        });
+      } catch { /* Local progress and its cached episode list are optional; the shelf renders without them. */ }
+    })();
     return () => { current = false; };
   }, [visibleSeriesKey]);
 
@@ -138,6 +164,12 @@ export default function App() {
     if (title.identity.type !== 'series') return 0;
     const imdbId = externalId(title.identity, 'imdb');
     return imdbId ? seriesProgress.get(imdbId) ?? 0 : 0;
+  };
+
+  const nextEpisodeLabel = (title: DiscoveryTitle): string | undefined => {
+    if (title.identity.type !== 'series') return undefined;
+    const imdbId = externalId(title.identity, 'imdb');
+    return imdbId ? seriesNextEpisode.get(imdbId) : undefined;
   };
 
   const memberKnownTitles = useMemo(() => [...new Map([
@@ -458,7 +490,7 @@ export default function App() {
                   </span>
                   <div className="shelf">
                     {page.titles.map((title) => (
-                      <VhsTape key={title.identity.canonicalKey} title={title} accent={genre.accent} locale={locale} watchedCount={watchedEpisodes(title)} onInspect={inspectTitle} />
+                      <VhsTape key={title.identity.canonicalKey} title={title} accent={genre.accent} locale={locale} watchedCount={watchedEpisodes(title)} nextEpisodeLabel={nextEpisodeLabel(title)} onInspect={inspectTitle} />
                     ))}
                   </div>
                 </section>

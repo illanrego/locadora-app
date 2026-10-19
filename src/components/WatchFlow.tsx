@@ -8,22 +8,33 @@ import { resolveTitleSubtitles, type StremioExtraSubtitleTrack } from '../media/
 import { normalizeSubtitleLanguage } from '../media/subtitles';
 import { readSubtitleDelay, writeSubtitleDelay, videoDelayIdentity } from '../media/subtitleDelayStore';
 import { useStremioVideo } from '../media/useStremioVideo';
-import { setEpisodeWatched } from '../locadora/localCache';
+import { readLocalSeriesEpisodes, readSeriesProgress, setEpisodeWatched } from '../locadora/localCache';
 import { externalId } from '../domain/content';
 import { markNativePlayerHiccup, readMediaConfiguration } from '../platform/nativeBridge';
 import { defaultResolutionFilter, filterSources, type ResolutionFilter } from '../media/sourcePicker';
 import { SERIES_QUICK_WATCH_V1 } from '../media/quickWatch';
-import { shouldMarkEpisodeWatched, type BoundedEpisode } from '../media/seriesEpisodes';
+import {
+  episodeLabel,
+  nextEpisode,
+  shouldMarkEpisodeWatched,
+  type BoundedEpisode,
+} from '../media/seriesEpisodes';
 import { Modal } from './Modal';
 import { PlayerIcon } from './PlayerIcon';
+
+type SelectedEpisode = Pick<BoundedEpisode, 'season' | 'episode' | 'name'>;
 
 interface WatchFlowProps {
   title: DiscoveryTitle;
   locale: Locale;
   mpvVersion: string | null;
   quickWatchEnabled: boolean;
-  episode?: Pick<BoundedEpisode, 'season' | 'episode' | 'name'> | null;
+  episode?: SelectedEpisode | null;
   onClose: () => void;
+}
+
+function episodeKey(episode: Pick<BoundedEpisode, 'season' | 'episode'>): string {
+  return `${episode.season}:${episode.episode}`;
 }
 
 function formatBytes(bytes: number | null, locale: Locale): string {
@@ -81,6 +92,10 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
     return () => document.documentElement.classList.remove('player-open');
   }, []);
   const [resolution, setResolution] = useState<MediaResolution | null>(null);
+  // The episode the player is actually on. It follows the prop and moves when
+  // the next-episode offer is taken, so an offer never needs a parent round-trip.
+  const [activeEpisode, setActiveEpisode] = useState<SelectedEpisode | null>(episode);
+  const [nextEpisodeOffer, setNextEpisodeOffer] = useState<BoundedEpisode | null>(null);
   const [resolutionFilter, setResolutionFilter] = useState<ResolutionFilter>(() => defaultResolutionFilter(Boolean(episode)));
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -99,6 +114,17 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
   const tracksButtonRef = useRef<HTMLButtonElement>(null);
   const sourcesButtonRef = useRef<HTMLButtonElement>(null);
   const autoMarkedEpisodes = useRef(new Set<string>());
+  // Which episode the loaded source belongs to, and which episodes have already
+  // been offered: the offer is derived state, never an automatic action.
+  const loadedEpisode = useRef<string | null>(null);
+  const offeredEpisodes = useRef(new Set<string>());
+
+  useEffect(() => {
+    setActiveEpisode((current) => (current?.season === episode?.season
+      && current?.episode === episode?.episode
+      && current?.name === episode?.name ? current : episode));
+    setNextEpisodeOffer(null);
+  }, [episode]);
 
   const play = useCallback(async (candidate: StreamCandidate) => {
     const stream = toStremioPlayableStream(candidate);
@@ -112,12 +138,13 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
     setLookupError(null);
     try {
       await video.load(stream);
+      loadedEpisode.current = activeEpisode ? episodeKey(activeEpisode) : null;
       video.addExtraSubtitlesTracks(externalSubtitlesRef.current);
     } catch (error) {
       setLookupError(error instanceof Error ? error.message : String(error));
       setManualVisible(true);
     }
-  }, [video.addExtraSubtitlesTracks, video.load]);
+  }, [activeEpisode, video.addExtraSubtitlesTracks, video.load]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -127,13 +154,13 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
         const addons = await readMediaConfiguration();
         if (controller.signal.aborted) return;
         setSubtitlesLoading(true);
-        void resolveTitleSubtitles(title, addons, { signal: controller.signal, episode }).then((subtitles) => {
+        void resolveTitleSubtitles(title, addons, { signal: controller.signal, episode: activeEpisode }).then((subtitles) => {
           if (controller.signal.aborted) return;
           externalSubtitlesRef.current = subtitles;
           video.addExtraSubtitlesTracks(subtitles);
           setSubtitlesLoading(false);
         }).catch(() => { if (!controller.signal.aborted) setSubtitlesLoading(false); });
-        const result = await resolveTitleMedia(title, addons, { signal: controller.signal, episode });
+        const result = await resolveTitleMedia(title, addons, { signal: controller.signal, episode: activeEpisode });
         if (controller.signal.aborted) return;
         setResolution(result);
         setLookupState('ready');
@@ -146,7 +173,7 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
           setManualVisible(true);
         } else if (!['cancelled'].includes(result.status)) {
           setLookupState('failed');
-          setLookupError(explanation(result, locale, Boolean(episode)));
+          setLookupError(explanation(result, locale, Boolean(activeEpisode)));
         }
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -159,11 +186,11 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
       controller.abort();
       if (abortRef.current === controller) abortRef.current = null;
     };
-  }, [episode, locale, play, quickWatchEnabled, title, video.addExtraSubtitlesTracks]);
+  }, [activeEpisode, locale, play, quickWatchEnabled, title, video.addExtraSubtitlesTracks]);
 
   useEffect(() => {
-    setResolutionFilter(defaultResolutionFilter(Boolean(episode)));
-  }, [episode?.episode, episode?.season]);
+    setResolutionFilter(defaultResolutionFilter(Boolean(activeEpisode)));
+  }, [activeEpisode]);
 
   const close = useCallback(() => {
     abortRef.current?.abort();
@@ -265,14 +292,65 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
     if (video.state.ended && video.state.fullscreen) video.setFullscreen(false);
   }, [video.setFullscreen, video.state.ended, video.state.fullscreen]);
   useEffect(() => {
-    if (!candidateId || !episode || !shouldMarkEpisodeWatched(video.state)) return;
+    if (!candidateId || !activeEpisode || !shouldMarkEpisodeWatched(video.state)) return;
     const seriesId = externalId(title.identity, 'imdb');
     if (!seriesId) return;
-    const key = `${episode.season}:${episode.episode}`;
+    const key = episodeKey(activeEpisode);
     if (autoMarkedEpisodes.current.has(key)) return;
     autoMarkedEpisodes.current.add(key);
-    void setEpisodeWatched(seriesId, episode, true);
-  }, [candidateId, episode, title.identity, video.state]);
+    void setEpisodeWatched(seriesId, activeEpisode, true);
+  }, [candidateId, activeEpisode, title.identity, video.state]);
+
+  // A finished episode offers the next one. Nothing is resolved, downloaded or
+  // started here: the offer is a label until the user takes it, and it appears
+  // only for the episode whose source actually ended and only when the cached
+  // episode list can name a next episode. No fetch happens inside the player.
+  useEffect(() => {
+    if (!activeEpisode || !video.state.ended) return;
+    const key = episodeKey(activeEpisode);
+    if (loadedEpisode.current !== key || offeredEpisodes.current.has(key)) return;
+    const seriesId = externalId(title.identity, 'imdb');
+    if (!seriesId) return;
+    offeredEpisodes.current.add(key);
+    let current = true;
+    void (async () => {
+      try {
+        const [episodes, progress] = await Promise.all([
+          readLocalSeriesEpisodes(seriesId),
+          readSeriesProgress(seriesId),
+        ]);
+        if (!current) return;
+        if (!episodes) {
+          setNextEpisodeOffer(null);
+          return;
+        }
+        const watched = new Set(Object.keys(progress?.watched ?? {}));
+        watched.add(key);
+        setNextEpisodeOffer(nextEpisode(episodes, watched, activeEpisode));
+      } catch {
+        if (current) setNextEpisodeOffer(null);
+      }
+    })();
+    return () => { current = false; };
+  }, [activeEpisode, title.identity, video.state.ended]);
+
+  const takeNextEpisode = useCallback(() => {
+    if (!nextEpisodeOffer) return;
+    const next: SelectedEpisode = {
+      season: nextEpisodeOffer.season,
+      episode: nextEpisodeOffer.episode,
+    };
+    if (nextEpisodeOffer.name) next.name = nextEpisodeOffer.name;
+    setNextEpisodeOffer(null);
+    // A new episode is a new video identity: the old source and its subtitle
+    // delay do not carry over, and the normal resolution path runs again.
+    setActiveEpisode(next);
+    setCandidateId(null);
+    setResolution(null);
+    setLookupError(null);
+    setManualVisible(false);
+    setLookupState('loading');
+  }, [nextEpisodeOffer]);
   const playerError = video.state.error ?? lookupError;
   const phase = lookupState === 'loading'
     ? 'loading-streams'
@@ -491,8 +569,20 @@ export function WatchFlow({ title, locale, mpvVersion, quickWatchEnabled, episod
           <span className="cinema-buffer">{active && !playerError && `${Math.floor(bufferedAhead / 1000)}s ${pt ? 'em buffer' : 'buffered'}`}</span>
           {lookupState === 'loading' && <button type="button" onClick={close}>{pt ? 'Cancelar' : 'Cancel'}</button>}
         </div>
+        {nextEpisodeOffer && <div className="cinema-next-episode" role="group"
+          aria-label={pt ? 'Próximo episódio' : 'Next episode'}>
+          <button type="button" className="cinema-panel-button" onClick={takeNextEpisode}>
+            <PlayerIcon name="play" />
+            <span>{pt ? 'Próximo' : 'Next'} {episodeLabel(nextEpisodeOffer)}</span>
+          </button>
+          <button type="button" className="cinema-icon-button"
+            aria-label={pt ? 'Dispensar próximo episódio' : 'Dismiss next episode'}
+            title={pt ? 'Dispensar' : 'Dismiss'} onClick={() => setNextEpisodeOffer(null)}>
+            <PlayerIcon name="close" />
+          </button>
+        </div>}
         {(playerError || !candidateId && lookupState !== 'loading') && <div className="cinema-feedback" role={playerError ? 'alert' : 'status'}>
-          <p>{playerError ?? explanation(resolution, locale, Boolean(episode))}</p>
+          <p>{playerError ?? explanation(resolution, locale, Boolean(activeEpisode))}</p>
           {playerError && current && <button type="button" onClick={() => void play(current)}>{pt ? 'Tentar novamente' : 'Try again'}</button>}
         </div>}
         <div className="cinema-timeline" style={{ '--played': percent(position), '--buffered': percent(video.state.buffered ?? 0) } as CSSProperties}>

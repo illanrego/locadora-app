@@ -11,12 +11,17 @@ import { normalizeStreams } from '../src/media/normalization';
 const mocks = vi.hoisted(() => ({
   controller: null as unknown as StremioVideoController,
   resolve: vi.fn(), subtitles: vi.fn(), configuration: vi.fn(), setWatched: vi.fn(),
+  readEpisodes: vi.fn(), readProgress: vi.fn(),
 }));
 vi.mock('../src/media/useStremioVideo', () => ({ useStremioVideo: () => mocks.controller }));
 vi.mock('../src/media/resolutionService', () => ({ resolveTitleMedia: mocks.resolve }));
 vi.mock('../src/media/subtitleResolution', () => ({ resolveTitleSubtitles: mocks.subtitles }));
 vi.mock('../src/platform/nativeBridge', () => ({ readMediaConfiguration: mocks.configuration }));
-vi.mock('../src/locadora/localCache', () => ({ setEpisodeWatched: mocks.setWatched }));
+vi.mock('../src/locadora/localCache', () => ({
+  setEpisodeWatched: mocks.setWatched,
+  readLocalSeriesEpisodes: mocks.readEpisodes,
+  readSeriesProgress: mocks.readProgress,
+}));
 import { WatchFlow } from '../src/components/WatchFlow';
 
 const title = normalizeDiscoveryTitle({ id: 1, type: 'movie', name: 'Synthetic screening', year: 2020 })!;
@@ -64,6 +69,8 @@ beforeEach(() => {
   mocks.configuration.mockResolvedValue([]);
   mocks.resolve.mockResolvedValue(resolution);
   mocks.subtitles.mockResolvedValue([]);
+  mocks.readEpisodes.mockResolvedValue(null);
+  mocks.readProgress.mockResolvedValue(null);
   mocks.controller = {
     viewportRef: { current: null }, containerRef: { current: null }, state: { ...initialState }, load: vi.fn().mockResolvedValue(undefined),
     unload: vi.fn(), setPaused: vi.fn(), seekRelative: vi.fn(), seekTo: vi.fn(), setFullscreen: vi.fn(),
@@ -271,6 +278,107 @@ describe('cinema player interactions', () => {
     mocks.controller.state = { ...initialState, time: 99_000, duration: 100_000 };
     view.rerender(<WatchFlow {...view.props} />);
     expect(mocks.setWatched).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers the next episode when one ends, and never starts it on its own', async () => {
+    const view = mount(true, 'en-US', { season: 16, episode: 5, name: 'Family Guy' }, seriesTitle);
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledTimes(1));
+    mocks.readEpisodes.mockResolvedValue({ seasons: [
+      { season: 16, episodes: [
+        { season: 16, episode: 5, name: 'Family Guy' },
+        { season: 16, episode: 6, name: 'Next one' },
+      ] },
+    ] });
+    mocks.readProgress.mockResolvedValue({
+      seriesId: 'tt0182576', season: 16, episode: 5,
+      watched: { '16:5': '2026-10-19T00:00:00.000Z' }, updatedAt: '2026-10-19T00:00:00.000Z',
+    });
+
+    mocks.controller.state = { ...initialState, ended: true };
+    view.rerender(<WatchFlow {...view.props} />);
+
+    const offer = await screen.findByRole('button', { name: 'Next T16E06' });
+    expect(mocks.controller.load).toHaveBeenCalledTimes(1);
+    expect(mocks.resolve).toHaveBeenCalledTimes(1);
+    expect(offer.closest('[role="group"]')).toHaveAccessibleName('Next episode');
+  });
+
+  it('resolves and plays the next episode only after the offer is taken', async () => {
+    mocks.resolve.mockResolvedValue(seriesResolution);
+    const view = mount(true, 'en-US', { season: 16, episode: 5, name: 'Family Guy' }, seriesTitle);
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledTimes(1));
+    mocks.readEpisodes.mockResolvedValue({ seasons: [
+      { season: 16, episodes: [
+        { season: 16, episode: 5, name: 'Family Guy' },
+        { season: 16, episode: 6, name: 'Next one' },
+      ] },
+    ] });
+    mocks.readProgress.mockResolvedValue(null);
+    mocks.controller.state = { ...initialState, ended: true };
+    view.rerender(<WatchFlow {...view.props} />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Next T16E06' }));
+
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledTimes(2));
+    expect(mocks.resolve).toHaveBeenLastCalledWith(
+      expect.anything(), expect.anything(),
+      expect.objectContaining({ episode: { season: 16, episode: 6, name: 'Next one' } }),
+    );
+    expect(screen.queryByRole('button', { name: 'Next T16E06' })).not.toBeInTheDocument();
+  });
+
+  it('dismisses the offer without resolving anything and stays offered once', async () => {
+    const view = mount(true, 'en-US', { season: 16, episode: 5 }, seriesTitle);
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledTimes(1));
+    mocks.readEpisodes.mockResolvedValue({ seasons: [
+      { season: 16, episodes: [{ season: 16, episode: 5 }, { season: 16, episode: 6 }] },
+    ] });
+    mocks.controller.state = { ...initialState, ended: true };
+    view.rerender(<WatchFlow {...view.props} />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Dismiss next episode' }));
+    expect(screen.queryByRole('button', { name: 'Next T16E06' })).not.toBeInTheDocument();
+    view.rerender(<WatchFlow {...view.props} />);
+    expect(screen.queryByRole('button', { name: 'Next T16E06' })).not.toBeInTheDocument();
+    expect(mocks.controller.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('never offers when the series is finished, the list is unknown or playback did not end', async () => {
+    const view = mount(true, 'en-US', { season: 16, episode: 5 }, seriesTitle);
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledTimes(1));
+    const finished = { seasons: [{ season: 16, episodes: [{ season: 16, episode: 5 }] }] };
+    mocks.readEpisodes.mockResolvedValue(finished);
+    mocks.readProgress.mockResolvedValue({
+      seriesId: 'tt0182576', season: 16, episode: 5,
+      watched: { '16:5': '2026-10-19T00:00:00.000Z' }, updatedAt: '2026-10-19T00:00:00.000Z',
+    });
+
+    // Ended, but the cached list has no next episode.
+    mocks.controller.state = { ...initialState, ended: true };
+    view.rerender(<WatchFlow {...view.props} />);
+    await waitFor(() => expect(mocks.readEpisodes).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('group', { name: 'Next episode' })).not.toBeInTheDocument();
+
+    // A cache that cannot answer the question offers nothing either.
+    mocks.readEpisodes.mockResolvedValue(null);
+    mocks.controller.state = { ...initialState, ended: true, time: 1_000 };
+    view.rerender(<WatchFlow {...view.props} />);
+    expect(screen.queryByRole('group', { name: 'Next episode' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the offer unreachable while playback has not ended', async () => {
+    const view = mount(true, 'en-US', { season: 16, episode: 5 }, seriesTitle);
+    await waitFor(() => expect(mocks.controller.load).toHaveBeenCalledTimes(1));
+    mocks.readEpisodes.mockResolvedValue({ seasons: [
+      { season: 16, episodes: [{ season: 16, episode: 5 }, { season: 16, episode: 6 }] },
+    ] });
+    mocks.controller.state = { ...initialState, ended: false, time: 90_000, duration: 100_000 };
+    view.rerender(<WatchFlow {...view.props} />);
+    await Promise.resolve();
+    expect(mocks.readEpisodes).not.toHaveBeenCalled();
+    expect(screen.queryByRole('group', { name: 'Next episode' })).not.toBeInTheDocument();
   });
 
   it('opens sources without autoplay when Quick Watch is off and allows retry after load failure', async () => {

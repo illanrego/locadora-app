@@ -3,6 +3,9 @@ export interface BoundedEpisode {
   episode: number;
   name?: string;
   released?: string;
+  // Plain text only. The parser strips markup before this is ever stored, and
+  // the UI renders it as a text node, so an add-on cannot inject HTML.
+  overview?: string;
 }
 
 export interface SeriesEpisodes {
@@ -16,6 +19,7 @@ const MAX_SEASONS = 60;
 // 24-season show was silently cut off around season 13.
 const MAX_EPISODES = 1500;
 const MAX_SCANNED_VIDEOS = 5000;
+export const MAX_EPISODE_OVERVIEW = 400;
 const IMDB_ID = /^tt[0-9]{5,9}$/;
 
 export function isSeriesImdbId(value: unknown): value is string {
@@ -37,6 +41,18 @@ function releasedDate(value: unknown): string | undefined {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value.slice(0, 10)
     ? undefined : date.toISOString().slice(0, 10);
+}
+
+// One bounded, markup-free synopsis. Tags are dropped rather than escaped so
+// the value is plain text wherever it is stored or rendered.
+export function boundedOverview(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const plain = value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_EPISODE_OVERVIEW).trim();
+  return plain || undefined;
+}
+
+export function episodeLabel(episode: Pick<BoundedEpisode, 'season' | 'episode'>): string {
+  return `T${String(episode.season).padStart(2, '0')}E${String(episode.episode).padStart(2, '0')}`;
 }
 
 export function parseSeriesEpisodes(payload: unknown): SeriesEpisodes {
@@ -64,6 +80,8 @@ export function parseSeriesEpisodes(payload: unknown): SeriesEpisodes {
     }
     const released = releasedDate(video?.released);
     if (released) bounded.released = released;
+    const overview = boundedOverview(video?.overview);
+    if (overview) bounded.overview = overview;
     const group = seasons.get(season) ?? [];
     group.push(bounded);
     seasons.set(season, group);

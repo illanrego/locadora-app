@@ -1,10 +1,83 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: series follow-up P6 — immersive episode picker placement and the watched marker
+Current milestone: series follow-up P7 — next-episode offer, season marking, specials reveal and episode context
 Status: implementation complete; JS gate green; manual/GUI visual check unverified
 
 ## Resume checkpoint
+
+2026-10-19 series follow-up P7 complete:
+- A finished episode now *offers* the next one and never autoplays. `WatchFlow`
+  keeps a local `activeEpisode` (initialised from its `episode` prop), and only
+  when the video actually reports `ended` for the episode whose source loaded
+  does it read `readLocalSeriesEpisodes()` plus `readSeriesProgress()` once and
+  delegate to the existing `nextEpisode(episodes, watched, pointer)`. Nothing is
+  fetched inside the player: a cache that cannot answer simply shows no offer.
+  The offer is a compact `role="group"` control in the dock with one play button
+  (`Próximo TxxExx` / `Next TxxExx`) and one dismiss button; taking it sets
+  `activeEpisode`, clears the old candidate/resolution and lets the existing
+  resolution path resolve and play the new episode, dismissing leaves everything
+  as it was and the offer does not return for that episode. Episodes already
+  watched past the current one are skipped, and the offer never appears when the
+  series is finished. A new episode is a new video identity: the previous
+  candidate, its subtitle-delay identity and the manual picker state are cleared
+  across the switch.
+- The episode picker can mark or unmark a whole season through one new
+  `setSeasonWatched()` write path: one read-modify-write of the same per-episode
+  progress keys the single toggle writes, one stored record, no per-episode loop.
+  The pointer lands on the season's last episode when marking and on its first
+  when unmarking, so "continue" moves past a marked season but still reaches an
+  unmarked one. No rental, return, review, donation or member state is touched.
+- Season 0 is revealed by an explicit `Mostrar/Ocultar especiais` control
+  (`aria-pressed`); only then does the season selector include it and the episode
+  list render it like any other season (label `T00Exx`, its own air date and
+  context). Because local progress keys are normal seasons only, season 0 rows
+  deliberately carry no per-episode or season watched toggle.
+- Episode context: the parsed episode shape gained a bounded `overview`
+  (`boundedOverview`, 400 characters, markup stripped, plain text in the DOM) and
+  already had `released`. The picker shows a `Contexto do episódio` block for the
+  selected episode — the row the user is focused on, defaulting to where
+  "continue" points in that season — with its label, air date and synopsis. The
+  parsed shape changed, so `CACHE_VERSION` moved from 2 to 3 and episode lists
+  cached by an earlier build are ignored (and re-fetched) instead of being
+  rendered without their context; cached overviews are re-normalised on read and
+  a non-text synopsis rejects the record. The same bump invalidates pre-P7 shelf
+  and title rows, which is the existing version-prefix discipline.
+- P6's optional extra landed: the watched marker on a series case now carries the
+  next episode label in its accessible name (`<title>: N episódios assistidos,
+  próximo T01E03` / `... , next T01E03`). `App` derives it from the same single
+  progress read plus one cached episode read per in-progress series on the shelf;
+  no fetch, and a missing list leaves the count-only label exactly as P6 wrote it.
+- No dependency, Rust file, engine, torrent, `quickWatch.ts`, `normalization.ts`,
+  `MemberPanel.tsx` or native image boundary changed; no episode thumbnail,
+  image host, autoplay of an untaken offer, persisted playback position, new
+  store, season-level rental or new decision entry was added. P7 also changed
+  nothing about D-032's frozen series Quick Watch rules.
+- Focused check: `npx vitest run test/seriesEpisodes.test.ts
+  test/localSeriesProgress.test.ts test/localCatalogueCache.test.ts
+  test/localCacheSchema.test.ts test/seriesEpisodePicker.test.tsx
+  test/watchFlow.test.tsx test/shelfStands.test.tsx` exited 0 — Test Files 7
+  passed (7), Tests 67 passed (67); one earlier run failed one picker assertion
+  because the raw `&amp;` in the fixture overview is kept verbatim (entities are
+  not decoded), and the expectation was corrected rather than the parser changed.
+- Full gate: `npm run check` exited 0 — TypeScript passed; Test Files 45 passed
+  (45), Tests 281 passed (281); Vite production build passed with 192 modules
+  and the existing large-chunk advisory. The baseline before this part was 45
+  files / 266 tests, so the fifteen new assertions are additive: no test was
+  removed, and `CACHE_VERSION`'s bump required two hard-coded cache-key literals
+  in existing tests to move from `2:` to `3:` (the previous-version record test
+  now explicitly writes `2:` and expects to be ignored).
+- `git diff --check` passed. Only the JS gate was run: no cargo or tauri build
+  was started and no desktop binary was rebuilt, per the brief's scope. No
+  browser/GUI automation, manual visual check, real progress database, real
+  add-on response or playback validation was performed; the owner does the
+  visual check.
+- **Next task:** owner manually verifies the P7 flows on the rebuilt desktop
+  build (an episode ending mid-series and at the end of a series, the season
+  mark/unmark action, the specials reveal and the episode context block). With
+  P7 in, every part of `docs/SERIES_FOLLOWUP_PLAN.md` (P1-P7) is implemented, so
+  the next milestone comes from the owner unless the manual check turns up a
+  defect.
 
 2026-10-19 series follow-up P6 complete:
 - The series episode picker no longer collides with the immersive header actions.

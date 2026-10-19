@@ -125,13 +125,35 @@ describe('local catalogue cache', () => {
     expect(await readLocalSeriesEpisodes(legacySeriesId)).toEqual(episodeList(2));
   });
 
+  it('ignores a list cached before the episode overview/air-date context existed', async () => {
+    // CACHE_VERSION moved from 2 to 3 with the parsed episode context: a list
+    // cached by an earlier build must be re-fetched, not rendered without it.
+    const previousSeriesId = 'tt9999903';
+    await writeRawSeriesRecord(`2:${previousSeriesId}`, episodeList());
+
+    expect(await readLocalSeriesEpisodes(previousSeriesId)).toBeNull();
+  });
+
   it('ignores a malformed parsed episode record instead of trusting it', async () => {
     const corruptSeriesId = 'tt9999902';
-    await writeRawSeriesRecord(`2:${corruptSeriesId}`, {
+    await writeRawSeriesRecord(`3:${corruptSeriesId}`, {
       seasons: [{ season: 1, episodes: [{ season: 2, episode: 1, name: 'Wrong season' }] }],
     });
 
     expect(await readLocalSeriesEpisodes(corruptSeriesId)).toBeNull();
+  });
+
+  it('keeps stored episode context plain text and rejects a non-text synopsis', async () => {
+    const withMarkup = { seasons: [{ season: 1, episodes: [{ season: 1, episode: 1, name: 'Pilot', overview: '<b>Bold</b> & <script>alert(1)</script> plot' }] }] };
+    await writeRawSeriesRecord('3:tt9999904', withMarkup);
+    expect(await readLocalSeriesEpisodes('tt9999904')).toEqual({
+      seasons: [{ season: 1, episodes: [{ season: 1, episode: 1, name: 'Pilot', overview: 'Bold & alert(1) plot' }] }],
+    });
+
+    await writeRawSeriesRecord('3:tt9999905', {
+      seasons: [{ season: 1, episodes: [{ season: 1, episode: 1, name: 'Pilot', overview: 42 }] }],
+    });
+    expect(await readLocalSeriesEpisodes('tt9999905')).toBeNull();
   });
 
   it('bounds parsed episode lists and evicts the oldest series by savedAt', async () => {

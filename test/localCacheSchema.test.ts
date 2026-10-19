@@ -27,7 +27,9 @@ describe('local cache schema upgrade', () => {
   it('adds progress and parsed episode lists without invalidating the catalogue cache-key version', async () => {
     const title = normalizeDiscoveryTitle({ id: 603, type: 'movie', name: 'The Matrix', year: 1999 })!;
     const complete = { ...title, director: ['Lana Wachowski', 'Lilly Wachowski'] };
-    await createVersionOneDatabase(`2:pt-BR:${title.identity.canonicalKey}`, complete);
+    // A version-1 database row written under the current CACHE_VERSION prefix
+    // (3) is still readable: the store upgrade itself invalidates nothing.
+    await createVersionOneDatabase(`3:pt-BR:${title.identity.canonicalKey}`, complete);
     vi.resetModules();
     const cache = await import('../src/locadora/localCache');
 

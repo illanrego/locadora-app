@@ -1,5 +1,6 @@
 import type { DiscoveryTitle } from '../domain/content';
 import {
+  boundedOverview,
   isSeriesImdbId,
   type BoundedEpisode,
   type SeriesEpisodes,
@@ -11,9 +12,10 @@ const LIMITS: Record<Store, number> = { shelves: 96, titles: 4_000, seriesEpisod
 const DATABASE_VERSION = 3;
 const MAX_WATCHED_EPISODES = 500;
 // Bump when the cached shape changes. Records written by an earlier build then simply stop matching
-// their key, so a tape cached before a feature (for example the credits block with person ids) is
-// re-fetched instead of being rendered without it. Dropped records are pruned by the store limit.
-const CACHE_VERSION = 2;
+// their key, so a tape cached before a feature (for example the credits block with person ids, or the
+// bounded episode overview/air-date context) is re-fetched instead of being rendered without it.
+// Dropped records are pruned by the store limit.
+const CACHE_VERSION = 3;
 const session: Record<Store, Map<string, unknown>> = {
   shelves: new Map(),
   titles: new Map(),
@@ -179,10 +181,15 @@ function normalizedCachedEpisodes(value: unknown): SeriesEpisodes | null {
       if (candidate.name !== undefined && (typeof candidate.name !== 'string'
         || candidate.name.length === 0 || candidate.name.length > 120 || candidate.name.trim() !== candidate.name)) return null;
       if (candidate.released !== undefined && !cachedReleaseDate(candidate.released)) return null;
+      // Stored context must be the bounded plain-text form: a record carrying
+      // anything else (a number, empty text) is rejected rather than trusted.
+      const overview = candidate.overview === undefined ? undefined : boundedOverview(candidate.overview);
+      if (candidate.overview !== undefined && !overview) return null;
 
       const episode: BoundedEpisode = { season: group.season, episode: candidate.episode };
       if (candidate.name !== undefined) episode.name = candidate.name;
       if (candidate.released !== undefined) episode.released = candidate.released;
+      if (overview !== undefined) episode.overview = overview;
       episodes.push(episode);
       previousEpisode = candidate.episode;
       episodeCount += 1;
@@ -294,6 +301,44 @@ export async function setEpisodeWatched(
     seriesId,
     season: episode.season,
     episode: episode.episode,
+    watched: boundedWatched(nextWatched),
+    updatedAt: timestamp,
+  };
+  await writeSeriesProgress(next);
+  return next;
+}
+
+// One season at a time: the same per-episode progress keys the single toggle
+// writes, applied in a single read-modify-write so a season never becomes N
+// sequential guess-and-write cycles. The stored pointer ends at the last
+// affected episode when marking, so "continue" moves past the season, and at
+// the first one when unmarking, so the cleared season stays reachable.
+export async function setSeasonWatched(
+  seriesId: string,
+  season: number,
+  episodes: readonly Pick<BoundedEpisode, 'season' | 'episode'>[],
+  watched: boolean,
+  now = new Date(),
+): Promise<ProgressRecord | null> {
+  if (!isSeriesImdbId(seriesId) || episodeIndex(season) === null
+    || Number.isNaN(now.getTime()) || episodes.length === 0) return null;
+  const ordered = [...episodes]
+    .filter((episode) => episode.season === season && episodeIndex(episode.episode) !== null)
+    .sort((left, right) => left.episode - right.episode);
+  if (ordered.length !== episodes.length) return null;
+
+  const timestamp = now.toISOString();
+  const current = await readSeriesProgress(seriesId);
+  const nextWatched = { ...(current?.watched ?? {}) };
+  for (const episode of ordered) {
+    const key = `${season}:${episode.episode}`;
+    if (watched) nextWatched[key] = timestamp;
+    else delete nextWatched[key];
+  }
+  const next: ProgressRecord = {
+    seriesId,
+    season,
+    episode: (watched ? ordered[ordered.length - 1] : ordered[0]).episode,
     watched: boundedWatched(nextWatched),
     updatedAt: timestamp,
   };

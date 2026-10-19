@@ -11,7 +11,7 @@ const discovery = vi.hoisted(() => ({
   loadShelf: vi.fn(),
   loadTitleDetails: vi.fn(),
 }));
-const progressCache = vi.hoisted(() => ({ readAllSeriesProgress: vi.fn() }));
+const progressCache = vi.hoisted(() => ({ readAllSeriesProgress: vi.fn(), readLocalSeriesEpisodes: vi.fn() }));
 
 vi.mock('../src/locadora/discovery', () => discovery);
 // The shelf owner is the only caller; a card must never open its own read.
@@ -61,6 +61,7 @@ function seriesTitle(id: number, name: string): DiscoveryTitle {
 beforeEach(() => {
   window.localStorage.clear();
   progressCache.readAllSeriesProgress.mockResolvedValue([]);
+  progressCache.readLocalSeriesEpisodes.mockResolvedValue(null);
   discovery.loadShelf.mockImplementation(async ({ stand }: { stand: number }) => stand === 0
     ? { titles: [title(1, 'First Stand Tape')], hasNextStand: true, source: 'public-api' }
     : { titles: [title(2, 'Second Stand Tape')], hasNextStand: false, source: 'public-api' });
@@ -128,6 +129,30 @@ describe('series watched state on the shelf', () => {
     await screen.findByRole('button', { name: 'Inspecionar Fixture series, 1999' });
     expect(container.querySelector('.case-progress')).toBeNull();
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('adds the next episode label from the cached list to the marker name', async () => {
+    discovery.loadShelf.mockImplementation(async () => ({
+      titles: [seriesTitle(7, 'Fixture series')],
+      hasNextStand: false,
+      source: 'public-api',
+    }));
+    progressCache.readAllSeriesProgress.mockResolvedValue([
+      { seriesId: 'tt0000007', season: 1, episode: 2, watched: { '1:1': 'a', '1:2': 'b' }, updatedAt: '2026-10-19T00:00:00.000Z' },
+    ]);
+    progressCache.readLocalSeriesEpisodes.mockResolvedValue({
+      seasons: [{ season: 1, episodes: [
+        { season: 1, episode: 1, name: 'Pilot' },
+        { season: 1, episode: 2 },
+        { season: 1, episode: 3, name: 'Third' },
+      ] }],
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole('img', { name: 'Fixture series: 2 episódios assistidos, próximo T01E03' }))
+      .toBeInTheDocument();
+    expect(progressCache.readLocalSeriesEpisodes).toHaveBeenCalledWith('tt0000007');
   });
 
   it('counts a single watched episode in English too', async () => {

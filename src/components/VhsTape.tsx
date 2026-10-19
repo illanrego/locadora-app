@@ -10,6 +10,9 @@ interface VhsTapeProps {
   // Local progress for this series, resolved once per shelf render by the shelf
   // owner. Zero means "no local progress" and renders no marker at all.
   watchedCount?: number;
+  // The next episode this series' local progress points at, from the cached
+  // episode list. Absent when the list is unknown or the series is finished.
+  nextEpisodeLabel?: string;
   onInspect: (title: DiscoveryTitle) => void;
 }
 
@@ -17,7 +20,7 @@ function initials(name: string): string {
   return name.split(/\s+/).slice(0, 3).map((part) => part[0]).join('').toUpperCase();
 }
 
-export function VhsTape({ title, accent, locale, watchedCount = 0, onInspect }: VhsTapeProps) {
+export function VhsTape({ title, accent, locale, watchedCount = 0, nextEpisodeLabel, onInspect }: VhsTapeProps) {
   const label = locale === 'pt-BR'
     ? `Inspecionar ${title.name}, ${title.year ?? 'ano desconhecido'}`
     : `Inspect ${title.name}, ${title.year ?? 'unknown year'}`;
@@ -26,8 +29,8 @@ export function VhsTape({ title, accent, locale, watchedCount = 0, onInspect }: 
   const posterUrl = useCachedArtwork(title.posterUrl, 'poster');
   const progress = title.identity.type === 'series' && watchedCount > 0 ? watchedCount : 0;
   const progressLabel = pt
-    ? `${title.name}: ${progress} ${progress === 1 ? 'episódio assistido' : 'episódios assistidos'}`
-    : `${title.name}: ${progress} ${progress === 1 ? 'episode watched' : 'episodes watched'}`;
+    ? `${title.name}: ${progress} ${progress === 1 ? 'episódio assistido' : 'episódios assistidos'}${nextEpisodeLabel ? `, próximo ${nextEpisodeLabel}` : ''}`
+    : `${title.name}: ${progress} ${progress === 1 ? 'episode watched' : 'episodes watched'}${nextEpisodeLabel ? `, next ${nextEpisodeLabel}` : ''}`;
   return (
     <article className="vhs-item" style={style}>
       <button className="vhs-case" type="button" aria-label={label} onClick={() => onInspect(title)}>

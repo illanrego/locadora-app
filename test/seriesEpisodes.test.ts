@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { episodeVideoId, episodesForSeason, nextEpisode, parseSeriesEpisodes, shouldMarkEpisodeWatched } from '../src/media/seriesEpisodes';
+import { MAX_EPISODE_OVERVIEW, episodeLabel, episodeVideoId, episodesForSeason, nextEpisode, parseSeriesEpisodes, shouldMarkEpisodeWatched } from '../src/media/seriesEpisodes';
 
 const sample = parseSeriesEpisodes({ meta: { videos: [
   { season: 2, episode: 2, title: 'Second', released: '2020-02-29T00:00:00.000Z' },
@@ -88,5 +88,34 @@ describe('series episodes', () => {
     for (const episode of [{ season: -1, episode: 1 }, { season: 1, episode: 0 }, { season: 1.2, episode: 3 }, { season: Infinity, episode: 1 }]) {
       expect(() => episodeVideoId('tt0182576', episode)).toThrow();
     }
+  });
+
+  it('keeps a bounded, markup-free episode overview and the parsed air date', () => {
+    const result = parseSeriesEpisodes({ meta: { videos: [
+      {
+        season: 1,
+        episode: 1,
+        name: 'Pilot',
+        released: '2020-02-29T00:00:00.000Z',
+        overview: '<p>First <b>episode</b> &amp; <script>alert(1)</script>  ' + 'x'.repeat(600) + '</p>',
+      },
+      { season: 1, episode: 2, overview: '   ' },
+      { season: 1, episode: 3, overview: 42 },
+    ] } });
+
+    const [pilot, blank, numeric] = episodesForSeason(result, 1);
+    expect(pilot).toMatchObject({ season: 1, episode: 1, name: 'Pilot', released: '2020-02-29' });
+    expect(pilot.overview).toBeDefined();
+    expect(pilot.overview).not.toContain('<');
+    expect(pilot.overview).toContain('First episode');
+    expect(pilot.overview!.length).toBeLessThanOrEqual(MAX_EPISODE_OVERVIEW);
+    expect(blank).not.toHaveProperty('overview');
+    expect(numeric).not.toHaveProperty('overview');
+  });
+
+  it('labels an episode as TxxExx with two-digit season and episode', () => {
+    expect(episodeLabel({ season: 1, episode: 2 })).toBe('T01E02');
+    expect(episodeLabel({ season: 0, episode: 1 })).toBe('T00E01');
+    expect(episodeLabel({ season: 116, episode: 105 })).toBe('T116E105');
   });
 });
