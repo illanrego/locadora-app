@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { DiscoveryTitle } from '../domain/content';
 import type { LocalSavedCollections, SavedCollection } from '../member/localSaved';
 import { copy, type Locale } from '../locadora/catalog';
@@ -11,6 +12,7 @@ interface SidePanelProps {
   locale: Locale;
   basket: DiscoveryTitle[];
   saved: LocalSavedCollections;
+  catalogueTitles: readonly DiscoveryTitle[];
   onInspect: (title: DiscoveryTitle) => void;
   onRemove: (title: DiscoveryTitle) => void;
   onSetSaved: (title: DiscoveryTitle, collection: SavedCollection, enabled: boolean) => Promise<boolean>;
@@ -19,9 +21,15 @@ interface SidePanelProps {
   onClose: () => void;
 }
 
-export function SidePanel({ kind, locale, basket, saved, onRemove, onSetSaved, onBasketComplete, onOpenAccount, onClose, onInspect }: SidePanelProps) {
+export function SidePanel({ kind, locale, basket, saved, catalogueTitles, onRemove, onSetSaved, onBasketComplete, onOpenAccount, onClose, onInspect }: SidePanelProps) {
   const t = copy[locale];
   const heading = kind === 'basket' ? t.basket : kind === 'saved' ? (locale === 'pt-BR' ? 'Salvos' : 'Saved') : t.account;
+  const knownTitles = useMemo(() => [...new Map([
+    ...catalogueTitles,
+    ...basket,
+    ...saved.watch_later,
+    ...saved.favorite,
+  ].map((title) => [title.identity.canonicalKey, title])).values()], [basket, catalogueTitles, saved]);
   return (
     <Modal label={heading} onClose={onClose} className="side-modal">
       <header className="panel-header">
@@ -32,7 +40,7 @@ export function SidePanel({ kind, locale, basket, saved, onRemove, onSetSaved, o
       {kind === 'basket' ? (
         <BasketPanel locale={locale} basket={basket} onRemove={onRemove} onComplete={onBasketComplete} onOpenAccount={onOpenAccount} />
       ) : kind === 'account' ? (
-        <MemberPanel locale={locale} onInspect={onInspect} />
+        <MemberPanel locale={locale} onInspect={onInspect} knownTitles={knownTitles} />
       ) : (
         <SavedPanel onInspect={onInspect} locale={locale} local={saved} onSet={onSetSaved} />
       )}

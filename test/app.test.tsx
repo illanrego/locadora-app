@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -118,6 +118,8 @@ describe('accessible Locadora shelf', () => {
     await user.click(screen.getByRole('button', { name: 'Conta' }));
     const dialog = screen.getByRole('dialog', { name: 'Conta' });
     expect(await within(dialog).findByText('Abra o aplicativo desktop para entrar na sua Locadora.')).toBeInTheDocument();
+    fireEvent(dialog, new Event('cancel', { bubbles: true, cancelable: true }));
+    expect(screen.queryByRole('dialog', { name: 'Conta' })).not.toBeInTheDocument();
   });
 
   it('keeps Quick Watch automatic by default and persists an explicit opt-out', async () => {

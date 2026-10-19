@@ -1,10 +1,61 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: series follow-up P4 — cache parsed episode lists
+Current milestone: series follow-up P5 — Carteirinha structure and continue watching
 Status: implementation complete; automated gate green; manual/GUI playback unverified
 
 ## Resume checkpoint
+
+2026-10-19 series follow-up P5 complete:
+- Carteirinha now follows the web account diagram while retaining the desktop
+  app's existing dark-blue palette, typography, spacing variables and component
+  vocabulary: monogram/member identity with inline username edit, explicit
+  rental-limit save and status, rented/recent/saved stats, personal shelves,
+  active rentals with Balcão return choices, collapsed history, then sign out.
+  Every structural section has an accessible heading and `aria-labelledby`;
+  the enclosing modal and its Escape/backdrop/close-button behavior are
+  unchanged. No web CSS was copied.
+- Watch-later and favorites retain D-020's three-title previews and separate
+  complete-list actions. Their new sibling appears only when local series
+  progress resolves to a cached next episode. It reads
+  `readAllSeriesProgress()` and `readLocalSeriesEpisodes()`, delegates selection
+  to the existing `nextEpisode(episodes, watched, pointer)`, caps the compact
+  preview at three most-recent progress records, never fetches an episode list,
+  and performs no write. Completed, cache-missing and canonically unresolved
+  records are omitted.
+- A progress IMDb id is mapped only to canonical title snapshots the app
+  already knows from the current shelf, the bounded in-session inspection list,
+  Cesta or local saved collections. This keeps inspection on an actual TMDB
+  identity without changing the progress/cache schemas or inventing an IMDb to
+  TMDB mapping. The in-session inspection list is bounded to 64 and is not a
+  new persistent store.
+- All member service calls and payloads are unchanged. Coverage now exercises
+  sign in/up/out, inline profile save, explicit rental-limit save, all three
+  return values (`watched`, `not_watched`, `unknown`), review publication,
+  history pagination/deduplication, three-item saved previews, block order,
+  dialog-cancel close behavior, cached next-episode inspection, and complete
+  absence of the continue block when there is no progress.
+- The web TV-pairing and default-streamings blocks have no desktop-app
+  counterpart and remain absent by design. No provider filter, pairing action,
+  dependency, member Worker/contract, request payload, media/player behavior,
+  series rule, progress writer or cache implementation changed.
+- Baseline: `npm test` exited 0 — Test Files 45 passed (45), Tests 256 passed
+  (256).
+- Final focused check: `git diff --check && npm run typecheck && npm test --
+  test/memberPanel.test.tsx test/app.test.tsx` exited 0 — Test Files 2 passed
+  (2), Tests 24 passed (24).
+- Full gate: `npm run check` exited 0 — TypeScript passed; Test Files 45 passed
+  (45), Tests 262 passed (262); Vite production build passed with 192 modules
+  and the existing large-chunk advisory.
+- Desktop rebuild: `npm run tauri -- build --no-bundle` exited 0 and refreshed
+  `src-tauri/target/release/wills-locadora-player` (release compilation 1m31s).
+  No browser/GUI automation, manual visual check, real member request, real
+  progress database or playback validation was performed.
+- **Next task:** implement series follow-up P6 from
+  `docs/SERIES_FOLLOWUP_PLAN.md` §9: verify and fix the episode picker's
+  immersive placement/collisions while keeping 2D accessible, then add a small
+  watched marker where a series tape appears without changing click targets or
+  packed-shelf geometry. Manual immersive acceptance remains with the owner.
 
 2026-10-19 series follow-up P4 complete:
 - `fetchSeriesEpisodes()` now reads a parsed episode list from the existing

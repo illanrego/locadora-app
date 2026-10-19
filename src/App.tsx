@@ -48,6 +48,7 @@ export default function App() {
   const [personCredit, setPersonCredit] = useState<CreditStandSelection | null>(null);
   const [titleSearchOpen, setTitleSearchOpen] = useState(false);
   const [pages, setPages] = useState<ShelfPage[]>([]);
+  const [inspectedTitles, setInspectedTitles] = useState<DiscoveryTitle[]>([]);
   const [stand, setStand] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
@@ -108,6 +109,10 @@ export default function App() {
 
   const visiblePages = pages;
   const visibleTitles = useMemo(() => visiblePages.flatMap((page) => page.titles), [visiblePages]);
+  const memberKnownTitles = useMemo(() => [...new Map([
+    ...inspectedTitles,
+    ...visibleTitles,
+  ].map((title) => [title.identity.canonicalKey, title])).values()], [inspectedTitles, visibleTitles]);
 
   const immersiveTitles = visiblePages[Math.min(immersiveStand, Math.max(0, visiblePages.length - 1))]?.titles ?? [];
   const navigateImmersive = (direction: number) => {
@@ -175,8 +180,10 @@ export default function App() {
   const inspectTitle = useCallback((title: DiscoveryTitle) => {
     const request = ++inspectionRequestRef.current;
     setSelected(title);
+    setInspectedTitles((current) => [title, ...current.filter((item) => item.identity.canonicalKey !== title.identity.canonicalKey)].slice(0, 64));
     void loadTitleDetails(title, locale).then((details) => {
       if (request !== inspectionRequestRef.current) return;
+      setInspectedTitles((current) => [details, ...current.filter((item) => item.identity.canonicalKey !== details.identity.canonicalKey)].slice(0, 64));
       setSelected((current) => current?.identity.canonicalKey === title.identity.canonicalKey ? details : current);
     }).catch(() => {
       // Inspection remains useful with the lightweight shelf record offline.
@@ -478,6 +485,7 @@ export default function App() {
         locale={locale}
         basket={basket}
         saved={saved}
+        catalogueTitles={memberKnownTitles}
         onInspect={(title) => { setPanel(null); inspectTitle(title); }}
         onRemove={toggleBasket}
         onSetSaved={setSavedTitle}

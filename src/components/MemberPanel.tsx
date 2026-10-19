@@ -1,6 +1,8 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import type { DiscoveryTitle } from '../domain/content';
+import { externalId, type DiscoveryTitle } from '../domain/content';
+import { readAllSeriesProgress, readLocalSeriesEpisodes } from '../locadora/localCache';
 import { memberDiscoveryTitle, normalizeMemberHistoryPage, normalizeMemberState, type MemberState, type MemberTitle } from '../member/memberState';
+import { nextEpisode, type BoundedEpisode } from '../media/seriesEpisodes';
 import {
   fetchMemberState,
   fetchMemberHistory,
@@ -19,7 +21,15 @@ import { TitleReviews } from './TitleReviews';
 interface MemberPanelProps {
   locale: Locale;
   onInspect: (title: DiscoveryTitle) => void;
+  knownTitles?: readonly DiscoveryTitle[];
 }
+
+interface ContinueItem {
+  title: DiscoveryTitle;
+  episode: BoundedEpisode;
+}
+
+const EMPTY_TITLES: readonly DiscoveryTitle[] = [];
 
 function messageFrom(cause: unknown, fallback: string): string {
   return cause instanceof Error && cause.message ? cause.message : fallback;
@@ -29,6 +39,10 @@ function formatDate(value: string | null, locale: Locale): string {
   if (!value) return '—';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date);
+}
+
+function episodeLabel(episode: BoundedEpisode): string {
+  return `T${String(episode.season).padStart(2, '0')}E${String(episode.episode).padStart(2, '0')}`;
 }
 
 function MemberTitleLink({ item, locale, onInspect }: { item: MemberTitle; locale: Locale; onInspect: (title: DiscoveryTitle) => void }) {
@@ -52,7 +66,7 @@ function TapeList({ items, locale, empty, onInspect }: { items: MemberTitle[]; l
   );
 }
 
-export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
+export function MemberPanel({ locale, onInspect, knownTitles = EMPTY_TITLES }: MemberPanelProps) {
   const [session, setSession] = useState<MemberSessionStatus | null>(null);
   const [member, setMember] = useState<MemberState | null>(null);
   const [identifier, setIdentifier] = useState('');
@@ -60,6 +74,9 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [signupUsername, setSignupUsername] = useState('');
   const [profileUsername, setProfileUsername] = useState('');
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [rentalLimitDraft, setRentalLimitDraft] = useState(3);
+  const [rentalLimitStatus, setRentalLimitStatus] = useState('');
   const [signup, setSignup] = useState(false);
   const [busy, setBusy] = useState(false);
   const [returningId, setReturningId] = useState('');
@@ -68,11 +85,21 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [collection, setCollection] = useState<'watchLater' | 'favorites' | null>(null);
+  const [continueItems, setContinueItems] = useState<ContinueItem[]>([]);
   const pt = locale === 'pt-BR';
+
+  function acceptMemberState(value: unknown) {
+    const next = normalizeMemberState(value);
+    setMember(next);
+    if (next.profile) {
+      setProfileUsername(next.profile.username);
+      setRentalLimitDraft(next.profile.rentalLimit);
+    }
+  }
 
   async function loadState() {
     const value = await fetchMemberState();
-    setMember(normalizeMemberState(value));
+    acceptMemberState(value);
   }
 
   useEffect(() => {
@@ -84,7 +111,7 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
         if (next.user?.username) setProfileUsername(next.user.username);
         if (next.signedIn) {
           const value = await fetchMemberState();
-          if (active) setMember(normalizeMemberState(value));
+          if (active) acceptMemberState(value);
         }
       })
       .catch((cause) => {
@@ -95,6 +122,40 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
       });
     return () => { active = false; };
   }, [pt]);
+
+  useEffect(() => {
+    let active = true;
+    if (!session?.signedIn || !member?.profile) {
+      setContinueItems([]);
+      return () => { active = false; };
+    }
+    const titlesBySeriesId = new Map(knownTitles.flatMap((title) => {
+      const seriesId = title.identity.type === 'series' ? externalId(title.identity, 'imdb') : null;
+      return seriesId ? [[seriesId, title] as const] : [];
+    }));
+    void readAllSeriesProgress()
+      .then(async (records) => Promise.all(records
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        .map(async (progress): Promise<ContinueItem | null> => {
+          const title = titlesBySeriesId.get(progress.seriesId);
+          if (!title) return null;
+          const episodes = await readLocalSeriesEpisodes(progress.seriesId);
+          if (!episodes) return null;
+          const episode = nextEpisode(
+            episodes,
+            new Set(Object.keys(progress.watched)),
+            { season: progress.season, episode: progress.episode },
+          );
+          return episode ? { title, episode } : null;
+        })))
+      .then((items) => {
+        if (active) setContinueItems(items.filter((item): item is ContinueItem => item !== null).slice(0, 3));
+      })
+      .catch(() => {
+        if (active) setContinueItems([]);
+      });
+    return () => { active = false; };
+  }, [knownTitles, member?.profile, session?.signedIn]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -155,6 +216,8 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
     try {
       await updateMemberProfile(profileUsername.trim().toLowerCase());
       await loadState();
+      setProfileEditing(false);
+      setNotice(pt ? 'Nome público salvo.' : 'Public username saved.');
     } catch (cause) {
       setError(messageFrom(cause, pt ? 'Não foi possível salvar seu nome público.' : 'Could not save your public username.'));
     } finally {
@@ -166,11 +229,13 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
     setBusy(true);
     setError('');
     setNotice('');
+    setRentalLimitStatus('');
     try {
       await updateMemberRentalLimit(value);
       await loadState();
-      setNotice(pt ? 'Limite de aluguéis salvo.' : 'Rental limit saved.');
+      setRentalLimitStatus(pt ? 'Limite de aluguéis salvo.' : 'Rental limit saved.');
     } catch (cause) {
+      setRentalLimitDraft(member?.profile?.rentalLimit ?? 3);
       setError(messageFrom(cause, pt ? 'Não foi possível salvar o limite.' : 'Could not save the limit.'));
     } finally {
       setBusy(false);
@@ -272,25 +337,41 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
     ...(member?.collections.favorites ?? []).map((item) => item.canonicalKey),
   ]).size;
 
-  if (collection && member) return <section className="member-section">
+  if (collection && member) {
+    const headingId = `member-${collection}-full-heading`;
+    return <section className="member-section" aria-labelledby={headingId}>
     <button type="button" onClick={() => setCollection(null)}>{pt ? 'Voltar à Carteirinha' : 'Back to membership'}</button>
-    <h3>{collection === 'watchLater' ? (pt ? 'Salvas para depois' : 'Saved for later') : (pt ? 'Favoritas' : 'Favorites')}</h3>
+    <h3 id={headingId}>{collection === 'watchLater' ? (pt ? 'Salvas para depois' : 'Saved for later') : (pt ? 'Favoritas' : 'Favorites')}</h3>
     <TapeList onInspect={onInspect} items={member.collections[collection]} locale={locale} empty={pt ? 'Nenhuma fita nesta lista.' : 'No tapes in this list.'} />
   </section>;
+  }
 
   return (
     <div className="member-overview">
-      <div className="membership-card">
-        <span>{pt ? 'CARTEIRINHA' : 'MEMBERSHIP'}</span>
-        <strong>@{username}</strong>
-        <small>{pt ? 'desde' : 'since'} {formatDate(member?.profile?.createdAt ?? null, locale)}</small>
-      </div>
+      <section className="membership-card" aria-labelledby="member-card-heading">
+        <h3 id="member-card-heading" className="sr-only">{pt ? 'Dados da Carteirinha' : 'Membership details'}</h3>
+        <div className="membership-mark" aria-hidden="true">WL</div>
+        <div className="membership-username">
+          <span>{pt ? 'Nome de usuário' : 'Username'}</span>
+          <div>
+            <strong>@{username}</strong>
+            {member?.profile && <button type="button" className="membership-edit"
+              aria-label={pt ? 'Editar nome de usuário' : 'Edit username'}
+              aria-controls="member-profile-form" aria-expanded={profileEditing}
+              onClick={() => { setProfileUsername(member.profile!.username); setProfileEditing((current) => !current); }}>✎</button>}
+          </div>
+        </div>
+        <div className="membership-since">
+          <span>{pt ? 'Membro desde' : 'Member since'}</span>
+          <small>{formatDate(member?.profile?.createdAt ?? null, locale)}</small>
+        </div>
+      </section>
       {error && <p className="member-error" role="alert">{error}</p>}
       {notice && <p className="member-success" role="status">{notice}</p>}
       {!member ? (
         <button type="button" disabled={busy} onClick={() => { setBusy(true); setError(''); void loadState().catch((cause) => setError(messageFrom(cause, pt ? 'Não foi possível carregar sua conta.' : 'Could not load your account.'))).finally(() => setBusy(false)); }}>{pt ? 'Tentar novamente' : 'Try again'}</button>
       ) : !member.profile ? (
-        <form className="member-sign-in member-profile-form" onSubmit={saveProfile}>
+        <form id="member-profile-form" className="member-sign-in member-profile-form" onSubmit={saveProfile}>
           <p>{pt ? 'Escolha seu nome público para terminar a Carteirinha.' : 'Choose your public username to finish your membership.'}</p>
           <label htmlFor="member-profile-username">{pt ? 'Nome público' : 'Public username'}</label>
           <input id="member-profile-username" value={profileUsername} onChange={(event) => setProfileUsername(event.target.value)} autoComplete="nickname" minLength={3} maxLength={24} pattern="[A-Za-z0-9_-]{3,24}" required />
@@ -298,55 +379,88 @@ export function MemberPanel({ locale, onInspect }: MemberPanelProps) {
         </form>
       ) : (
         <>
-          <label htmlFor="member-rental-limit">{pt ? 'Limite de aluguéis simultâneos' : 'Simultaneous rental limit'}</label>
-          <select id="member-rental-limit" value={member.profile.rentalLimit} disabled={busy} onChange={(event) => void saveRentalLimit(Number(event.target.value))}>
-            {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
-          </select>
-          <p className="member-privacy">{pt ? 'Vale para o aplicativo e o site. Reduzir o limite não devolve suas fitas atuais.' : 'Applies to the app and website. Lowering the limit does not return existing rentals.'}</p>
-          <dl className="member-counts">
-            <div><dt>{pt ? 'Ativas' : 'Active'}</dt><dd>{member.activeRental?.items.length ?? 0}/{member.profile.rentalLimit}</dd></div>
-            <div><dt>{pt ? 'Salvas' : 'Saved'}</dt><dd>{savedCount}</dd></div>
-            <div><dt>{pt ? 'Devolvidas' : 'Returned'}</dt><dd>{member.history.length}{member.historyHasMore ? '+' : ''}</dd></div>
-          </dl>
-          <section className="member-section">
-            <h3>{pt ? 'Com você agora' : 'With you now'}</h3>
-            {member.activeRental?.items.length ? (
-              <ul className="member-tape-list member-return-list">
-                {member.activeRental.items.map((item) => (
-                  <li key={item.id}>
-                    <span><MemberTitleLink item={item} locale={locale} onInspect={onInspect} /><small>{item.year ?? '—'}</small></span>
-                    <div className="return-actions" aria-label={pt ? `Devolver ${item.name}` : `Return ${item.name}`}>
-                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item, 'watched')}>{pt ? 'Assisti' : 'Watched'}</button>
-                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item, 'not_watched')}>{pt ? 'Não assisti' : 'Not watched'}</button>
-                      <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item, 'unknown')}>{pt ? 'Não dizer' : 'Skip'}</button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="member-empty">{pt ? 'Nenhuma fita alugada agora.' : 'No tapes currently rented.'}</p>}
+          {profileEditing && <form id="member-profile-form" className="member-sign-in member-profile-form" onSubmit={saveProfile}>
+            <label htmlFor="member-profile-username">{pt ? 'Nome público' : 'Public username'}</label>
+            <input id="member-profile-username" value={profileUsername} onChange={(event) => setProfileUsername(event.target.value)} autoComplete="nickname" minLength={3} maxLength={24} pattern="[A-Za-z0-9_-]{3,24}" required />
+            <div className="member-inline-actions">
+              <button type="submit" className="primary-action" disabled={busy}>{busy ? (pt ? 'Salvando…' : 'Saving…') : (pt ? 'Salvar nome' : 'Save username')}</button>
+              <button type="button" disabled={busy} onClick={() => setProfileEditing(false)}>{pt ? 'Cancelar' : 'Cancel'}</button>
+            </div>
+          </form>}
+          <section className="member-section member-rental-limit" aria-labelledby="member-rental-limit-heading">
+            <h3 id="member-rental-limit-heading">{pt ? 'Limite de aluguéis' : 'Rental limit'}</h3>
+            <form onSubmit={(event) => { event.preventDefault(); void saveRentalLimit(rentalLimitDraft); }}>
+              <label htmlFor="member-rental-limit">{pt ? 'Limite de aluguéis simultâneos' : 'Simultaneous rental limit'}</label>
+              <div>
+                <select id="member-rental-limit" value={rentalLimitDraft} disabled={busy} onChange={(event) => setRentalLimitDraft(Number(event.target.value))}>
+                  {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+                </select>
+                <button type="submit" disabled={busy}>{pt ? 'Salvar limite' : 'Save limit'}</button>
+              </div>
+              <p className="member-privacy">{pt ? 'Vale para o aplicativo e o site. Reduzir o limite não devolve suas fitas atuais.' : 'Applies to the app and website. Lowering the limit does not return existing rentals.'}</p>
+              <p className="member-rental-limit-status" role="status" aria-live="polite">{rentalLimitStatus}</p>
+            </form>
+          </section>
+          <section className="member-summary" aria-labelledby="member-stats-heading">
+            <h3 id="member-stats-heading" className="sr-only">{pt ? 'Resumo da conta' : 'Account summary'}</h3>
+            <dl className="member-counts">
+              <div><dd>{member.activeRental?.items.length ?? 0}/{member.profile.rentalLimit}</dd><dt>{pt ? 'Fitas alugadas' : 'Rented tapes'}</dt></div>
+              <div><dd>{member.history.length}{member.historyHasMore ? '+' : ''}</dd><dt>{pt ? 'Registros recentes' : 'Recent records'}</dt></div>
+              <div><dd>{savedCount}</dd><dt>{pt ? 'Itens salvos' : 'Saved items'}</dt></div>
+            </dl>
+          </section>
+          <section className="member-section member-shelves" aria-labelledby="member-shelves-heading">
+            <h3 id="member-shelves-heading">{pt ? 'Prateleiras pessoais' : 'Personal shelves'}</h3>
+            <div className="member-shelf-grid">
+              <section className="member-shelf" aria-labelledby="member-watch-later-heading">
+                <header><h4 id="member-watch-later-heading">{pt ? '＋ Assistir depois' : '＋ Watch later'}</h4>
+                  <button type="button" onClick={() => setCollection('watchLater')}>{pt ? 'Abrir lista' : 'Open list'} ({member.collections.watchLater.length})</button></header>
+                <TapeList onInspect={onInspect} items={member.collections.watchLater.slice(0, 3)} locale={locale} empty={pt ? 'Nenhuma fita salva.' : 'No saved tapes.'} />
+              </section>
+              <section className="member-shelf" aria-labelledby="member-favorites-heading">
+                <header><h4 id="member-favorites-heading">{pt ? '★ Favoritas' : '★ Favorites'}</h4>
+                  <button type="button" onClick={() => setCollection('favorites')}>{pt ? 'Abrir lista' : 'Open list'} ({member.collections.favorites.length})</button></header>
+                <TapeList onInspect={onInspect} items={member.collections.favorites.slice(0, 3)} locale={locale} empty={pt ? 'Nenhuma fita favorita.' : 'No favorite tapes.'} />
+              </section>
+              {continueItems.length > 0 && <section className="member-shelf" aria-labelledby="member-continue-heading">
+                <header><h4 id="member-continue-heading">{pt ? '▶ Continuar assistindo' : '▶ Continue watching'}</h4></header>
+                <ul className="member-tape-list member-continue-list">
+                  {continueItems.map(({ title, episode }) => <li key={externalId(title.identity, 'imdb') ?? title.identity.canonicalKey}>
+                    <span><button type="button" className="member-title-link"
+                      aria-label={pt ? `Inspecionar ${title.name}` : `Inspect ${title.name}`}
+                      onClick={() => onInspect(title)}>{title.name}</button>
+                      <small>{episodeLabel(episode)}{episode.name ? ` · ${episode.name}` : ''}</small></span>
+                  </li>)}
+                </ul>
+              </section>}
+            </div>
+          </section>
+          <section className="member-section member-active-rentals" aria-labelledby="member-active-heading">
+            <h3 id="member-active-heading">{pt ? 'Fitas alugadas' : 'Active rentals'}</h3>
+            {member.activeRental?.items.length ? <ul className="member-tape-list member-return-list">
+              {member.activeRental.items.map((item) => <li key={item.id}>
+                <span><MemberTitleLink item={item} locale={locale} onInspect={onInspect} /><small>{item.year ?? '—'}</small></span>
+                <small className="return-counter-label">{pt ? 'Devolver no Balcão' : 'Return at the Counter'}</small>
+                <div className="return-actions" aria-label={pt ? `Devolver ${item.name}` : `Return ${item.name}`}>
+                  <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item, 'watched')}>{pt ? 'Assisti' : 'Watched'}</button>
+                  <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item, 'not_watched')}>{pt ? 'Não assisti' : 'Not watched'}</button>
+                  <button type="button" disabled={returningId === item.id} onClick={() => void returnTape(item, 'unknown')}>{pt ? 'Não dizer' : 'Skip'}</button>
+                </div>
+              </li>)}
+            </ul> : <p className="member-empty">{pt ? 'Nenhuma fita alugada agora.' : 'No tapes currently rented.'}</p>}
           </section>
           {reviewItem && (
-            <section className="member-section return-review" aria-label={pt ? `Avaliação de ${reviewItem.name}` : `Review ${reviewItem.name}`}>
-              <h3>{pt ? `O que achou de ${reviewItem.name}?` : `What did you think of ${reviewItem.name}?`}</h3>
+            <section className="member-section return-review" aria-labelledby="member-return-review-heading">
+              <h3 id="member-return-review-heading">{pt ? `Avaliação de ${reviewItem.name}` : `Review ${reviewItem.name}`}</h3>
               <p>{pt ? 'Você marcou esta devolução como assistida. Registre sua avaliação agora.' : 'You marked this return as watched. Share your review now.'}</p>
               <TitleReviews contentType={reviewItem.type} tmdbId={reviewItem.tmdbId} locale={locale} />
             </section>
           )}
-          <section className="member-section">
-            <h3>{pt ? 'Salvas para depois' : 'Saved for later'}</h3>
-            <TapeList onInspect={onInspect} items={member.collections.watchLater.slice(0, 3)} locale={locale} empty={pt ? 'Nenhuma fita salva.' : 'No saved tapes.'} />
-            <button type="button" onClick={() => setCollection('watchLater')}>{pt ? 'Abrir Assistir depois' : 'Open Watch later'} ({member.collections.watchLater.length})</button>
-          </section>
-          <section className="member-section">
-            <h3>{pt ? 'Favoritas' : 'Favorites'}</h3>
-            <TapeList onInspect={onInspect} items={member.collections.favorites.slice(0, 3)} locale={locale} empty={pt ? 'Nenhuma fita favorita.' : 'No favorite tapes.'} />
-            <button type="button" onClick={() => setCollection('favorites')}>{pt ? 'Abrir Favoritas' : 'Open Favorites'} ({member.collections.favorites.length})</button>
-          </section>
-          <section className="member-section">
-            <h3>{pt ? 'Últimas devoluções' : 'Recent returns'}</h3>
+          <details className="member-section member-history" aria-labelledby="member-history-heading">
+            <summary id="member-history-heading">{pt ? 'Histórico da Locadora' : 'Locadora history'}</summary>
             <TapeList onInspect={onInspect} items={member.history} locale={locale} empty={pt ? 'Seu histórico ainda está vazio.' : 'Your history is still empty.'} />
-            {member.historyHasMore && <button type="button" className="history-more" disabled={historyBusy} onClick={() => void loadMoreHistory()}>{historyBusy ? (pt ? 'Buscando…' : 'Loading…') : (pt ? 'Mais histórico' : 'More history')}</button>}
-          </section>
+            {member.historyHasMore && <button type="button" className="history-more" disabled={historyBusy} onClick={() => void loadMoreHistory()}>{historyBusy ? (pt ? 'Buscando…' : 'Loading…') : (pt ? 'Carregar histórico' : 'Load history')}</button>}
+          </details>
         </>
       )}
       <button type="button" className="text-action" disabled={busy} onClick={() => void signOut()}>{pt ? 'Sair da Locadora' : 'Sign out of Locadora'}</button>

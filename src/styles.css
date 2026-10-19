@@ -293,17 +293,41 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .member-error { padding: .7rem; border: 1px solid #e36a5b; color: #ffd0c9; background: #5b201a; font-size: .75rem; line-height: 1.45; }
 .member-privacy { color: var(--muted); font-size: .68rem; line-height: 1.5; text-align: center; }
 .member-overview { display: grid; gap: 1rem; margin-top: 1.25rem; }
-.membership-card { position: relative; display: grid; gap: .2rem; padding: 1rem 1.15rem; overflow: hidden; border: 3px solid var(--paper); color: var(--ink); background: var(--yellow); box-shadow: 5px 6px 0 #080d15; transform: rotate(-.6deg); }
+.membership-card { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .65rem 1rem; padding: 1rem 1.15rem; overflow: hidden; border: 3px solid var(--paper); color: var(--ink); background: var(--yellow); box-shadow: 5px 6px 0 #080d15; transform: rotate(-.6deg); }
 .membership-card::after { content: "◼ REWIND CLUB"; position: absolute; right: -1.2rem; bottom: .7rem; color: #172c4930; font: 900 1.15rem Impact, sans-serif; transform: rotate(-8deg); }
 .membership-card span { color: var(--red); font: 900 .66rem "Courier New", monospace; letter-spacing: .14em; }
 .membership-card strong { font: 900 1.8rem/1 Impact, "Arial Narrow", sans-serif; letter-spacing: .03em; }
 .membership-card small { position: relative; z-index: 1; font: 700 .62rem "Courier New", monospace; text-transform: uppercase; }
+.membership-mark { position: relative; z-index: 1; display: grid; place-items: center; width: 3.2rem; aspect-ratio: 1; border: 3px solid var(--red); color: var(--red); background: var(--paper); font: 900 1.25rem Impact, sans-serif; transform: rotate(2deg); }
+.membership-username { position: relative; z-index: 1; display: grid; gap: .2rem; min-width: 0; }
+.membership-username > div { display: flex; align-items: center; gap: .45rem; min-width: 0; }
+.membership-username strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.membership-edit { display: grid; place-items: center; flex: none; min-width: 32px; min-height: 32px; padding: .2rem; border: 2px solid var(--red); color: var(--red); background: var(--paper); box-shadow: 2px 2px 0 var(--ink); font-size: .8rem; }
+.membership-since { position: relative; z-index: 1; display: grid; gap: .25rem; justify-items: end; text-align: right; }
+.member-inline-actions { display: flex; gap: .45rem; }
+.member-inline-actions button { flex: 1; }
+.member-rental-limit form { display: grid; gap: .55rem; }
+.member-rental-limit form > label { color: var(--yellow); font: 800 .65rem/1 "Courier New", monospace; letter-spacing: .06em; text-transform: uppercase; }
+.member-rental-limit form > div { display: grid; grid-template-columns: minmax(80px, .4fr) 1fr; gap: .55rem; }
+.member-rental-limit select { min-height: 42px; padding: .55rem; border: 2px solid #3f526b; color: var(--cream); background: #080d15; }
+.member-rental-limit .member-privacy { margin: 0; text-align: left; }
+.member-rental-limit-status { min-height: 1.1rem; margin: 0; color: #baf3d3; font-size: .68rem; }
 .member-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: .55rem; margin: 0; }
 .member-counts div { padding: .7rem; border: 1px dashed #ffffff38; text-align: center; }
 .member-counts dt { color: var(--muted); font: 700 .58rem "Courier New", monospace; text-transform: uppercase; }
-.member-counts dd { margin: .25rem 0 0; color: var(--yellow); font: 900 1.25rem "Courier New", monospace; }
-.member-section { border-top: 2px solid #ffffff25; }
+.member-counts dd { margin: 0 0 .25rem; color: var(--yellow); font: 900 1.25rem "Courier New", monospace; }
+.member-section { padding-top: .85rem; border-top: 2px solid #ffffff25; }
 .member-section h3 { margin: .9rem 0 .6rem; color: var(--cyan); font: 900 .85rem "Arial Narrow", Arial, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+.member-section > h3 { margin-top: 0; }
+.member-shelf-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; align-items: start; }
+.member-shelf { display: grid; gap: .55rem; min-width: 0; padding: .7rem; border: 1px dashed #ffffff38; background: #ffffff05; }
+.member-shelf header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .4rem; }
+.member-shelf h4 { margin: 0; color: var(--yellow); font: 900 .68rem/1.3 "Arial Narrow", Arial, sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.member-shelf header button { min-height: 30px; padding: .35rem; font-size: .5rem; }
+.member-shelf .member-tape-list li { align-items: flex-start; flex-direction: column; padding: .5rem; }
+.member-shelf .member-title-link { font-size: .72rem; }
+.member-history summary { color: var(--cyan); font: 900 .85rem "Arial Narrow", Arial, sans-serif; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.member-history[open] summary { margin-bottom: .65rem; }
 .return-review { padding: .8rem; border: 2px solid var(--yellow); background: #172c4966; }
 .return-review h3 { margin-top: 0; color: var(--yellow); }
 .return-review > p { margin: 0 0 .8rem; color: #d6ccb7; font-size: .75rem; line-height: 1.5; }
@@ -316,6 +340,7 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
 .member-return-list li { align-items: flex-start; flex-direction: column; }
 .return-actions { display: flex; flex-wrap: wrap; gap: .35rem; width: 100%; }
 .return-actions button { min-height: 32px; padding: .4rem; font-size: .54rem; }
+.return-counter-label { color: var(--yellow) !important; text-transform: uppercase; }
 .member-empty { margin: 0; padding: .65rem; border: 1px dashed #ffffff24; }
 .history-more { width: 100%; margin-top: .55rem; }
 .saved-panel { margin-top: 1rem; }
@@ -480,6 +505,10 @@ footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem
   .inspection-art { min-height: 260px; border: 0; border-bottom: 8px solid #080b10; }
   .inspection-copy { padding: 1.3rem; }
   .basket-list li { align-items: stretch; flex-direction: column; }
+  .membership-card { grid-template-columns: auto minmax(0, 1fr); }
+  .membership-since { grid-column: 1 / -1; justify-items: start; text-align: left; }
+  .member-shelf-grid { grid-template-columns: 1fr; }
+  .member-counts { grid-template-columns: 1fr; }
   footer { align-items: start; flex-direction: column; }
 }
 
