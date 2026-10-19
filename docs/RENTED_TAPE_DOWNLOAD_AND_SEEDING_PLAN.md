@@ -647,3 +647,19 @@ exist. P6 is independent and can move anywhere.
 
 Every brief carries the standard proof block, and the milestone records the
 `D-0NN` entry from §18 before P1 starts.
+
+## 22. One mechanism still genuinely open
+
+The upload cap is "~40% of measured upstream" (§18, §11), and *measured* has no
+definition yet. Two honest options:
+
+1. **The user declares it** — one field in settings ("minha internet envia X
+   Mbps"), default derived from a conservative value. Predictable, explainable,
+   one screen, no guessing. Wrong only if the user lies or does not know.
+2. **The app learns it** — observe achieved upload throughput across sessions and
+   cap at a multiple of the observed peak. Self-tuning, but it takes sessions to
+   converge and it will be wrong on a bad night.
+
+Recommendation: **declare it**, with the app's own observed peak shown beside the
+field so the number is grounded rather than a guess. P4 decides this before it
+starts; nothing in P1–P3 depends on it.
