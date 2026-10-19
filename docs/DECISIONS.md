@@ -550,6 +550,29 @@ The private v1 manifest is app-owned, atomically replaced, and never logged.
 Player policy, queue/manifest lifecycle logic, UI and seeding scheduling remain
 later parts; playback never mutates rentals or returns.
 
+### D-035 — Bundled defaults are seeded per resource
+
+Accepted 2026-10-19 by the Rental tapes P7 brief
+(`docs/RENTED_TAPE_DOWNLOAD_AND_SEEDING_PLAN.md` §12, §21 P7). Three bare public
+manifests ship and are appended, never replacing or reordering anything the user
+configured:
+
+- `meta` — `https://v3-cinemeta.strem.io/manifest.json`, unchanged (D-031);
+- `stream` — `https://torrentio.strem.fun/manifest.json`;
+- `subtitles` — `https://opensubtitles-v3.strem.io/manifest.json`, the key-less
+  v3 add-on; §12's no-credential rule is what selects it.
+
+A default is appended only when no configured add-on declares that resource, so
+a user's own Torrentio — debrid-configured or not — is never doubled by a public
+one, and each resource is decided on its own. Each decision is recorded under
+its own key `locadora:default-media-seed-v1:<resource>`; removing an add-on
+records the resources it declared and disconnecting records all three, so a
+deliberate removal is never undone by a later read. A failed add records nothing
+for that resource and is attempted at most once per read. The single pre-P7 key
+is no longer read: it could not say which resource it had settled, so the
+configuration itself decides. The read-only Stremio import and the manual add
+path still record nothing (D-011).
+
 ## Non-negotiable boundaries
 
 - The public Locadora repository remains unchanged and contains no playback,

@@ -1,10 +1,74 @@
 # Implementation progress
 
 Last updated: 2026-10-19
-Current milestone: D-034 rented tapes P6 — the tape dashboard and settings surface
-Status: P6 implemented and automated checks green; owner engine/network acceptance pending
+Current milestone: D-034 rented tapes P7 — bundled stream and subtitle defaults
+Status: P7 implemented and automated checks green; owner engine/network acceptance for P5–P7 pending
 
 ## Resume checkpoint
+
+2026-10-19 D-034 rented tapes P7 bundled stream and subtitle defaults (D-035):
+- `src/platform/nativeBridge.ts` replaces the single metadata default with an
+  ordered table `DEFAULT_MEDIA_ADDONS`: `meta` (Cinemeta, unchanged), `stream`
+  (`https://torrentio.strem.fun/manifest.json`), `subtitles`
+  (`https://opensubtitles-v3.strem.io/manifest.json`). All three are bare public
+  manifests with no account, key, query string or debrid configuration.
+- `readMediaConfiguration` walks that table once per read. For each resource it
+  skips the resource when its seed flag is recorded, records the flag and moves
+  on when a configured add-on already declares it, and otherwise appends the
+  default through the existing `media_configuration_add` command and records
+  that one flag. Defaults are appended after the user's add-ons in the fixed
+  metadata → stream → subtitles order; nothing is reordered, replaced or
+  removed. The command returns the updated list, so each later decision sees
+  the result of the earlier ones.
+- Seed flags are now per resource:
+  `locadora:default-media-seed-v1:meta|stream|subtitles`, plus a session set for
+  the case where WebView local storage is unavailable. Seeding one default no
+  longer marks the other two as decided.
+- Deliberate removal stays respected: `removeMediaConfiguration` snapshots the
+  configuration first, removes the add-on, then records the resources that
+  add-on declared, so only that decision is settled. If the snapshot fails the
+  removal still happens and all three are recorded — an explicit removal must
+  never be undone by a later read. `disconnectMediaConfiguration` still records
+  all three. Add and the read-only Stremio import still record nothing, so an
+  imported stream-only collection still receives the metadata and subtitle
+  defaults it cannot answer.
+- Choices the brief left open: (a) a resource the configuration already covers
+  is recorded without an add, so a later read cannot append a default behind the
+  user's back even if the add-on disappears by a path other than
+  `removeMediaConfiguration`; (b) the superseded single key
+  `locadora:default-media-seed-v1` is no longer read — it cannot say which
+  resource it settled, so an empty configuration is seeded again rather than
+  left without metadata, streams or subtitles (a user on the old build who
+  removed an add-on may therefore see Cinemeta reappear once); (c) a failed add
+  records nothing and is not retried inside the same read, so the next read may
+  attempt it once more — bounded per read, never a loop; (d) the seeding order
+  is metadata, streams, subtitles, chosen because a series needs metadata before
+  a stream or subtitle request makes sense; (e) no settings surface was added.
+- Exact validation commands/results:
+  - `npx tsc -b`: exit 0.
+  - `npx vitest run test/mediaConfigurationDefault.test.ts`: 1 file, 11 tests
+    passed.
+  - `npm run check`: exit 0; `tsc -b` clean; Test Files 55 passed (55), Tests
+    423 passed (423) — baseline 55/416, so +7 tests in the existing file; Vite
+    built 204 modules with the existing chunk advisory only.
+- Mutation evidence, restored before commit: made `configurationCovers` return
+  false for `stream`, so the stream default ignored an existing stream add-on.
+  `npx vitest run test/mediaConfigurationDefault.test.ts` exited 1 (3 failed, 8
+  passed): "adds only the resources a stream-only configuration lacks, after
+  it", "adds nothing when the configuration already answers all three
+  resources", and the import/disconnect case. After restoring the predicate the
+  same command exited 0 (11 passed).
+- No browser/GUI automation, no real add-on request, no manual visual or
+  playback verification was performed. No push, no history rewrite, no
+  dependency, no Rust change.
+- **Next task:** owner acceptance run for P5–P7 on a real engine and network:
+  start from an empty profile and confirm the settings drawer lists Cinemeta,
+  Torrentio and OpenSubtitles v3 in that order; add a personal Torrentio and
+  confirm no second stream add-on appears; remove one default and confirm it
+  stays gone after a restart while the others remain; then rent a movie and
+  check the P6 dashboard row, its uploaded figure and the four `locadora.tapes.*`
+  controls. §22 (how "measured upstream" is defined for the P4 upload cap)
+  remains the only open mechanism.
 
 2026-10-19 D-034 rented tapes P6 tape dashboard and settings surface:
 - `src/components/TapeDashboard.tsx` (new) is the read-only dashboard inside

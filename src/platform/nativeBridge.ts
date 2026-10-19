@@ -259,10 +259,30 @@ export async function selectNativeSubtitle(url: string | null): Promise<void> {
   return invoke('player_select_subtitle', { url });
 }
 
-const DEFAULT_META_MANIFEST = 'https://v3-cinemeta.strem.io/manifest.json';
-const DEFAULT_MEDIA_SEED_KEY = 'locadora:default-media-seed-v1';
+type MediaDefaultResource = 'meta' | 'stream' | 'subtitles';
+
+interface DefaultMediaAddon {
+  resource: MediaDefaultResource;
+  manifestUrl: string;
+}
+
+/**
+ * The three resources a brand-new install cannot answer on its own. Each one is
+ * a bare, unconfigured public manifest: no account, no key, no debrid
+ * configuration. A credential shipped in a desktop binary is a published
+ * credential, so these URLs must stay exactly like this (plan §12). Appended in
+ * this order, after whatever the user already configured.
+ */
+const DEFAULT_MEDIA_ADDONS: readonly DefaultMediaAddon[] = [
+  { resource: 'meta', manifestUrl: 'https://v3-cinemeta.strem.io/manifest.json' },
+  { resource: 'stream', manifestUrl: 'https://torrentio.strem.fun/manifest.json' },
+  { resource: 'subtitles', manifestUrl: 'https://opensubtitles-v3.strem.io/manifest.json' },
+];
+
+const MEDIA_DEFAULT_RESOURCES: readonly MediaDefaultResource[] = ['meta', 'stream', 'subtitles'];
+const DEFAULT_MEDIA_SEED_KEY_PREFIX = 'locadora:default-media-seed-v1';
 let mediaConfigurationQueue: Promise<unknown> = Promise.resolve();
-let defaultSeededThisSession = false;
+const defaultSeedsRecordedThisSession = new Set<MediaDefaultResource>();
 
 function serializeMediaConfiguration<T>(task: () => Promise<T>): Promise<T> {
   const result = mediaConfigurationQueue.then(task, task);
@@ -270,29 +290,48 @@ function serializeMediaConfiguration<T>(task: () => Promise<T>): Promise<T> {
   return result;
 }
 
-function defaultSeedRecorded(): boolean {
+function defaultSeedKey(resource: MediaDefaultResource): string {
+  return `${DEFAULT_MEDIA_SEED_KEY_PREFIX}:${resource}`;
+}
+
+// One flag per resource: seeding metadata must not mark streams or subtitles as
+// decided, and a resource whose add-on add failed stays unrecorded so a later
+// read may try that one again.
+function defaultSeedRecorded(resource: MediaDefaultResource): boolean {
+  if (defaultSeedsRecordedThisSession.has(resource)) return true;
   try {
-    return defaultSeededThisSession || window.localStorage.getItem(DEFAULT_MEDIA_SEED_KEY) === '1';
+    return window.localStorage.getItem(defaultSeedKey(resource)) === '1';
   } catch {
-    return defaultSeededThisSession;
+    return false;
   }
 }
 
-// The default exists so a series can list its episodes without the user
-// configuring anything. An existing configuration that already answers `meta`
-// needs nothing; one built only from stream/subtitle add-ons (the common
-// imported case) still gets the metadata default appended after it.
-function configurationNeedsMetaDefault(addons: readonly ConfiguredAddon[]): boolean {
-  return !addons.some((addon) => Array.isArray(addon.resources) && addon.resources.includes('meta'));
+function recordDefaultSeeds(resources: readonly MediaDefaultResource[]): void {
+  for (const resource of resources) {
+    defaultSeedsRecordedThisSession.add(resource);
+    try {
+      window.localStorage.setItem(defaultSeedKey(resource), '1');
+    } catch {
+      // A working keyring remains useful when WebView local storage is unavailable.
+    }
+  }
 }
 
-function recordDefaultSeed(): void {
-  defaultSeededThisSession = true;
-  try {
-    window.localStorage.setItem(DEFAULT_MEDIA_SEED_KEY, '1');
-  } catch {
-    // A working keyring remains useful when WebView local storage is unavailable.
-  }
+/**
+ * A configured add-on answers a resource when it declares it. The default is
+ * only a floor for a slot nothing else fills, so a user's own Torrentio —
+ * including a debrid-configured one — is never duplicated by a public one.
+ */
+function configurationCovers(
+  addons: readonly ConfiguredAddon[],
+  resource: MediaDefaultResource,
+): boolean {
+  return addons.some((addon) => Array.isArray(addon.resources) && addon.resources.includes(resource));
+}
+
+function declaredDefaultResources(addon: ConfiguredAddon | undefined): MediaDefaultResource[] {
+  if (!addon || !Array.isArray(addon.resources)) return [];
+  return MEDIA_DEFAULT_RESOURCES.filter((resource) => addon.resources.includes(resource));
 }
 
 export async function shutdownNativePlayer(): Promise<void> {
@@ -303,20 +342,27 @@ export async function shutdownNativePlayer(): Promise<void> {
 export async function readMediaConfiguration(): Promise<ConfiguredAddon[]> {
   if (!isNativeShell()) return [];
   return serializeMediaConfiguration(async () => {
-    const addons = await invoke<ConfiguredAddon[]>('media_configuration_status');
-    if (!configurationNeedsMetaDefault(addons)) {
-      recordDefaultSeed();
-      return addons;
+    let addons = await invoke<ConfiguredAddon[]>('media_configuration_status');
+    // Appending keeps the user's order intact: defaults only ever land at the
+    // end, in the fixed metadata → stream → subtitles order.
+    for (const { resource, manifestUrl } of DEFAULT_MEDIA_ADDONS) {
+      if (defaultSeedRecorded(resource)) continue;
+      if (configurationCovers(addons, resource)) {
+        // A slot the user already fills is a settled decision: record it so no
+        // later read appends a bundled default behind their back.
+        recordDefaultSeeds([resource]);
+        continue;
+      }
+      try {
+        addons = await invoke<ConfiguredAddon[]>('media_configuration_add', { manifestUrl });
+        recordDefaultSeeds([resource]);
+      } catch {
+        // The public default is optional when its manifest cannot be reached.
+        // Nothing is recorded for it, so one later read may try again; this
+        // read never retries it.
+      }
     }
-    if (defaultSeedRecorded()) return addons;
-    try {
-      const seeded = await invoke<ConfiguredAddon[]>('media_configuration_add', { manifestUrl: DEFAULT_META_MANIFEST });
-      recordDefaultSeed();
-      return seeded;
-    } catch {
-      // The public default is optional when its manifest cannot be reached.
-      return addons;
-    }
+    return addons;
   });
 }
 
@@ -339,8 +385,19 @@ export async function importInstalledStremioConfiguration(): Promise<StremioImpo
 export async function removeMediaConfiguration(addonId: string): Promise<ConfiguredAddon[]> {
   if (!isNativeShell()) throw new Error('Protected media configuration is available in the desktop app');
   return serializeMediaConfiguration(async () => {
+    // The resource a removed add-on provided is settled by that removal, so the
+    // next read must not append a bundled default in its place. Without a
+    // snapshot the resources are unknown; an explicit removal then silences all
+    // three rather than re-adding one the user just got rid of.
+    let settledResources: readonly MediaDefaultResource[] = MEDIA_DEFAULT_RESOURCES;
+    try {
+      const before = await invoke<ConfiguredAddon[]>('media_configuration_status');
+      settledResources = declaredDefaultResources(before.find((addon) => addon.id === addonId));
+    } catch {
+      // Keep the conservative fallback above.
+    }
     const addons = await invoke<ConfiguredAddon[]>('media_configuration_remove', { addonId });
-    recordDefaultSeed();
+    recordDefaultSeeds(settledResources);
     return addons;
   });
 }
@@ -349,7 +406,8 @@ export async function disconnectMediaConfiguration(): Promise<void> {
   if (!isNativeShell()) return;
   return serializeMediaConfiguration(async () => {
     await invoke('media_configuration_disconnect');
-    recordDefaultSeed();
+    // Disconnect is a deliberate emptying: no bundled default is re-seeded.
+    recordDefaultSeeds(MEDIA_DEFAULT_RESOURCES);
   });
 }
 
