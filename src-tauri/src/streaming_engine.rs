@@ -21,6 +21,7 @@ pub const URL: &str = "http://127.0.0.1:11471/";
 pub const TAPE_PORT: u16 = 11472;
 pub const TAPE_URL: &str = "http://127.0.0.1:11472/";
 const DEFAULT_TAPE_PEER_PORT: u16 = 6881;
+const DEFAULT_TAPE_MAX_SEED_RATIO: f64 = 0.0;
 const BINARY: &[u8] = include_bytes!("../resources/streaming-engine/stremio-server");
 const LICENSE: &[u8] = include_bytes!("../resources/streaming-engine/LICENSE");
 const PROVENANCE: &[u8] = include_bytes!("../resources/streaming-engine/provenance.json");
@@ -265,7 +266,13 @@ impl Drop for Engine {
     }
 }
 
-fn tape_command(binary: &Path, store: &Path, port: u16, peer_port: u16) -> Command {
+fn tape_command(
+    binary: &Path,
+    store: &Path,
+    port: u16,
+    peer_port: u16,
+    max_seed_ratio: f64,
+) -> Command {
     let mut command = Command::new(binary);
     command
         .env_clear()
@@ -280,7 +287,7 @@ fn tape_command(binary: &Path, store: &Path, port: u16, peer_port: u16) -> Comma
         )
         .env("STREMIO_MEM_LIMIT", "268435456")
         .env("STREMIO_TORRENT_IDLE_TIMEOUT", "0")
-        .env("STREMIO_MAX_SEED_RATIO", "0")
+        .env("STREMIO_MAX_SEED_RATIO", max_seed_ratio.to_string())
         .env("BT_LISTEN_PORT", peer_port.to_string())
         .env("STREMIO_TRACKERS_URL", "off")
         .env("STREMIO_LOCAL_IMDB", "off")
@@ -310,6 +317,7 @@ impl TapeEngine {
         store: &Path,
         port: u16,
         peer_port: u16,
+        max_seed_ratio: f64,
         closing: &AtomicBool,
     ) -> Result<(), String> {
         if closing.load(Ordering::SeqCst) {
@@ -325,7 +333,7 @@ impl TapeEngine {
         let binary = materialize(binary_root)?;
         private_dir(store)?;
         self.store = Some(store.to_path_buf());
-        let mut command = tape_command(&binary, store, port, peer_port);
+        let mut command = tape_command(&binary, store, port, peer_port, max_seed_ratio);
         let parent = std::process::id();
         // SAFETY: only async-signal-safe libc operations between fork and exec.
         unsafe {
@@ -621,6 +629,7 @@ pub async fn streaming_engine_request(
 pub async fn tape_engine_ensure(
     app: AppHandle,
     peer_port: Option<u16>,
+    max_seed_ratio: Option<f64>,
 ) -> Result<TapeEngineReady, String> {
     let binary_root = app
         .path()
@@ -633,20 +642,40 @@ pub async fn tape_engine_ensure(
         .map_err(|_| "Could not locate tape storage")?
         .join("tape-store");
     let peer_port = peer_port.unwrap_or(DEFAULT_TAPE_PEER_PORT);
+    // Local tape settings are sampled at process spawn. Changing either value
+    // deliberately takes effect on the next lazy start; P4 adds no restart path.
+    let max_seed_ratio = max_seed_ratio
+        .filter(|ratio| ratio.is_finite() && *ratio >= 0.0)
+        .unwrap_or(DEFAULT_TAPE_MAX_SEED_RATIO);
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<EngineState>();
         let mut engine = state
             .tape
             .lock()
             .map_err(|_| "Tape engine state is unavailable")?;
-        engine.ensure(&binary_root, &store, TAPE_PORT, peer_port, &state.closing)?;
+        engine.ensure(
+            &binary_root,
+            &store,
+            TAPE_PORT,
+            peer_port,
+            max_seed_ratio,
+            &state.closing,
+        )?;
         Ok(TapeEngineReady { url: TAPE_URL })
     })
     .await
     .map_err(|_| "Tape startup task failed")?
 }
 
+#[tauri::command]
+pub fn tape_engine_status(state: State<'_, EngineState>) -> bool {
+    state.tape_is_ready()
+}
+
 fn tape_path_allowed(path: &str) -> bool {
+    if path == "/settings" {
+        return true;
+    }
     let Some(relative) = path.strip_prefix('/') else {
         return false;
     };
@@ -690,11 +719,30 @@ fn tape_request_allowed(url: &url::Url, method: &str, body: Option<&str>) -> boo
         return false;
     }
     let is_create = url.path().split('/').next_back() == Some("create");
+    let is_settings = url.path() == "/settings";
     match method {
+        "POST" if is_settings => body.is_some_and(tape_settings_body_allowed),
         "POST" => is_create,
-        "GET" => !is_create && body.is_none(),
+        "GET" => !is_create && !is_settings && body.is_none(),
         _ => false,
     }
+}
+
+fn tape_settings_body_allowed(body: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
+        return false;
+    };
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    object.len() == 1
+        && object
+            .get("seedingEnabled")
+            .is_some_and(|value| value.is_boolean())
+}
+
+fn tape_request_spelling_allowed(raw: &str, parsed: &url::Url) -> bool {
+    parsed.path() != "/settings" || raw == format!("{TAPE_URL}settings")
 }
 
 #[tauri::command]
@@ -705,7 +753,10 @@ pub async fn tape_engine_request(
     body: Option<String>,
 ) -> Result<EngineResponse, String> {
     let parsed = url::Url::parse(&url).map_err(|_| "Invalid tape engine request")?;
-    if !tape_request_allowed(&parsed, &method, body.as_deref()) || !state.tape_is_ready() {
+    if !tape_request_spelling_allowed(&url, &parsed)
+        || !tape_request_allowed(&parsed, &method, body.as_deref())
+        || !state.tape_is_ready()
+    {
         return Err("Tape engine request is unavailable or not permitted".into());
     }
     let client = reqwest::Client::builder()
@@ -889,6 +940,7 @@ mod tests {
             store,
             TAPE_PORT,
             DEFAULT_TAPE_PEER_PORT,
+            DEFAULT_TAPE_MAX_SEED_RATIO,
         );
         assert_eq!(PORT, 11471);
         assert_eq!(TAPE_PORT, 11472);
@@ -933,6 +985,25 @@ mod tests {
     }
 
     #[test]
+    fn tape_role_reads_ratio_and_peer_port_at_spawn() {
+        let command = tape_command(
+            Path::new("/private/engine"),
+            Path::new("/private/tape-store"),
+            TAPE_PORT,
+            0,
+            1.5,
+        );
+        assert_eq!(
+            command_env(&command, "STREMIO_MAX_SEED_RATIO").as_deref(),
+            Some("1.5")
+        );
+        assert_eq!(
+            command_env(&command, "BT_LISTEN_PORT").as_deref(),
+            Some("0")
+        );
+    }
+
+    #[test]
     fn tape_engine_is_lazy_until_explicit_ensure() {
         let state = EngineState::default();
         assert!(state.tape.lock().unwrap().child.is_none());
@@ -960,7 +1031,7 @@ mod tests {
         let mut engine = TapeEngine::default();
         assert!(
             engine
-                .ensure(&binary_root, &store, port, 0, &closing)
+                .ensure(&binary_root, &store, port, 0, 0.0, &closing)
                 .unwrap_err()
                 .contains("busy")
         );
@@ -968,7 +1039,7 @@ mod tests {
         drop(listener);
 
         engine
-            .ensure(&binary_root, &store, port, 0, &closing)
+            .ensure(&binary_root, &store, port, 0, 0.0, &closing)
             .unwrap();
         assert!(engine.alive());
         assert_eq!(
@@ -1024,6 +1095,27 @@ mod tests {
         ] {
             assert!(tape_request_allowed(&parsed_tape_url(&path), method, body));
         }
+    }
+
+    #[test]
+    fn tape_bridge_accepts_only_the_runtime_seeding_setting() {
+        let settings = url::Url::parse(&format!("{TAPE_URL}settings")).unwrap();
+        for body in [r#"{"seedingEnabled":true}"#, r#"{"seedingEnabled":false}"#] {
+            assert!(tape_request_allowed(&settings, "POST", Some(body)));
+        }
+        for (method, body) in [
+            ("GET", None),
+            ("POST", None),
+            ("POST", Some("{}")),
+            ("POST", Some(r#"{"seedingEnabled":true,"cacheSize":null}"#)),
+            ("POST", Some(r#"{"seedingEnabled":1}"#)),
+        ] {
+            assert!(!tape_request_allowed(&settings, method, body));
+        }
+        let normalized = format!("{TAPE_URL}{}/../settings", "a".repeat(40));
+        let parsed = url::Url::parse(&normalized).unwrap();
+        assert_eq!(parsed.path(), "/settings");
+        assert!(!tape_request_spelling_allowed(&normalized, &parsed));
     }
 
     #[test]

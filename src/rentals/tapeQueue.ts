@@ -145,6 +145,7 @@ export type TapeQueueEvent =
   | { type: 'started'; job: TapeJob }
   | { type: 'progress'; job: TapeJob }
   | { type: 'completed'; job: TapeJob }
+  | { type: 'paused'; job: TapeJob }
   | { type: 'retry-queued'; job: TapeJob; code: TapeFailureCode }
   | { type: 'failed'; job: TapeJob; code: TapeFailureCode }
   | { type: 'cancelled'; job: TapeJob };
@@ -152,10 +153,13 @@ export type TapeQueueEvent =
 export interface TapeQueueSnapshot {
   active: TapeJob | null;
   queued: TapeJob[];
+  paused: boolean;
 }
 
 export interface TapeQueueOptions {
   driver: TapeQueueDriver;
+  /** The master switch is sampled when the queue is created. Default true. */
+  enabled?: boolean;
   /** Timestamp source for `completedAt`; injectable for deterministic tests. */
   now?: () => string;
   onEvent?: (event: TapeQueueEvent) => void;
@@ -165,6 +169,9 @@ export interface TapeQueue {
   enqueue(seed: TapeJobSeed): TapeJob | null;
   nextJob(): TapeJob | null;
   startNext(): TapeJob | null;
+  pause(): TapeJob | null;
+  resume(): void;
+  isPaused(): boolean;
   onProgress(event: TapeDownloadProgress): void;
   onFailure(code: TapeFailureCode): void;
   cancelForReturn(infoHash: string): TapeJob | null;
@@ -188,15 +195,21 @@ function isValidSeed(seed: TapeJobSeed): boolean {
 
 class TapeDownloadQueue implements TapeQueue {
   private readonly driver: TapeQueueDriver;
+  private readonly enabled: boolean;
   private readonly now: () => string;
   private readonly listeners = new Set<(event: TapeQueueEvent) => void>();
   private readonly pending: TapeJob[] = [];
   /** Per tape per session: survives a return and a re-enqueue of the same hash. */
   private readonly attemptsByTape = new Map<string, number>();
   private activeJob: TapeJob | null = null;
+  private activeRun = 0;
+  private nextRun = 0;
+  private paused: boolean;
 
   constructor(options: TapeQueueOptions) {
     this.driver = options.driver;
+    this.enabled = options.enabled !== false;
+    this.paused = !this.enabled;
     this.now = options.now ?? (() => new Date().toISOString());
     if (options.onEvent) this.listeners.add(options.onEvent);
   }
@@ -237,7 +250,7 @@ class TapeDownloadQueue implements TapeQueue {
    * event, never as this return value.
    */
   startNext(): TapeJob | null {
-    if (this.activeJob) return null;
+    if (this.paused || this.activeJob) return null;
     const job = this.pending.shift();
     if (!job) return null;
 
@@ -249,6 +262,8 @@ class TapeDownloadQueue implements TapeQueue {
     job.totalBytes = null;
     job.state = 'resolving';
     this.activeJob = job;
+    const run = ++this.nextRun;
+    this.activeRun = run;
     this.emit({ type: 'started', job });
 
     let pending: Promise<void>;
@@ -262,9 +277,47 @@ class TapeDownloadQueue implements TapeQueue {
     // The native command rejects only at the terminal state, so this is the
     // single failure path; a job that already left the slot is left alone.
     Promise.resolve(pending).catch((error: unknown) => {
-      if (this.activeJob === job) this.fail(job, classifyTapeFailure(error));
+      if (this.activeJob === job && this.activeRun === run) this.fail(job, classifyTapeFailure(error));
     });
     return copyJob(job);
+  }
+
+  /**
+   * Stops network work without failing the active tape. The job returns to its
+   * FIFO position and the cancelled drain's rejection is ignored because it no
+   * longer owns the active slot. An intentional playback-priority pause also
+   * does not spend the retry budget.
+   */
+  pause(): TapeJob | null {
+    if (this.paused) return null;
+    this.paused = true;
+    const job = this.activeJob;
+    if (!job) return null;
+
+    this.activeJob = null;
+    this.activeRun = 0;
+    const attempts = Math.max(0, (this.attemptsByTape.get(job.infoHash) ?? job.attempts) - 1);
+    if (attempts === 0) this.attemptsByTape.delete(job.infoHash);
+    else this.attemptsByTape.set(job.infoHash, attempts);
+    job.attempts = attempts;
+    job.failureCode = null;
+    job.state = 'queued';
+    this.insert(job);
+    this.emit({ type: 'paused', job });
+    try {
+      Promise.resolve(this.driver.cancel()).catch(() => undefined);
+    } catch {
+      // The queue state is authoritative even if a driver is already gone.
+    }
+    return copyJob(job);
+  }
+
+  resume(): void {
+    if (this.enabled) this.paused = false;
+  }
+
+  isPaused(): boolean {
+    return this.paused;
   }
 
   /**
@@ -291,6 +344,7 @@ class TapeDownloadQueue implements TapeQueue {
       if (event.totalBytes !== null) job.totalBytes = event.totalBytes;
       job.state = 'ready';
       this.activeJob = null;
+      this.activeRun = 0;
       this.emit({ type: 'completed', job });
       return;
     }
@@ -322,6 +376,7 @@ class TapeDownloadQueue implements TapeQueue {
     const active = this.activeJob;
     if (!active || active.infoHash !== infoHash) return null;
     this.activeJob = null;
+    this.activeRun = 0;
     active.state = 'returned';
     this.emit({ type: 'cancelled', job: active });
     try {
@@ -336,6 +391,7 @@ class TapeDownloadQueue implements TapeQueue {
     return {
       active: this.activeJob ? copyJob(this.activeJob) : null,
       queued: this.pending.map(copyJob),
+      paused: this.paused,
     };
   }
 
@@ -360,6 +416,7 @@ class TapeDownloadQueue implements TapeQueue {
 
   private fail(job: TapeJob, code: TapeFailureCode): void {
     this.activeJob = null;
+    this.activeRun = 0;
     job.failureCode = code;
 
     if (code === 'torrent-not-found') {

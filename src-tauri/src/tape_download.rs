@@ -328,6 +328,8 @@ pub async fn tape_download_start(
     state: State<'_, DownloadState>,
     info_hash: Option<serde_json::Value>,
     file_idx: Option<serde_json::Value>,
+    peer_port: Option<u16>,
+    max_seed_ratio: Option<f64>,
 ) -> Result<(), DownloadError> {
     let progress = DownloadProgress::request(
         &info_hash.unwrap_or_default(),
@@ -338,7 +340,7 @@ pub async fn tape_download_start(
     download
         .run(
             async {
-                tape_engine_ensure(app.clone(), None)
+                tape_engine_ensure(app.clone(), peer_port, max_seed_ratio)
                     .await
                     .map(|_| ())
                     .map_err(|_| DownloadErrorCode::EngineUnavailable.into())

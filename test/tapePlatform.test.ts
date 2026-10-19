@@ -43,6 +43,7 @@ beforeEach(() => {
   vi.resetModules();
   invoke.mockReset();
   listen.mockReset();
+  window.localStorage.clear();
   useNativeShell();
 });
 
@@ -51,11 +52,13 @@ describe('tape engine wrappers', () => {
     const tapePlatform = await platform();
     invoke.mockResolvedValueOnce({ url: ORIGIN });
     await expect(tapePlatform.ensureTapeEngine()).resolves.toBe(ORIGIN);
-    expect(invoke).toHaveBeenLastCalledWith('tape_engine_ensure', { peerPort: null });
+    expect(invoke).toHaveBeenLastCalledWith('tape_engine_ensure', { peerPort: 6881, maxSeedRatio: 0 });
 
+    window.localStorage.setItem('locadora.tapes.peerPort', '0');
+    window.localStorage.setItem('locadora.tapes.ratio', '1.5');
     invoke.mockResolvedValueOnce({ url: ORIGIN });
-    await tapePlatform.ensureTapeEngine(6881);
-    expect(invoke).toHaveBeenLastCalledWith('tape_engine_ensure', { peerPort: 6881 });
+    await tapePlatform.ensureTapeEngine();
+    expect(invoke).toHaveBeenLastCalledWith('tape_engine_ensure', { peerPort: 0, maxSeedRatio: 1.5 });
 
     invoke.mockResolvedValueOnce({ url: 'http://127.0.0.1:11471' });
     await expect(tapePlatform.ensureTapeEngine()).rejects.toMatchObject({ code: 'engine-unavailable' });
@@ -71,7 +74,7 @@ describe('tape engine wrappers', () => {
       `http://user:secret@127.0.0.1:11472/${HASH}/3`,
       `http://127.0.0.1:11472/${HASH.toUpperCase()}/3`,
       `http://127.0.0.1:11472/${HASH}/10000`,
-      `http://127.0.0.1:11472/${HASH}/settings`,
+      `http://127.0.0.1:11472/${HASH}/../settings`,
     ]) {
       await expect(tapePlatform.requestTapeEngine(url, 'GET')).rejects.toMatchObject({ code: 'invalid-request' });
     }
@@ -80,6 +83,38 @@ describe('tape engine wrappers', () => {
     await expect(tapePlatform.requestTapeEngine(`http://127.0.0.1:11472/${HASH}/3`, 'GET', '{}'))
       .rejects.toMatchObject({ code: 'invalid-request' });
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('allows only the boolean seeding setting on the settings path', async () => {
+    const tapePlatform = await platform();
+    const settingsUrl = `${ORIGIN}/settings`;
+    for (const [method, body] of [
+      ['GET', null],
+      ['POST', null],
+      ['POST', '{}'],
+      ['POST', '{"seedingEnabled":1}'],
+      ['POST', '{"seedingEnabled":true,"cacheSize":null}'],
+    ] as const) {
+      await expect(tapePlatform.requestTapeEngine(settingsUrl, method, body))
+        .rejects.toMatchObject({ code: 'invalid-request' });
+    }
+    invoke.mockResolvedValueOnce({ status: 200, body: '{"success":true}', contentType: 'application/json' });
+    await expect(tapePlatform.requestTapeEngine(settingsUrl, 'POST', '{"seedingEnabled":false}'))
+      .resolves.toMatchObject({ status: 200 });
+  });
+
+  it('does not POST a seeding setting while the tape engine is off', async () => {
+    const tapePlatform = await platform();
+    invoke.mockResolvedValueOnce(false);
+    await expect(tapePlatform.setTapeSeedingEnabled(false)).resolves.toBe(false);
+    expect(invoke.mock.calls).toEqual([['tape_engine_status']]);
+
+    invoke.mockResolvedValueOnce(true);
+    invoke.mockResolvedValueOnce({ status: 200, body: '{"success":true}', contentType: 'application/json' });
+    await expect(tapePlatform.setTapeSeedingEnabled(false)).resolves.toBe(true);
+    expect(invoke).toHaveBeenLastCalledWith('tape_engine_request', {
+      url: `${ORIGIN}/settings`, method: 'POST', body: '{"seedingEnabled":false}',
+    });
   });
 
   it('passes an allowed request through and validates the answer', async () => {
@@ -132,7 +167,9 @@ describe('tape download wrappers', () => {
     const tapePlatform = await platform();
     invoke.mockResolvedValue(undefined);
     await tapePlatform.startTapeDownload(HASH, 3);
-    expect(invoke).toHaveBeenLastCalledWith('tape_download_start', { infoHash: HASH, fileIdx: 3 });
+    expect(invoke).toHaveBeenLastCalledWith('tape_download_start', {
+      infoHash: HASH, fileIdx: 3, peerPort: 6881, maxSeedRatio: 0,
+    });
     await tapePlatform.cancelTapeDownload();
     expect(invoke).toHaveBeenLastCalledWith('tape_download_cancel');
   });
@@ -181,9 +218,19 @@ describe('tape download wrappers', () => {
     invoke.mockResolvedValue(undefined);
     const driver = tapePlatform.createTapeDownloadDriver();
     await driver.start(HASH, 0);
-    expect(invoke).toHaveBeenLastCalledWith('tape_download_start', { infoHash: HASH, fileIdx: 0 });
+    expect(invoke).toHaveBeenLastCalledWith('tape_download_start', {
+      infoHash: HASH, fileIdx: 0, peerPort: 6881, maxSeedRatio: 0,
+    });
     await driver.cancel();
     expect(invoke).toHaveBeenLastCalledWith('tape_download_cancel');
+  });
+
+  it('keeps the engine and queue driver off when the master switch is false', async () => {
+    window.localStorage.setItem('locadora.tapes.enabled', 'false');
+    const tapePlatform = await platform();
+    await expect(tapePlatform.ensureTapeEngine()).rejects.toMatchObject({ code: 'engine-unavailable' });
+    await expect(tapePlatform.startTapeDownload(HASH, 0)).rejects.toMatchObject({ code: 'engine-unavailable' });
+    expect(invoke).not.toHaveBeenCalled();
   });
 });
 

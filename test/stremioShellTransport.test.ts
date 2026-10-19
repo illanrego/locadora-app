@@ -11,6 +11,12 @@ const native = vi.hoisted(() => ({
   shutdown: vi.fn().mockResolvedValue(undefined),
   start: vi.fn().mockResolvedValue(undefined),
 }));
+const tapeWindow = vi.hoisted(() => ({
+  closed: vi.fn(),
+  ended: vi.fn(),
+  errored: vi.fn(),
+  started: vi.fn(),
+}));
 
 vi.mock('../src/platform/nativeBridge', () => ({
   controlNativePlayer: native.control,
@@ -20,11 +26,18 @@ vi.mock('../src/platform/nativeBridge', () => ({
   shutdownNativePlayer: native.shutdown,
   startNativePlayer: native.start,
 }));
+vi.mock('../src/rentals/tapePlaybackWindow', () => ({
+  notifyTapePlaybackClosed: tapeWindow.closed,
+  notifyTapePlaybackEnded: tapeWindow.ended,
+  notifyTapePlaybackErrored: tapeWindow.errored,
+  notifyTapePlaybackStarted: tapeWindow.started,
+}));
 
 import { StremioShellTransport } from '../src/platform/stremioShellTransport';
 
 beforeEach(() => {
   Object.values(native).forEach((mock) => mock.mockClear());
+  Object.values(tapeWindow).forEach((mock) => mock.mockClear());
 });
 
 describe('official Stremio video shell adapter', () => {
@@ -52,6 +65,8 @@ describe('official Stremio video shell adapter', () => {
     transport.send('mpv-command', ['loadfile', 'https://media.example.invalid/video']);
 
     await waitFor(() => expect(native.load).toHaveBeenCalledOnce());
+    expect(tapeWindow.started).toHaveBeenCalledOnce();
+    expect(tapeWindow.started).toHaveBeenCalledWith('https://media.example.invalid/video');
     expect(ready).toHaveBeenCalledWith({ loadId: 1, ready: false });
     await transport.destroy();
   });
@@ -112,6 +127,20 @@ describe('official Stremio video shell adapter', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(ended).toHaveBeenCalledTimes(1);
     expect(ended).toHaveBeenCalledWith({ error: 'The playback descriptor is not allowed' });
+    expect(tapeWindow.errored).toHaveBeenCalledOnce();
     await transport.destroy();
+  });
+
+  it('reports native end and failure events to the tape window', async () => {
+    native.events.mockResolvedValueOnce([
+      { kind: 'ended', value: 'eof' },
+      { kind: 'failed', value: 'Synthetic failure' },
+    ]);
+    const transport = new StremioShellTransport('0.35.1');
+    await transport.start();
+    await waitFor(() => expect(tapeWindow.ended).toHaveBeenCalledOnce());
+    expect(tapeWindow.errored).toHaveBeenCalledOnce();
+    await transport.destroy();
+    expect(tapeWindow.closed).toHaveBeenCalledOnce();
   });
 });

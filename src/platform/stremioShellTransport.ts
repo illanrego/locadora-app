@@ -7,6 +7,12 @@ import {
   startNativePlayer,
   type NativePlayerEvent,
 } from './nativeBridge';
+import {
+  notifyTapePlaybackClosed,
+  notifyTapePlaybackEnded,
+  notifyTapePlaybackErrored,
+  notifyTapePlaybackStarted,
+} from '../rentals/tapePlaybackWindow';
 
 type ShellEvent = 'mpv-prop-change' | 'mpv-event-ended' | 'mpv-event-video-ready';
 type ShellListener = (value: unknown) => void;
@@ -70,6 +76,7 @@ export class StremioShellTransport {
 
   async destroy(): Promise<void> {
     this.destroyed = true;
+    notifyTapePlaybackClosed();
     if (this.pollTimer !== null) window.clearInterval(this.pollTimer);
     this.pollTimer = null;
     await this.queue.catch(() => undefined);
@@ -94,6 +101,7 @@ export class StremioShellTransport {
     if (name === 'mpv-command' && Array.isArray(args)) {
       const [command, value] = args;
       if (command === 'stop') {
+        notifyTapePlaybackClosed();
         await controlNativePlayer('stop');
         return;
       }
@@ -102,6 +110,7 @@ export class StremioShellTransport {
         this.seeking = false;
         this.activeLoadId = ++this.loadId;
         this.emit('mpv-event-video-ready', { loadId: this.activeLoadId, ready: false });
+        notifyTapePlaybackStarted(value);
         await loadNativePlayer(value);
       }
       return;
@@ -126,6 +135,7 @@ export class StremioShellTransport {
   private reportFailure(name: string, args: unknown, error: unknown): void {
     const isLoad = name === 'mpv-command' && Array.isArray(args) && args[0] === 'loadfile';
     if (!isLoad) return;
+    notifyTapePlaybackErrored();
     this.emit('mpv-event-ended', { error: nativeCommandError(error) });
   }
 
@@ -170,9 +180,11 @@ export class StremioShellTransport {
         this.emit('mpv-prop-change', event.value);
         break;
       case 'ended':
+        notifyTapePlaybackEnded();
         this.emit('mpv-event-ended', { reason: event.value });
         break;
       case 'failed':
+        notifyTapePlaybackErrored();
         this.emit('mpv-event-ended', { error: event.value });
         break;
       default:

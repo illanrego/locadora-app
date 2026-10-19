@@ -25,6 +25,7 @@ pub fn run() {
             streaming_engine::streaming_engine_status,
             streaming_engine::streaming_engine_request,
             streaming_engine::tape_engine_ensure,
+            streaming_engine::tape_engine_status,
             streaming_engine::tape_engine_request,
             tape_download::tape_download_start,
             tape_download::tape_download_cancel,

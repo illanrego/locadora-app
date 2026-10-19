@@ -25,6 +25,7 @@ import {
   type TapeFailureCode,
   type TapeQueueDriver,
 } from '../rentals/tapeQueue';
+import { readTapeSettings, type TapeSettings } from '../rentals/tapeSettings';
 import { isNativeShell } from './nativeBridge';
 
 /** The tape engine's fixed loopback port; reserved fail-closed (§20). */
@@ -34,7 +35,7 @@ export const TAPE_PROGRESS_EVENT = 'tape-download-progress';
 
 /** Native request-body ceiling for the tape bridge (§20). */
 const MAX_TAPE_REQUEST_BODY_BYTES = 3 * 1024 * 1024;
-const TAPE_PATH_PATTERN = /^\/[0-9a-f]{40}(?:\/\d{1,4})?(?:\/(?:stats\.json|create|remove))?$/;
+const TAPE_PATH_PATTERN = /^(?:\/settings|\/[0-9a-f]{40}(?:\/\d{1,4})?(?:\/(?:stats\.json|create|remove))?)$/;
 const UNAVAILABLE = 'Rented tapes are available in the desktop app';
 
 export interface TapeEngineResponse {
@@ -83,6 +84,7 @@ export function isAllowedTapeUrl(url: string): boolean {
   }
   if (parsed.origin !== TAPE_ENGINE_ORIGIN) return false;
   if (parsed.username || parsed.password || parsed.search || parsed.hash) return false;
+  if (parsed.pathname === '/settings' && url !== `${TAPE_ENGINE_ORIGIN}/settings`) return false;
   return TAPE_PATH_PATTERN.test(parsed.pathname);
 }
 
@@ -90,11 +92,17 @@ export function isAllowedTapeUrl(url: string): boolean {
  * Starts the tape engine (lazily, on the first rented tape) and returns its fixed
  * origin. Any other answer is refused rather than followed.
  */
-export async function ensureTapeEngine(peerPort?: number | null): Promise<string> {
+export async function ensureTapeEngine(settings: TapeSettings = readTapeSettings()): Promise<string> {
   requireNativeShell();
+  if (!settings.enabled) {
+    throw new TapePlatformError('engine-unavailable', 'Rented tapes are disabled.');
+  }
   let ready: { url?: unknown } | null;
   try {
-    ready = await invoke<{ url?: unknown } | null>('tape_engine_ensure', { peerPort: peerPort ?? null });
+    ready = await invoke<{ url?: unknown } | null>('tape_engine_ensure', {
+      peerPort: settings.peerPort,
+      maxSeedRatio: settings.ratio,
+    });
   } catch (error) {
     throw nativeFailure(error, 'engine-unavailable');
   }
@@ -102,6 +110,16 @@ export async function ensureTapeEngine(peerPort?: number | null): Promise<string
     throw new TapePlatformError('engine-unavailable', 'The tape engine answered on an unexpected address.');
   }
   return TAPE_ENGINE_ORIGIN;
+}
+
+/** Read-only readiness probe. It never starts engine B. */
+export async function isTapeEngineRunning(): Promise<boolean> {
+  if (!isNativeShell()) return false;
+  try {
+    return await invoke<boolean>('tape_engine_status') === true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -121,7 +139,14 @@ export async function requestTapeEngine(
   if (method === 'GET' && body != null) {
     throw new TapePlatformError('invalid-request', 'Invalid tape engine request.');
   }
-  if (method === 'POST' && !url.endsWith('/create')) {
+  const isSettings = url === `${TAPE_ENGINE_ORIGIN}/settings`;
+  if (method === 'GET' && isSettings) {
+    throw new TapePlatformError('invalid-request', 'Invalid tape engine request.');
+  }
+  if (method === 'POST' && !url.endsWith('/create') && !isSettings) {
+    throw new TapePlatformError('invalid-request', 'Invalid tape engine request.');
+  }
+  if (isSettings && !isSeedingSettingsBody(body)) {
     throw new TapePlatformError('invalid-request', 'Invalid tape engine request.');
   }
   if (body != null && new TextEncoder().encode(body).length > MAX_TAPE_REQUEST_BODY_BYTES) {
@@ -135,6 +160,33 @@ export async function requestTapeEngine(
     throw nativeFailure(error, 'engine-unavailable');
   }
   return normalizeEngineResponse(response);
+}
+
+function isSeedingSettingsBody(body: string | null | undefined): boolean {
+  if (typeof body !== 'string') return false;
+  try {
+    const value = JSON.parse(body) as unknown;
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+    const record = value as Record<string, unknown>;
+    return Object.keys(record).length === 1 && typeof record.seedingEnabled === 'boolean';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Applies the only runtime upload control exposed by the pinned tape engine.
+ * An engine that is off is already not seeding, so readiness is checked first
+ * and that ordinary case performs no settings POST and surfaces no error.
+ */
+export async function setTapeSeedingEnabled(enabled: boolean): Promise<boolean> {
+  if (!await isTapeEngineRunning()) return false;
+  const response = await requestTapeEngine(
+    `${TAPE_ENGINE_ORIGIN}/settings`,
+    'POST',
+    JSON.stringify({ seedingEnabled: enabled }),
+  );
+  return response.status >= 200 && response.status < 300;
 }
 
 function normalizeEngineResponse(value: unknown): TapeEngineResponse {
@@ -203,8 +255,17 @@ export async function startTapeDownload(infoHash: string, fileIdx: number): Prom
   if (!isInfoHash(infoHash) || !isFileIdx(fileIdx)) {
     throw new TapePlatformError('invalid-request', 'Invalid tape download request.');
   }
+  const settings = readTapeSettings();
+  if (!settings.enabled) {
+    throw new TapePlatformError('engine-unavailable', 'Rented tapes are disabled.');
+  }
   try {
-    await invoke('tape_download_start', { infoHash, fileIdx });
+    await invoke('tape_download_start', {
+      infoHash,
+      fileIdx,
+      peerPort: settings.peerPort,
+      maxSeedRatio: settings.ratio,
+    });
   } catch (error) {
     throw nativeFailure(error, 'read-failed');
   }

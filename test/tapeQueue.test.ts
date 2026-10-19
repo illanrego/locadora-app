@@ -278,6 +278,70 @@ describe('tape queue cancellation on return', () => {
   });
 });
 
+describe('tape queue playback-priority pause', () => {
+  it('does not start while paused and resumes without failing or spending an attempt', async () => {
+    const driver = pendingDriver();
+    const events: TapeQueueEvent[] = [];
+    const queue = createTapeQueue({ driver, onEvent: (event) => events.push(event) });
+    queue.enqueue(seed(1));
+
+    queue.pause();
+    expect(queue.isPaused()).toBe(true);
+    expect(queue.startNext()).toBeNull();
+    expect(driver.start).not.toHaveBeenCalled();
+
+    queue.resume();
+    expect(queue.startNext()?.infoHash).toBe(hash(1));
+    expect(queue.pause()).toMatchObject({ infoHash: hash(1), state: 'queued', attempts: 0 });
+    await flush();
+    expect(driver.cancel).toHaveBeenCalledTimes(1);
+    expect(queue.snapshot()).toMatchObject({ active: null, paused: true });
+    expect(queue.snapshot().queued[0]).toMatchObject({ state: 'queued', failureCode: null, attempts: 0 });
+    expect(eventTypes(events)).toEqual(['started', 'paused']);
+
+    queue.resume();
+    expect(queue.startNext()).toMatchObject({ state: 'resolving', attempts: 1 });
+    expect(driver.start).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the queue stopped when the master switch was off at construction', () => {
+    const driver = pendingDriver();
+    const queue = createTapeQueue({ driver, enabled: false });
+    queue.enqueue(seed(1));
+
+    expect(queue.isPaused()).toBe(true);
+    queue.resume();
+    expect(queue.isPaused()).toBe(true);
+    expect(queue.startNext()).toBeNull();
+    expect(driver.start).not.toHaveBeenCalled();
+  });
+
+  it('ignores the cancelled run if its rejection arrives after the job resumed', async () => {
+    let rejectPausedRun: ((error: unknown) => void) | null = null;
+    let starts = 0;
+    const driver = {
+      start: vi.fn(() => {
+        starts += 1;
+        return starts === 1
+          ? new Promise<void>((_resolve, reject) => { rejectPausedRun = reject; })
+          : new Promise<void>(() => undefined);
+      }),
+      cancel: vi.fn(async () => undefined),
+    } satisfies TapeQueueDriver;
+    const queue = createTapeQueue({ driver });
+    queue.enqueue(seed(1));
+    queue.startNext();
+    queue.pause();
+    queue.resume();
+    queue.startNext();
+
+    rejectPausedRun!({ code: 'cancelled' });
+    await flush();
+    expect(queue.snapshot().active).toMatchObject({ state: 'resolving', attempts: 1, failureCode: null });
+    expect(queue.snapshot().queued).toEqual([]);
+  });
+});
+
 describe('native progress payloads', () => {
   it('accepts the shape the native driver emits', () => {
     expect(normalizeTapeDownloadProgress({
