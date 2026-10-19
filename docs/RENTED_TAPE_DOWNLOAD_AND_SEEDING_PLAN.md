@@ -468,7 +468,11 @@ free of 191 GB (90% used)** and `/` has 4.3 GB free; 19 GiB RAM with ~11 GiB
 available. The disk number is the binding constraint, not RAM.
 
 - **Default active limit of 3 (D-020) × 1.5 GB ≈ 4.5 GB** — comfortable inside
-  the measured free space.
+  the measured free space, and inside the 6 GB default ceiling (§20).
+- **The default ceiling is 6 GB** (owner, 2026-10-19): roughly 32% of the free
+  space measured on this machine, which holds four 1.5 GB tapes and refuses the
+  fifth rather than eating the disk. The user can raise it; `0` removes it and
+  leaves only the free-space reserve as a guard.
 - **The D-020 maximum of 10 ≈ 15 GB — not viable on this disk** (79% of what is
   free). The store must therefore refuse admission by measured free space, not
   by rental count, and say so in the dashboard. Rentals are still governed by
@@ -545,8 +549,14 @@ B wipe its root and watch the test fail.
 5. Ratio: **unlimited while rented**, optional cap available.
 6. Bundled public add-ons for every user, bare manifests only (§12).
 7. Seeding window: **while Locadora is open** (§11).
+8. Disk: **6 GB default** for rentals, user-configurable, with `0` meaning no
+   ceiling (§20).
+9. Tape count: capped by the **rental limit by default** (D-020), with an
+   optional independent cap that can never exceed it (§20).
+10. A **master switch** to not download or keep rented tapes at all, default on
+    (§23).
 
-All seven are recorded in one `docs/DECISIONS.md` entry (`D-0NN`) when the
+All ten are recorded in one `docs/DECISIONS.md` entry (`D-0NN`) when the
 milestone starts, together with the standing weak-connection constraint (§2.1).
 
 ## 19. Shape of the Codex brief
@@ -621,10 +631,15 @@ startup. `seedingEnabled` flips to `false` while the RAM path plays (§11).
 
 **Settings keys (localStorage, local only)**
 
-- `locadora.tapes.maxGb` — user ceiling in GB, `0` = no cap.
-- `locadora.tapes.uploadShare` — `0.4` default; `1` = unlimited.
-- `locadora.tapes.ratio` — `0` = unlimited.
-- `locadora.tapes.peerPort` — default `6881`.
+| key | default | meaning |
+|---|---|---|
+| `locadora.tapes.enabled` | `true` | master switch: download and keep rented tapes at all |
+| `locadora.tapes.maxGb` | `6` | what Locadora may use on disk for tapes; `0` = no ceiling |
+| `locadora.tapes.maxCount` | `0` = follow the rental limit | how many tapes may be kept at once; never above the rental limit |
+| `locadora.tapes.upstreamMbps` | `0` = unknown | the user's declared upstream, used for the upload cap |
+| `locadora.tapes.uploadShare` | `0.4` | fraction of upstream used for seeding; `1` = unlimited |
+| `locadora.tapes.ratio` | `0` = unlimited | ratio after which a tape stops uploading (it is kept) |
+| `locadora.tapes.peerPort` | `6881` | pinned peer port; `0` = random each start |
 
 ## 21. Parts and delegation
 
@@ -663,3 +678,47 @@ definition yet. Two honest options:
 Recommendation: **declare it**, with the app's own observed peak shown beside the
 field so the number is grounded rather than a guess. P4 decides this before it
 starts; nothing in P1–P3 depends on it.
+
+## 23. Defaults borrowed from desktop torrent clients (verified 2026-10-19)
+
+Read from the clients' own sources, not from memory: qBittorrent
+`src/base/bittorrent/sessionimpl.cpp` (master) and Transmission
+`docs/Editing-Configuration-Files.md` (main). Deluge, µTorrent/BitTorrent
+Classic and MiTorrent are closed or were not verifiable from source in this
+pass — do not quote numbers for them.
+
+| client | upload limit | ratio limit | stops seeding | peer port |
+|---|---|---|---|---|
+| qBittorrent | `GlobalUPSpeedLimit` = `0` → unlimited | `GlobalMaxRatio` = `-1` → unlimited | never by default (inactive-seed limit off) | `Port` = `-1` → **random each start** |
+| Transmission | `speed_limit_up` 100 kB/s but `speed_limit_up_enabled` = false → unlimited | `seed_ratio_limit` = 2.0 but `seed_ratio_limited` = false → **not enforced** | seeds indefinitely | `peer-port-random-enabled` = false → fixed port |
+| µTorrent / BitTorrent Classic | not verified | not verified | not verified | not verified |
+
+**The pattern worth copying:** the popular clients ship unlimited upload,
+unlimited ratio, and seed until you remove the torrent. Their limits exist and
+are off.
+
+That matters for our design: "seed while Locadora is open" is not a Locadora
+invention, it is exactly the client model — a client seeds while it runs and
+stops when you close it. We match the clients on the two things that define the
+behaviour (ratio, when serving stops) and differ only where our context does.
+
+**Where we deliberately differ, and why**
+
+| we do | clients | reason |
+|---|---|---|
+| upload capped at ~40% of declared upstream | unlimited | the user never chose a torrent client; §2.1 assumes a weak link |
+| pinned port, `6881` default, "random" still an option | qBittorrent random, Transmission fixed | give-back for IPv4 peers, with the choice left to the user |
+| a 6 GB space ceiling and a tape-count cap | no such concept | we keep rentals, not a library; disk is the scarce resource on the target machine |
+| a master switch to not keep tapes | not applicable | an ethical default is still a default |
+
+**What is interesting for the user to change** (the whole surface, §20):
+whether the feature is on at all; the GB ceiling; how many tapes are kept; the
+declared upstream and the share of it we may use; the ratio; and the peer port.
+Everything else stays an internal constant — a torrent client's full option
+matrix is not our product, and every knob we expose is one more thing that can
+be set wrong.
+
+**Three different numbers, kept distinct on purpose:** the server-side rental
+limit (D-020), the local tape-count cap (defaults to the rental limit, so most
+users never see it), and the GB ceiling (6 GB). The rental limit decides what
+you may borrow; the other two decide what fits on the disk.
