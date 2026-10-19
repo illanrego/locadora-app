@@ -257,7 +257,11 @@ only if its checks stay green:
 
 ## 13. Not in scope
 
-- Episode-level resume position (D-005 still governs position).
+- **Episode stills — rejected by the owner (2026-10-19), not deferred.** Cinemeta
+  serves them from `episodes.metahub.space`, the native image boundary stays
+  TMDB-only, and the owner called the idea an overshoot. Do not re-propose it.
+- Episode-level resume position — *now implemented* under D-033; this line is
+  history, not scope.
 - Season-level rentals or packs as a rental unit.
 - Web/window parity for progress (the record stays server-shaped for it, §7.1 of
   the series plan).

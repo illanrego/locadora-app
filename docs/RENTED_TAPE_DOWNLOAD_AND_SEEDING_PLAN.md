@@ -279,10 +279,13 @@ $XDG_DATA_HOME/com.illanrego.willslocadora/
 - **Failure**: no source, engine down, disk full, no peers for N minutes →
   job `failed` with a reason; retried once on the next launch and on the next
   `Assistir` of that tape. Never a tight retry loop.
-- **Disk admission**: before enqueuing, compare `sizeBytes` (from the chosen
-  candidate, which Quick Watch already normalised) against free space minus a
-  reserve (suggest 2 GiB). Insufficient space → job refused with a message; the
-  rental still exists, the tape simply stays stream-only.
+- **Disk admission** (owner, 2026-10-19): the engine's own budget is unlimited,
+  so eviction can never remove a rented tape. The app owns the limit, and it is
+  the **smaller of two numbers**: the user's own ceiling ("Locadora may use up
+  to N GB for tapes", set in settings) and the free space minus a 2 GiB reserve.
+  Insufficient space → job refused with a message; the rental still exists, the
+  tape simply stays stream-only. A refusal never silently deletes a tape and
+  never blocks the rental itself.
 - **Cancellation**: returning a tape mid-download removes the engine torrent and
   deletes the partial directory.
 
@@ -329,8 +332,16 @@ seeding it, closing the app stops serving immediately. Retention is a separate
 clock — the file stays on disk for the whole rental, whether or not the app was
 open. So: *disk lifetime = rental*, *serving window = app session*.
 
-- Upload is on for engine B (`seedingEnabled=true`), unlimited ratio by
-  default, cap optional via `STREMIO_MAX_SEED_RATIO` without losing retention.
+- Upload is on for engine B (`seedingEnabled=true`) with **unlimited ratio while
+  the tape is rented** (owner, 2026-10-19): giving back is the point, and a ratio
+  cap only pauses uploading — it never drops the torrent or its pieces. A cap
+  remains available in settings as `STREMIO_MAX_SEED_RATIO` for anyone who wants
+  one.
+- **Upload bandwidth is capped by default** (owner, 2026-10-19): a share of
+  *measured* upstream, default ~40%, because Brazilian upstream is a fraction of
+  downstream and seeding must never starve what the user is watching. Unlimited
+  upload is an explicit opt-in, not a default. The measurement is the app's own
+  observed throughput for that engine, not a hardcoded number.
 - Seeding runs while the app is open and the tape is rented — including while
   that tape is being watched from disk, including while another tape downloads,
   and including while the app sits idle on the shelf.
@@ -358,11 +369,14 @@ open. So: *disk lifetime = rental*, *serving window = app session*.
   stop that also deletes.
 - Restart resumes seeding only for tapes whose descriptor is still resolvable
   (§8).
-- The peer port question (§18) decides whether we are also reachable inbound.
-  Outbound-only still seeds, but at a fraction of the give-back rate and mostly
-  to peers we dialled. Because serving is bounded to app sessions, a pinned
-  port is reachable only inside those sessions — the exposure window and the
-  serving window are the same window.
+- **The peer port is pinned** (owner, 2026-10-19): a 6881-class port, exposed in
+  settings, so IPv4 peers can dial the tape engine and give-back is not limited
+  to peers we happened to dial first. `BT_LISTEN_PORT` is the knob; the stream
+  engine keeps its OS-assigned port because it never seeds deliberately. Because
+  serving is bounded to app sessions, the pinned port is reachable only inside
+  those sessions — the exposure window and the serving window are the same
+  window, which is what makes the pin defensible rather than a permanent
+  identifier.
 - P2P disclosure stays as §9 of the product plan already requires: peers may
   observe the user's IP. This plan makes that disclosure load-bearing rather
   than incidental, so the wording gets a review before release.
@@ -521,35 +535,23 @@ B wipe its root and watch the test fail.
 8. Store directory size after returning everything → back to settings/certs
    only.
 
-## 18. Open decisions for the owner
+## 18. Decisions — all settled (owner, 2026-10-19)
 
-Each has a recommendation; none is implemented until answered.
+1. Finished-copy playback: **Option A**, the tape engine's URL (§10).
+2. Peer port: **pinned**, 6881-class, configurable in settings.
+3. Disk budget: **unlimited in the engine**; the app owns admission, bounded by
+   the smaller of the user's GB ceiling and free space minus a 2 GiB reserve.
+4. Upload cap: **~40% of measured upstream by default**, unlimited as an opt-in.
+5. Ratio: **unlimited while rented**, optional cap available.
+6. Bundled public add-ons for every user, bare manifests only (§12).
+7. Seeding window: **while Locadora is open** (§11).
 
-1. **Finished-copy playback: decided — Option A (§10).** Recorded 2026-10-18.
-2. **Peer port: pinned or OS-assigned.** Still open. Mechanics verified since
-   the first draft: the engine reads `BT_LISTEN_PORT` (`app.go:111`, `0 =
-   random`), ports are settable without touching the binary; the bundled
-   library leaves `NoDefaultPortForwarding` false, so UPnP/NAT-PMP mapping is
-   attempted automatically; and this machine has global IPv6 on `wlp3s0`
-   (`2804:14c:5be0:83ba::/64`), which the engine's own `Seed` comment names as
-   its inbound path ("uses IPv6 inbound") — so reachability here does not
-   depend on the port at all. Pinning therefore buys a predictable port for
-   IPv4-only peers, not reachability. Recommend pinned (`6881`-class, configurable)
-   for give-back, with the disclosure wording carrying the honesty.
-3. **Disk budget: app admission control or engine `cacheSize`.** The engine
-   evicts least-recently-accessed torrents once over budget, and it has no
-   per-torrent pin — so a rented tape nobody opened is a prime eviction target.
-   Recommend `cacheSize = null` (unlimited) for engine B and let the app's own
-   admission control be the only limit, so the engine never evicts a rental.
-4. **Upload cap.** Recommend a visible setting with a sane default cap on this
-   connection (e.g. 30–50% of upstream), unlimited being opt-in, because D-030
-   already tunes the whole player for a weak link.
-5. **Ratio policy.** Recommend unlimited while rented (the point is giving
-   back) with an optional cap in settings.
+All seven are recorded in one `docs/DECISIONS.md` entry (`D-0NN`) when the
+milestone starts, together with the standing weak-connection constraint (§2.1).
 
 ## 19. Shape of the Codex brief
 
-When approved, the brief is one job (one Codex run per repository):
+One brief per part (§21), never two runs against this repository at once.
 
 - Read order: `AGENTS.md` → `WILLS_LOCADORA_PLAYER_PLAN.md` →
   `IMPLEMENTATION_PROGRESS.md` → `docs/DECISIONS.md` → this document.
@@ -564,3 +566,84 @@ When approved, the brief is one job (one Codex run per repository):
 - Proof block: `npm run check` tail, cargo tests and clippy when Rust is
   touched, `git diff --stat`, the mutation-check evidence, and an explicit
   statement of every choice this document left open.
+
+## 20. Frozen implementation contract
+
+These are the names, ports and shapes the parts must use. A part that needs to
+change one of them stops and reports instead of improvising.
+
+**Processes and ports**
+
+| | stream engine (A) | tape engine (B) |
+|---|---|---|
+| loopback port | 11471, unchanged | **11472**, fixed, reserved fail-closed |
+| `APP_PATH` | ephemeral session dir | `$XDG_DATA_HOME/com.illanrego.willslocadora/tape-store` |
+| `STREMIO_MEMORY_CACHE_SIZE` | `268435456` | unset → `0` → disk |
+| `STREMIO_TORRENT_IDLE_TIMEOUT` | `30` | `0` |
+| `STREMIO_MAX_SEED_RATIO` | unset | `0` (unlimited, §18) |
+| `BT_LISTEN_PORT` | unset (OS) | user setting, default `6881` |
+| `STREMIO_DISABLE_WEBTORRENT` | `1` | `1` |
+| `STREMIO_MEM_LIMIT` | `536870912` | start at `268435456`, measure |
+| teardown | `remove_dir_all(session)` | never delete the store |
+
+B starts lazily on the first rented tape, is stopped only by app exit, and sets
+`cacheSize = null` plus `seedingEnabled = true` through `POST /settings` at
+startup. `seedingEnabled` flips to `false` while the RAM path plays (§11).
+
+**Storage**
+
+- Root: `$XDG_DATA_HOME/com.illanrego.willslocadora/tape-store`, mode `0700`;
+  engine settings `tape-store/server-settings.json`; pieces under
+  `tape-store/<infohash>/`.
+- Manifest: `tape-store.json` v1, atomic write (tmp → fsync → rename), fields as
+  §7, plus `torrentBytesB64` when the stream supplied raw `.torrent` bytes.
+- Metainfo rule: persist `torrentBytesB64` when available (the engine's
+  `/create?from=` accepts it); otherwise persist `infoHash` + trackers and
+  re-create from DHT at launch. A tape whose metainfo cannot be re-resolved
+  becomes `unverified`, is never assumed playable, and never blocks the app.
+
+**Native surface (new, deny-by-default, allowlisted)**
+
+- `tape_engine_ensure()` → `{ url }`, must equal the fixed 11472 origin.
+- `tape_engine_request(url, method, body)` — method limited to GET/POST on the
+  fixed origin, path limited to
+  `^/[0-9a-f]{40}(/\d{1,4})?(/(stats\.json|create|remove))?$`, body bounded.
+- `tape_store_read()`, `tape_store_write(manifest)` (bounded, validated),
+  `tape_store_clear()`.
+- Player URL policy accepts `http://127.0.0.1:11472/<40-hex>/<idx>` with exactly
+  the rejections the 11471 shape has (`/settings`, `stats.json`, `proxy/`,
+  userinfo, other hosts, other ports). No filesystem path is ever accepted.
+
+**Queue states**
+
+`queued → resolving → downloading → ready → seeding`, plus `failed`,
+`returned`, `unverified`. The player reads a snapshot; it never writes a job.
+
+**Settings keys (localStorage, local only)**
+
+- `locadora.tapes.maxGb` — user ceiling in GB, `0` = no cap.
+- `locadora.tapes.uploadShare` — `0.4` default; `1` = unlimited.
+- `locadora.tapes.ratio` — `0` = unlimited.
+- `locadora.tapes.peerPort` — default `6881`.
+
+## 21. Parts and delegation
+
+One part per run, sequential, one writer per repository. Model tiers follow the
+owner's rule: `gpt-6-astra` high only where a mistake is expensive, otherwise
+`gpt-5.6-sol` (high, or medium for a contained change).
+
+| part | scope | tier |
+|---|---|---|
+| P1 | tape engine supervisor: role split, 11472, durable store, lazy start, never wipe on drop, fail-closed reservation, no-wipe test | astra high |
+| P2 | manifest + admission + queue: descriptor persistence, GB ceiling, min(cap, free−2 GiB), drain-to-complete, progress, retry-once, cancellation | sol high |
+| P3 | playback switch: 11472 in the player predicate, ready→local copy, otherwise RAM path untouched, rejection tests kept | sol high |
+| P4 | seeding window and caps: `seedingEnabled` two-state machine, queue pause during a RAM stream, upload share, ratio, pinned peer port, settings surface | sol high |
+| P5 | tape dashboard: per-tape rows, uploaded per tape and per session, store total vs cap, the plain-language line, Carteirinha placement | sol high |
+| P6 | bundled stream and subtitle defaults for new profiles (bare public manifests, empty-only seeding, override preserved) | sol medium |
+
+P1 first because everything else talks to B. P3 before P4 because you cannot
+serve a tape the player cannot open. P5 last but one so the numbers it displays
+exist. P6 is independent and can move anywhere.
+
+Every brief carries the standard proof block, and the milestone records the
+`D-0NN` entry from §18 before P1 starts.
