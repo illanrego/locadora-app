@@ -264,22 +264,10 @@ impl TapeState {
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TapeReason {
-    TapesDisabled,
-    RentalUnreadable,
-    SeriesOutOfScope,
-    TitleUnmapped,
-    NoQualifyingSource,
-    NotATorrent,
-    InvalidSource,
-    UnknownFileIndex,
-    UnknownSize,
-    AlreadyQueued,
     CapExceeded,
     CountExceeded,
-    SpaceExceeded,
     InvalidRow,
     ManifestWriteFailed,
-    MediaFailure,
     EngineUnavailable,
     TorrentNotFound,
     InvalidRequest,
@@ -293,22 +281,10 @@ pub enum TapeReason {
 impl TapeReason {
     fn token(self) -> &'static str {
         match self {
-            Self::TapesDisabled => "tapes-disabled",
-            Self::RentalUnreadable => "rental-unreadable",
-            Self::SeriesOutOfScope => "series-out-of-scope",
-            Self::TitleUnmapped => "title-unmapped",
-            Self::NoQualifyingSource => "no-qualifying-source",
-            Self::NotATorrent => "not-a-torrent",
-            Self::InvalidSource => "invalid-source",
-            Self::UnknownFileIndex => "unknown-file-index",
-            Self::UnknownSize => "unknown-size",
-            Self::AlreadyQueued => "already-queued",
             Self::CapExceeded => "cap-exceeded",
             Self::CountExceeded => "count-exceeded",
-            Self::SpaceExceeded => "space-exceeded",
             Self::InvalidRow => "invalid-row",
             Self::ManifestWriteFailed => "manifest-write-failed",
-            Self::MediaFailure => "media-failure",
             Self::EngineUnavailable => "engine-unavailable",
             Self::TorrentNotFound => "torrent-not-found",
             Self::InvalidRequest => "invalid-request",
@@ -425,6 +401,9 @@ pub enum TapeEvent {
     },
     HydrateSummary {
         state_counts: StateCounts,
+    },
+    Problem {
+        reason: TapeReason,
     },
 }
 
@@ -602,6 +581,10 @@ fn event_line(event: TapeEvent) -> Vec<u8> {
         TapeEvent::HydrateSummary { state_counts } => {
             insert_string(&mut map, "event", "hydrate-summary");
             map.insert("stateCounts".into(), state_counts_value(state_counts));
+        }
+        TapeEvent::Problem { reason } => {
+            insert_string(&mut map, "event", "problem");
+            insert_string(&mut map, "reason", reason.token());
         }
     }
     let mut line = serde_json::to_vec(&Value::Object(map)).expect("safe tape event serializes");
@@ -783,10 +766,16 @@ mod tests {
                 state: TapeState::Ready,
             },
         );
+        diagnostics.record(
+            &root,
+            TapeEvent::Problem {
+                reason: TapeReason::ManifestUnreadable,
+            },
+        );
         let path = only_file(&root, "tape-events-");
         let output = fs::read_to_string(&path).unwrap();
         let lines = output.lines().collect::<Vec<_>>();
-        assert_eq!(lines.len(), 4);
+        assert_eq!(lines.len(), 5);
         assert!(
             lines
                 .iter()
@@ -818,6 +807,36 @@ mod tests {
         );
         println!("P9_SAMPLE_BEGIN\n{}P9_SAMPLE_END", output);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn problem_reasons_reject_dead_rental_outcomes() {
+        let accepted = serde_json::json!({
+            "event": "problem",
+            "reason": "registration-refused",
+        });
+        assert!(serde_json::from_value::<TapeEvent>(accepted).is_ok());
+
+        for dead in [
+            "tapes-disabled",
+            "rental-unreadable",
+            "series-out-of-scope",
+            "title-unmapped",
+            "no-qualifying-source",
+            "not-a-torrent",
+            "invalid-source",
+            "unknown-file-index",
+            "unknown-size",
+            "already-queued",
+            "space-exceeded",
+            "media-failure",
+        ] {
+            let event = serde_json::json!({ "event": "problem", "reason": dead });
+            assert!(
+                serde_json::from_value::<TapeEvent>(event).is_err(),
+                "accepted {dead}"
+            );
+        }
     }
 
     #[test]

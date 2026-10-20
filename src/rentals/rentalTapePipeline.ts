@@ -328,6 +328,7 @@ function tapeRecordFor(
 }
 
 type AdmissionCode = 'cap-exceeded' | 'count-exceeded' | 'unknown-size' | 'space-exceeded';
+type DiagnosticAdmissionCode = Extract<AdmissionCode, 'cap-exceeded' | 'count-exceeded'>;
 
 function admissionCode(reason: AdmissionCode): AdmissionCode {
   switch (reason) {
@@ -336,6 +337,11 @@ function admissionCode(reason: AdmissionCode): AdmissionCode {
     case 'space-exceeded': return 'space-exceeded';
     default: return 'unknown-size';
   }
+}
+
+/** The live pipeline validates size first and has no free-space input yet. */
+function diagnosticAdmissionCode(reason: AdmissionCode): DiagnosticAdmissionCode | null {
+  return reason === 'cap-exceeded' || reason === 'count-exceeded' ? reason : null;
 }
 
 export function createRentalTapePipeline(dependencies: RentalTapePipelineDependencies): RentalTapePipeline {
@@ -546,12 +552,15 @@ export function createRentalTapePipeline(dependencies: RentalTapePipelineDepende
             freeBytes: null,
           });
           if (!admitted.allowed) {
-            dependencies.diagnostics?.record({
-              event: 'admit-refused',
-              contentId: item.contentId,
-              infoHash,
-              reason: admissionCode(admitted.reason),
-            });
+            const diagnosticReason = diagnosticAdmissionCode(admitted.reason);
+            if (diagnosticReason) {
+              dependencies.diagnostics?.record({
+                event: 'admit-refused',
+                contentId: item.contentId,
+                infoHash,
+                reason: diagnosticReason,
+              });
+            }
             return { outcome: 'skipped', code: admissionCode(admitted.reason), row: null };
           }
 
@@ -708,8 +717,8 @@ export function hydrateRetainedTapes(): Promise<TapeHydrationResult> {
     queue: { enqueue: (seed) => rentalTapePipeline().queue.enqueue(seed) },
     pump: pumpRentalTapes,
     onProblem: (problem) => {
-      // One quiet line per problem: never a modal, never an infohash or a path.
-      console.warn(`[locadora] tapes: ${problem.message}`);
+      // Exactly one channel: typed JSONL when enabled, the existing warning otherwise.
+      tapeDiagnostics().reportProblem(problem.code, problem.message);
     },
     diagnostics: tapeDiagnostics(),
   });

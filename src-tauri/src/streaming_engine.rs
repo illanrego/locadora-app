@@ -1,6 +1,6 @@
 //! App-owned, embedded engine. Never searches PATH for Stremio or adopts a listener.
 use crate::tape_diagnostics::{
-    EngineLogThreads, TapeDiagnosticsState, TapeEvent, TapeState, engine_log_path, start_engine_log,
+    EngineLogThreads, TapeDiagnosticsState, TapeEvent, engine_log_path, start_engine_log,
 };
 use serde::Serialize;
 use std::{
@@ -877,36 +877,16 @@ pub async fn tape_engine_request(
         .trim_start_matches('/')
         .split('/')
         .collect::<Vec<_>>();
-    if let Some(info_hash) = parts.first().filter(|hash| hash.len() == 40) {
-        match parts.last().copied() {
-            Some("create") => crate::tape_diagnostics::record(
-                &app,
-                TapeEvent::Create {
-                    info_hash: (*info_hash).into(),
-                    http_status: status,
-                },
-            ),
-            Some("stats.json") if status == 200 => {
-                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&response.body) {
-                    let uploaded = value
-                        .get("uploaded")
-                        .and_then(serde_json::Value::as_u64)
-                        .unwrap_or(0);
-                    let seeder =
-                        value.get("isSeeder").and_then(serde_json::Value::as_bool) == Some(true);
-                    if uploaded > 0 || seeder {
-                        crate::tape_diagnostics::record(
-                            &app,
-                            TapeEvent::SeedObserved {
-                                info_hash: (*info_hash).into(),
-                                state: TapeState::Seeding,
-                            },
-                        );
-                    }
-                }
-            }
-            _ => {}
-        }
+    if let Some(info_hash) = parts.first().filter(|hash| hash.len() == 40)
+        && parts.last().copied() == Some("create")
+    {
+        crate::tape_diagnostics::record(
+            &app,
+            TapeEvent::Create {
+                info_hash: (*info_hash).into(),
+                http_status: status,
+            },
+        );
     }
     Ok(response)
 }

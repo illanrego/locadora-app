@@ -1,10 +1,81 @@
 # Implementation progress
 
 Last updated: 2026-10-20
-Current milestone: D-034 rented tapes P9 — opt-in first-drive diagnostics
-Status: P9 implemented and automated checks green; owner engine/network acceptance for P5–P9 pending
+Current milestone: D-034 rented tapes P10 — complete diagnostic signals and event audit
+Status: P10 implemented and automated checks green; owner engine/network acceptance for P5–P10 pending
 
 ## Resume checkpoint
+
+2026-10-20 D-034 rented tapes P10 complete diagnostics and dead-event audit:
+- `seed-observed` now originates exactly where sharing is derived: the
+  dashboard's existing one-shot stats read. A `ready` row records it when the
+  parsed top-level `isSeeder` is true or `uploaded` is non-zero, once per hash
+  per dashboard mount. A non-sharing `ready` row records nothing, rerenders do
+  not read or record again, and the manifest remains untouched. The native
+  request bridge's broader stats-side emitter was removed so one dashboard
+  observation cannot produce two events.
+- Hydration problems have one channel. The existing lazy exact-value flag check
+  now appends a closed `{ event: 'problem', reason }` object when diagnostics
+  are enabled; when they are disabled it preserves the exact existing
+  `console.warn('[locadora] tapes: ...')` line. The prose message never enters
+  JSONL, and append failure never spills it into a second channel.
+- The TypeScript event audit is a compile-time-complete variant-to-emitter map;
+  its table-driven regression constructs all 14 variants. A second complete map
+  covers every accepted reason. Adding a union member without documenting an
+  emitter now fails typecheck.
+- Dead diagnostic reasons were deleted from both frontend and native schemas:
+  `tapes-disabled`, `rental-unreadable`, `series-out-of-scope`,
+  `title-unmapped`, `no-qualifying-source`, `not-a-torrent`, `invalid-source`,
+  `unknown-file-index`, `unknown-size`, `already-queued`, `space-exceeded` and
+  `media-failure`. They are rental outcomes or currently unreachable admission
+  branches, not emitted diagnostic reasons. `unknown-size` cannot reach
+  admission after the pipeline's size validation; `space-exceeded` cannot be
+  produced while the live pipeline deliberately supplies `freeBytes: null`.
+  `cap-exceeded` and `count-exceeded` remain live admission emitters, and all six
+  `TapeFailureCode` values remain producible by native download branches.
+- Choices the brief left open: (a) `problem` carries only the closed reason and
+  keeps the existing bounded prose solely for the flag-off warning; (b) the
+  dashboard owns `seed-observed`, while Rust retains the enum variant only as
+  the typed append contract; (c) a mount-local hash set is the explicit
+  once-guard even though a valid manifest already de-duplicates hashes; (d)
+  audit tables live beside the union so source changes and documentation cannot
+  drift independently.
+- Exact validation commands/results, run serially:
+  - `npm run check`: exit 0; TypeScript clean; Test Files 57 passed (57), Tests
+    448 passed (448), baseline 57/445; Vite built 206 modules with only the
+    existing large-chunk advisory.
+  - `cargo test --manifest-path src-tauri/Cargo.toml`: final exit 0; 61 passed,
+    2 ignored; main and doc tests ran 0. The first full attempt had 60 passed,
+    one intermittent bundled-engine storage-policy fixture failure and 2
+    ignored; that exact test passed alone, then the unchanged final full command
+    passed.
+  - `cargo test --manifest-path crates/native-core/Cargo.toml --
+    --test-threads=1`: exit 0; 24 passed, 0 failed; doc tests ran 0.
+  - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D
+    warnings`: exit 0 after replacing the now-single create-event match with its
+    equivalent collapsed conditional.
+  - `cargo fmt --manifest-path src-tauri/Cargo.toml --check`: exit 0 after
+    applying Rust formatting.
+  - `npm run tauri -- build --no-bundle`: exit 0; prepared the verified pinned
+    engine, built the 206-module frontend and refreshed the optimized desktop
+    binary in 2m27s, with only the existing large-chunk advisory.
+  - Focused diagnostics/dashboard gate: 2 files, 20 tests passed.
+- Mutation evidence, restored before the final gates: changed the dashboard
+  predicate so every `ready` tape emitted `seed-observed`.
+  `npx vitest run test/tapeDashboard.test.tsx -t "records sharing once per tape
+  per mount"` exited 1: the diagnostic recorder was called twice instead of
+  once because the non-sharing row was incorrectly included. Restoring the
+  derived-sharing predicate made the same command exit 0 (1 passed, 15 skipped).
+- No browser/GUI automation, manual visual check, real download, real seeding or
+  playback acceptance was performed. No push, history rewrite, dependency,
+  timer, poll, settings key, manifest/queue/admission/playback-window/hydration
+  decision, engine behavior, player behavior or 2 MiB cap changed.
+- **Next task:** owner first-drive acceptance with
+  `LOCADORA_TAPE_DIAGNOSTICS=1`: exercise one sharing and one non-sharing tape,
+  one hydration problem and one normal restart, confirm each observation/problem
+  has exactly one JSONL event and no duplicate console warning, then relaunch
+  without the flag and confirm the same problem uses only the existing warning.
+  P5–P9 real engine/network acceptance remains open.
 
 2026-10-20 D-034 rented tapes P9 lean opt-in diagnostics:
 - Diagnostics exist only when the process environment contains the exact value

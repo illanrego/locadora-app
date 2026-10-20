@@ -11,8 +11,10 @@ const tapePlatform = vi.hoisted(() => ({
   requestTapeEngine: vi.fn(),
   TAPE_ENGINE_ORIGIN: 'http://127.0.0.1:11472',
 }));
+const tapeDiagnostic = vi.hoisted(() => ({ record: vi.fn() }));
 
 vi.mock('../src/platform/tape', () => tapePlatform);
+vi.mock('../src/rentals/tapeDiagnostics', () => ({ tapeDiagnostics: () => tapeDiagnostic }));
 
 import { TapeDashboard } from '../src/components/TapeDashboard';
 import { normalizeDiscoveryTitle } from '../src/domain/content';
@@ -169,6 +171,10 @@ describe('rented-tape dashboard', () => {
     expect(within(region).getByRole('row', { name: /Semeando/ })).toHaveTextContent('compartilhando');
     expect(within(region).getByRole('row', { name: /Enviando/ })).toHaveTextContent('compartilhando');
     expect(within(region).getByRole('row', { name: /Parada/ })).toHaveTextContent('pronta');
+    expect(tapeDiagnostic.record.mock.calls).toEqual([
+      [{ event: 'seed-observed', infoHash: HASH_A, state: 'seeding' }],
+      [{ event: 'seed-observed', infoHash: HASH_B, state: 'seeding' }],
+    ]);
 
     // Derived only: every bridge call was a stats read and the manifest was
     // neither written nor mutated by the render.
@@ -178,6 +184,35 @@ describe('rented-tape dashboard', () => {
       expect(url).toMatch(/\/stats\.json$/);
     }
     expect(JSON.stringify(seeded)).toBe(before);
+  });
+
+  it('records sharing once per tape per mount, never per rerender, and records no ready non-sharer', async () => {
+    const seeded = {
+      version: 1 as const,
+      tapes: [
+        tape({ infoHash: HASH_A, title: 'Compartilhando', state: 'ready', sizeBytes: TAPE_GIBIBYTE }),
+        tape({ infoHash: HASH_B, title: 'Parada', state: 'ready', sizeBytes: TAPE_GIBIBYTE }),
+      ],
+    };
+    tapePlatform.readTapeManifest.mockResolvedValue(seeded);
+    tapePlatform.requestTapeEngine.mockImplementation(async (url: string) => ({
+      status: 200,
+      body: url.includes(HASH_A)
+        ? JSON.stringify({ uploaded: 1, isSeeder: true })
+        : JSON.stringify({ uploaded: 0, isSeeder: false }),
+      contentType: 'application/json',
+    }));
+
+    const view = render(<TapeDashboard locale="pt-BR" onInspect={vi.fn()} />);
+    await screen.findByRole('region', { name: 'Fitas neste aparelho' });
+    view.rerender(<TapeDashboard locale="en-US" onInspect={vi.fn()} />);
+
+    expect(tapeDiagnostic.record).toHaveBeenCalledTimes(1);
+    expect(tapeDiagnostic.record).toHaveBeenCalledWith({
+      event: 'seed-observed',
+      infoHash: HASH_A,
+      state: 'seeding',
+    });
   });
 
   it('states the sharing word in both locales', async () => {

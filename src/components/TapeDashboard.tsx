@@ -25,10 +25,13 @@ import {
   formatTapeDate,
   formatTapeTotal,
   readTapeStats,
+  tapePresentedState,
   tapeStateLabel,
   type TapeDashboardEntry,
   type TapeEngineReading,
 } from '../rentals/tapeDashboard';
+import { tapeDiagnostics, type TapeDiagnostics } from '../rentals/tapeDiagnostics';
+import type { TapeState } from '../rentals/tapeManifest';
 import { readTapeSettings } from '../rentals/tapeSettings';
 
 interface TapeDashboardProps {
@@ -46,8 +49,10 @@ const EMPTY_TITLES: readonly DiscoveryTitle[] = [];
  * dashboard *derives* the sharing state from them and writes nothing back.
  */
 async function readEngineReadings(
-  tapes: readonly { infoHash: string; fileIdx: number }[],
+  tapes: readonly { infoHash: string; fileIdx: number; state: TapeState }[],
+  diagnostics: Pick<TapeDiagnostics, 'record'>,
 ): Promise<Map<string, TapeEngineReading | null>> {
+  const observed = new Set<string>();
   const readings = await Promise.all(tapes.map(async (tape) => {
     try {
       const response = await requestTapeEngine(
@@ -55,7 +60,16 @@ async function readEngineReadings(
         'GET',
       );
       if (response.status !== 200) return [tape.infoHash, null] as const;
-      return [tape.infoHash, readTapeStats(response.body)] as const;
+      const reading = readTapeStats(response.body);
+      if (
+        !observed.has(tape.infoHash)
+        && tapePresentedState(tape.state, reading) === 'seeding'
+        && tape.state === 'ready'
+      ) {
+        observed.add(tape.infoHash);
+        diagnostics.record({ event: 'seed-observed', infoHash: tape.infoHash, state: 'seeding' });
+      }
+      return [tape.infoHash, reading] as const;
     } catch {
       return [tape.infoHash, null] as const;
     }
@@ -82,7 +96,7 @@ export function TapeDashboard({ locale, onInspect, knownTitles = EMPTY_TITLES }:
           setEntries([]);
           return;
         }
-        const uploaded = await readEngineReadings(manifest.tapes);
+        const uploaded = await readEngineReadings(manifest.tapes, tapeDiagnostics());
         if (!active) return;
         setCeilingBytes(tapeCeilingBytes({ maxGb: readTapeSettings().maxGb }));
         setEntries(buildTapeDashboard(manifest, uploaded));
