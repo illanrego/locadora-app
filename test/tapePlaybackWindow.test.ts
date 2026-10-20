@@ -9,11 +9,13 @@ function fixture(running = true) {
   const queue = { pause: vi.fn(), resume: vi.fn() };
   const engineRunning = vi.fn(async () => running);
   const postSeedingEnabled = vi.fn(async () => true);
+  const record = vi.fn();
   return {
     queue,
     engineRunning,
     postSeedingEnabled,
-    window: createTapePlaybackWindow({ queue, engineRunning, postSeedingEnabled }),
+    record,
+    window: createTapePlaybackWindow({ queue, engineRunning, postSeedingEnabled, diagnostics: { record } }),
   };
 }
 
@@ -45,6 +47,10 @@ describe('rented-tape seeding window', () => {
     expect(state.postSeedingEnabled.mock.calls).toEqual([[false], [true]]);
     expect(state.queue.pause).toHaveBeenCalledTimes(1);
     expect(state.queue.resume).toHaveBeenCalledTimes(1);
+    expect(state.record.mock.calls).toEqual([
+      [{ event: 'pause', cause: 'ram-playback' }],
+      [{ event: 'resume', cause: 'idle' }],
+    ]);
   });
 
   it('keeps seeding and the queue running for a finished tape', async () => {

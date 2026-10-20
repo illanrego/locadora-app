@@ -71,6 +71,7 @@ interface Harness {
   enqueue: ReturnType<typeof vi.fn>;
   pump: ReturnType<typeof vi.fn>;
   problems: TapeHydrationProblem[];
+  diagnostics: ReturnType<typeof vi.fn>;
 }
 
 function harness(options: {
@@ -88,6 +89,7 @@ function harness(options: {
   const writes: TapeManifest[] = [];
   const events: string[] = [];
   const problems: TapeHydrationProblem[] = [];
+  const diagnostics = vi.fn();
   const settings: TapeSettings = { ...DEFAULT_TAPE_SETTINGS, ...options.settings };
 
   const readManifest = vi.fn(async () => {
@@ -135,6 +137,7 @@ function harness(options: {
     queue: { enqueue },
     pump,
     onProblem: (problem) => problems.push(problem),
+    diagnostics: { record: diagnostics },
   });
 
   return {
@@ -148,6 +151,7 @@ function harness(options: {
     enqueue,
     pump,
     problems,
+    diagnostics,
   };
 }
 
@@ -170,6 +174,22 @@ describe('startup hydration: retained tapes survive a restart', () => {
     });
     expect(state.ensureEngine).toHaveBeenCalledTimes(1);
     expect(state.requestEngine).toHaveBeenCalledTimes(3);
+    expect(state.diagnostics.mock.calls).toEqual([
+      [{
+        event: 'hydrate-summary',
+        stateCounts: {
+          queued: 0,
+          resolving: 0,
+          downloading: 0,
+          ready: 2,
+          seeding: 1,
+          failed: 0,
+          returned: 0,
+          unverified: 0,
+        },
+      }],
+      [{ event: 'hydration', registered: 3, requeued: 0, unverified: 0, refused: 0 }],
+    ]);
 
     // The body is the pipeline's own: infoHash, no index guessing, dht plus the
     // row's trackers.

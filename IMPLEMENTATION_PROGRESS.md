@@ -1,10 +1,97 @@
 # Implementation progress
 
 Last updated: 2026-10-20
-Current milestone: D-034 rented tapes P8 — restart hydration and derived seeding state
-Status: P8 implemented and automated checks green; owner engine/network acceptance for P5–P8 pending
+Current milestone: D-034 rented tapes P9 — opt-in first-drive diagnostics
+Status: P9 implemented and automated checks green; owner engine/network acceptance for P5–P9 pending
 
 ## Resume checkpoint
+
+2026-10-20 D-034 rented tapes P9 lean opt-in diagnostics:
+- Diagnostics exist only when the process environment contains the exact value
+  `LOCADORA_TAPE_DIAGNOSTICS=1`. Unset, `0`, `true`, `01` and every other value
+  leave the event writer disabled and build engine B with its prior
+  `STREMIO_LOG_LEVEL=error`, `STREMIO_HTTP_LOG=0`, null stdout and null stderr.
+  Engine A and playback diagnostics are unchanged.
+- With the flag on, engine B alone receives `STREMIO_LOG_LEVEL=info` and
+  `STREMIO_HTTP_LOG=1`. Its stdout and stderr are drained through the app into
+  the private 0600 file
+  `$XDG_CACHE_HOME/com.illanrego.willslocadora/diagnostics/tape-engine-<pid>.log`;
+  the directory is 0700. Every child line is scrubbed before writing: URLs,
+  trackers, magnets, paths, credentials, media filenames and full 40-character
+  hashes cannot enter the file. The two pipes share one 2 MiB writer; on the
+  first excess byte it writes one closing cap line and discards later output
+  while continuing to drain the child, so logging cannot block the engine.
+- `src-tauri/src/tape_diagnostics.rs` owns the native exact-value gate, the
+  redactor, private capped writers and the closed event schema.
+  `src/rentals/tapeDiagnostics.ts` is the small typed frontend: its first event
+  lazily reads the native flag once, serializes enabled app-side events in
+  order, and never invokes append when disabled. The JSONL file is
+  `$XDG_CACHE_HOME/com.illanrego.willslocadora/diagnostics/tape-events-<pid>-<session-ms>.jsonl`,
+  also 0600 and capped at 2 MiB with one final valid `log-capped` JSON object.
+- Event wiring is deliberately thin: the rental pipeline records `enqueue`,
+  admission refusal and return; the native engine/request/download boundaries
+  record successful ensure, create status, download start/complete/closed
+  failure and observed seeding; the playback window records RAM-path pause and
+  idle resume; startup hydration records one initial manifest state summary and
+  one result containing registered/requeued/unverified/refused counts. There is
+  no timer, polling, settings toggle, network call, dashboard change, sampling
+  loop or new dependency.
+- Dynamic event strings have one native redaction route. A content id survives
+  only in the canonical `movie|series[:tmdb]:<digits>` shape; an infohash
+  survives only as its lower-case first eight characters. Event/state/cause/
+  reason/remove values are closed enums, and statuses, sizes and counts are
+  numbers. The hostile payload regression tries a credentialed URL, tracker,
+  magnet, path, media filename, token and full infohash against both redactors.
+- Choices the brief left open: (a) event session ids are process id plus epoch
+  milliseconds, avoiding collisions without persistent state; (b) stdout and
+  stderr share one bounded file and retain whichever sanitized line acquires
+  the writer first; (c) old per-session files are not rotated or deleted — P9
+  bounds each file and adds no daemon; (d) the necessary event-log cap marker is
+  the additional closed `log-capped`/`size-cap` object, so every JSONL line stays
+  parseable; (e) `seed-observed` piggybacks only on the dashboard's existing
+  one-shot stats request and adds no poll; (f) a playback-priority cancellation
+  may appear as both `pause: ram-playback` and `download-failed: cancelled`,
+  preserving the native driver's closed result rather than guessing intent;
+  (g) the frontend pays one lazy native boolean read after its first
+  diagnostic-worthy decision, while disabled runs perform no append, file I/O,
+  engine pipe or logging environment change; (h) an invalid dynamic content id
+  is omitted instead of replaced with attacker-controlled text.
+- Turn it on by prefixing the normal launch command, for example
+  `LOCADORA_TAPE_DIAGNOSTICS=1 npm run tauri dev`. Inspect the newest files with
+  `tail -n 80 "${XDG_CACHE_HOME:-$HOME/.cache}/com.illanrego.willslocadora/diagnostics"/tape-*`.
+  Leaving the variable unset restores the exact prior path.
+- Exact validation commands/results, run serially:
+  - `cargo test --manifest-path src-tauri/Cargo.toml`: exit 0; 60 passed, 2
+    ignored (baseline 54/2, six additive P9 tests); main and doc tests ran 0.
+    Two earlier full attempts hit one intermittent bundled-engine fixture
+    startup/configuration failure each; the exact fixture passed in isolation
+    and the unchanged final full command passed.
+  - `cargo test --manifest-path crates/native-core/Cargo.toml --
+    --test-threads=1`: exit 0; 24 passed, 0 failed; doc tests ran 0.
+  - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D
+    warnings`: exit 0.
+  - `cargo fmt --manifest-path src-tauri/Cargo.toml --check`: exit 0.
+  - `npm run check`: exit 0; TypeScript clean; Test Files 57 passed (57), Tests
+    445 passed (445), baseline 56/443; Vite built 206 modules with only the
+    existing large-chunk advisory.
+  - `cargo test --manifest-path src-tauri/Cargo.toml tape_diagnostics --
+    --nocapture`: exit 0; 6 passed and printed the real redacted JSONL sample.
+- Mutation evidence, restored before the final gates: changed the absent-value
+  branch of `enabled_from` to enable diagnostics by default. `cargo test
+  --manifest-path src-tauri/Cargo.toml
+  tape_diagnostics::tests::no_file_when_flag_is_off -- --exact` exited 101: the
+  assertion that no diagnostics directory exists failed. Restoring the exact
+  `== "1"` predicate made the same command exit 0 (1 passed).
+- No browser/GUI automation, manual visual check, real download, real engine
+  logging, real seeding or playback acceptance was performed. No push, history
+  rewrite, dependency, dashboard UI, player, engine A, RAM path, series code,
+  resume store, manifest/queue/admission semantics or decisions entry changed.
+- **Next task:** owner first-drive acceptance with
+  `LOCADORA_TAPE_DIAGNOSTICS=1`: rent one movie, allow or refuse one admission,
+  exercise a RAM playback pause/resume, finish or fail one tape, reopen the app
+  for hydration, inspect both bounded files, then relaunch without the flag and
+  confirm no new tape diagnostics file appears. P5–P8 real engine/network
+  acceptance and §22's measured-upstream mechanism remain open.
 
 2026-10-20 D-034 rented tapes P8 restart hydration and derived seeding state:
 - `src/rentals/tapeHydration.ts` (new, pure) is the once-per-session startup

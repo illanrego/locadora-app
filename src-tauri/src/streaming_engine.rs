@@ -1,4 +1,7 @@
 //! App-owned, embedded engine. Never searches PATH for Stremio or adopts a listener.
+use crate::tape_diagnostics::{
+    EngineLogThreads, TapeDiagnosticsState, TapeEvent, TapeState, engine_log_path, start_engine_log,
+};
 use serde::Serialize;
 use std::{
     fs,
@@ -47,6 +50,7 @@ struct Engine {
 struct TapeEngine {
     child: Option<Child>,
     store: Option<PathBuf>,
+    diagnostic_threads: Option<EngineLogThreads>,
     // See Engine::spawn_thread. The tape process needs the same parent-death guarantee.
     spawn_thread: Option<(std::sync::mpsc::Sender<()>, thread::JoinHandle<()>)>,
 }
@@ -266,13 +270,31 @@ impl Drop for Engine {
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum TapeCommandOutput {
+    Null,
+    Diagnostics(PathBuf),
+}
+
+struct TapeCommand {
+    command: Command,
+    output: TapeCommandOutput,
+}
+
+struct TapeSpawnOptions<'a> {
+    peer_port: u16,
+    max_seed_ratio: f64,
+    diagnostics_cache_root: Option<&'a Path>,
+}
+
 fn tape_command(
     binary: &Path,
     store: &Path,
     port: u16,
     peer_port: u16,
     max_seed_ratio: f64,
-) -> Command {
+    diagnostics_cache_root: Option<&Path>,
+) -> TapeCommand {
     let mut command = Command::new(binary);
     command
         .env_clear()
@@ -294,14 +316,25 @@ fn tape_command(
         .env("STREMIO_METADATA_URL", "off")
         .env("STREMIO_ENABLE_DLNA", "0")
         .env("STREMIO_DISABLE_WEBTORRENT", "1")
-        .env("STREMIO_LOG_LEVEL", "error")
-        .env("STREMIO_HTTP_LOG", "0")
         .current_dir(store)
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
         .process_group(0);
-    command
+    let output = if let Some(root) = diagnostics_cache_root {
+        command
+            .env("STREMIO_LOG_LEVEL", "info")
+            .env("STREMIO_HTTP_LOG", "1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        TapeCommandOutput::Diagnostics(root.to_path_buf())
+    } else {
+        command
+            .env("STREMIO_LOG_LEVEL", "error")
+            .env("STREMIO_HTTP_LOG", "0")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        TapeCommandOutput::Null
+    };
+    TapeCommand { command, output }
 }
 
 impl TapeEngine {
@@ -316,8 +349,7 @@ impl TapeEngine {
         binary_root: &Path,
         store: &Path,
         port: u16,
-        peer_port: u16,
-        max_seed_ratio: f64,
+        options: TapeSpawnOptions<'_>,
         closing: &AtomicBool,
     ) -> Result<(), String> {
         if closing.load(Ordering::SeqCst) {
@@ -333,7 +365,17 @@ impl TapeEngine {
         let binary = materialize(binary_root)?;
         private_dir(store)?;
         self.store = Some(store.to_path_buf());
-        let mut command = tape_command(&binary, store, port, peer_port, max_seed_ratio);
+        let TapeCommand {
+            mut command,
+            output,
+        } = tape_command(
+            &binary,
+            store,
+            port,
+            options.peer_port,
+            options.max_seed_ratio,
+            options.diagnostics_cache_root,
+        );
         let parent = std::process::id();
         // SAFETY: only async-signal-safe libc operations between fork and exec.
         unsafe {
@@ -356,7 +398,17 @@ impl TapeEngine {
         });
         self.spawn_thread = Some((release_tx, thread));
         match child_rx.recv() {
-            Ok(Ok(child)) => self.child = Some(child),
+            Ok(Ok(mut child)) => {
+                if let TapeCommandOutput::Diagnostics(cache_root) = output {
+                    let path = engine_log_path(&cache_root, child.id());
+                    self.diagnostic_threads = Some(start_engine_log(
+                        &path,
+                        child.stdout.take(),
+                        child.stderr.take(),
+                    ));
+                }
+                self.child = Some(child);
+            }
             _ => {
                 self.stop();
                 return Err("Could not start the bundled tape engine".into());
@@ -441,6 +493,9 @@ impl TapeEngine {
         if let Some((release, thread)) = self.spawn_thread.take() {
             let _ = release.send(());
             let _ = thread.join();
+        }
+        if let Some(threads) = self.diagnostic_threads.take() {
+            threads.join();
         }
         // The durable tape store is rental-owned and is never removed at shutdown.
         self.store = None;
@@ -631,11 +686,11 @@ pub async fn tape_engine_ensure(
     peer_port: Option<u16>,
     max_seed_ratio: Option<f64>,
 ) -> Result<TapeEngineReady, String> {
-    let binary_root = app
+    let cache_root = app
         .path()
         .app_cache_dir()
-        .map_err(|_| "Could not locate engine storage")?
-        .join("streaming-engine");
+        .map_err(|_| "Could not locate engine storage")?;
+    let binary_root = cache_root.join("streaming-engine");
     let store = app
         .path()
         .app_data_dir()
@@ -647,6 +702,11 @@ pub async fn tape_engine_ensure(
     let max_seed_ratio = max_seed_ratio
         .filter(|ratio| ratio.is_finite() && *ratio >= 0.0)
         .unwrap_or(DEFAULT_TAPE_MAX_SEED_RATIO);
+    let diagnostics_cache_root = app
+        .state::<TapeDiagnosticsState>()
+        .is_enabled()
+        .then_some(cache_root);
+    let diagnostics_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<EngineState>();
         let mut engine = state
@@ -657,14 +717,20 @@ pub async fn tape_engine_ensure(
             &binary_root,
             &store,
             TAPE_PORT,
-            peer_port,
-            max_seed_ratio,
+            TapeSpawnOptions {
+                peer_port,
+                max_seed_ratio,
+                diagnostics_cache_root: diagnostics_cache_root.as_deref(),
+            },
             &state.closing,
         )?;
         Ok(TapeEngineReady { url: TAPE_URL })
     })
     .await
     .map_err(|_| "Tape startup task failed")?
+    .inspect(|_| {
+        crate::tape_diagnostics::record(&diagnostics_app, TapeEvent::Ensure { info_hash: None });
+    })
 }
 
 #[tauri::command]
@@ -747,6 +813,7 @@ fn tape_request_spelling_allowed(raw: &str, parsed: &url::Url) -> bool {
 
 #[tauri::command]
 pub async fn tape_engine_request(
+    app: AppHandle,
     state: State<'_, EngineState>,
     url: String,
     method: String,
@@ -771,7 +838,7 @@ pub async fn tape_engine_request(
         } else {
             reqwest::Method::GET
         },
-        parsed,
+        parsed.clone(),
     );
     if let Some(body) = body {
         request = request
@@ -800,11 +867,48 @@ pub async fn tape_engine_request(
         }
         bytes.extend_from_slice(&chunk);
     }
-    Ok(EngineResponse {
+    let response = EngineResponse {
         status,
         body: String::from_utf8(bytes).map_err(|_| "Invalid tape engine response")?,
         content_type,
-    })
+    };
+    let parts = parsed
+        .path()
+        .trim_start_matches('/')
+        .split('/')
+        .collect::<Vec<_>>();
+    if let Some(info_hash) = parts.first().filter(|hash| hash.len() == 40) {
+        match parts.last().copied() {
+            Some("create") => crate::tape_diagnostics::record(
+                &app,
+                TapeEvent::Create {
+                    info_hash: (*info_hash).into(),
+                    http_status: status,
+                },
+            ),
+            Some("stats.json") if status == 200 => {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&response.body) {
+                    let uploaded = value
+                        .get("uploaded")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0);
+                    let seeder =
+                        value.get("isSeeder").and_then(serde_json::Value::as_bool) == Some(true);
+                    if uploaded > 0 || seeder {
+                        crate::tape_diagnostics::record(
+                            &app,
+                            TapeEvent::SeedObserved {
+                                info_hash: (*info_hash).into(),
+                                state: TapeState::Seeding,
+                            },
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(response)
 }
 
 #[cfg(test)]
@@ -935,13 +1039,16 @@ mod tests {
     #[test]
     fn tape_role_has_distinct_fixed_port_and_disk_environment() {
         let store = Path::new("/private/tape-store");
-        let command = tape_command(
+        let plan = tape_command(
             Path::new("/private/engine"),
             store,
             TAPE_PORT,
             DEFAULT_TAPE_PEER_PORT,
             DEFAULT_TAPE_MAX_SEED_RATIO,
+            None,
         );
+        assert_eq!(plan.output, TapeCommandOutput::Null);
+        let command = plan.command;
         assert_eq!(PORT, 11471);
         assert_eq!(TAPE_PORT, 11472);
         assert_ne!(PORT, TAPE_PORT);
@@ -985,6 +1092,35 @@ mod tests {
     }
 
     #[test]
+    fn tape_diagnostics_change_only_engine_b_logging() {
+        let cache = Path::new("/private/cache");
+        let plan = tape_command(
+            Path::new("/private/engine"),
+            Path::new("/private/tape-store"),
+            TAPE_PORT,
+            DEFAULT_TAPE_PEER_PORT,
+            DEFAULT_TAPE_MAX_SEED_RATIO,
+            Some(cache),
+        );
+        assert_eq!(
+            plan.output,
+            TapeCommandOutput::Diagnostics(cache.to_path_buf())
+        );
+        assert_eq!(
+            command_env(&plan.command, "STREMIO_LOG_LEVEL").as_deref(),
+            Some("info")
+        );
+        assert_eq!(
+            command_env(&plan.command, "STREMIO_HTTP_LOG").as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            engine_log_path(cache, 4321),
+            Path::new("/private/cache/diagnostics/tape-engine-4321.log")
+        );
+    }
+
+    #[test]
     fn tape_role_reads_ratio_and_peer_port_at_spawn() {
         let command = tape_command(
             Path::new("/private/engine"),
@@ -992,7 +1128,9 @@ mod tests {
             TAPE_PORT,
             0,
             1.5,
+            None,
         );
+        let command = command.command;
         assert_eq!(
             command_env(&command, "STREMIO_MAX_SEED_RATIO").as_deref(),
             Some("1.5")
@@ -1031,7 +1169,17 @@ mod tests {
         let mut engine = TapeEngine::default();
         assert!(
             engine
-                .ensure(&binary_root, &store, port, 0, 0.0, &closing)
+                .ensure(
+                    &binary_root,
+                    &store,
+                    port,
+                    TapeSpawnOptions {
+                        peer_port: 0,
+                        max_seed_ratio: 0.0,
+                        diagnostics_cache_root: None,
+                    },
+                    &closing,
+                )
                 .unwrap_err()
                 .contains("busy")
         );
@@ -1039,7 +1187,17 @@ mod tests {
         drop(listener);
 
         engine
-            .ensure(&binary_root, &store, port, 0, 0.0, &closing)
+            .ensure(
+                &binary_root,
+                &store,
+                port,
+                TapeSpawnOptions {
+                    peer_port: 0,
+                    max_seed_ratio: 0.0,
+                    diagnostics_cache_root: None,
+                },
+                &closing,
+            )
             .unwrap();
         assert!(engine.alive());
         assert_eq!(

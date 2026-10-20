@@ -78,6 +78,7 @@ interface Harness {
   start: ReturnType<typeof vi.fn>;
   cancel: ReturnType<typeof vi.fn>;
   resolveWinner: ReturnType<typeof vi.fn>;
+  record: ReturnType<typeof vi.fn>;
 }
 
 function harness(options: {
@@ -100,6 +101,7 @@ function harness(options: {
   const start = vi.fn(options.startImpl ?? (async () => new Promise<void>(() => undefined)));
   const cancel = vi.fn(async () => undefined);
   const resolveWinner = vi.fn(async (title: DiscoveryTitle) => options.winners?.[title.identity.canonicalKey] ?? null);
+  const record = vi.fn();
 
   const pipeline = createRentalTapePipeline({
     settings: () => settings,
@@ -110,6 +112,7 @@ function harness(options: {
     requestEngine,
     download: { start, cancel },
     now: () => '2026-10-19T12:00:00.000Z',
+    diagnostics: { record },
   });
 
   return {
@@ -124,6 +127,7 @@ function harness(options: {
     start,
     cancel,
     resolveWinner,
+    record,
   };
 }
 
@@ -173,6 +177,12 @@ describe('rental → tape: a confirmed movie rental', () => {
     });
     expect(state.start).toHaveBeenCalledWith(infoHash, 3);
     expect(state.start).toHaveBeenCalledTimes(1);
+    expect(state.record).toHaveBeenCalledWith({
+      event: 'enqueue',
+      contentId: 'movie:tmdb:101',
+      sizeBytes: 1_500_000_000,
+      infoHash,
+    });
     // The row walks the queue's own states without a second writer.
     expect(state.manifest().tapes[0].state).toBe('resolving');
   });
@@ -239,6 +249,10 @@ describe('rental → tape: a confirmed movie rental', () => {
     expect(state.ensureEngine).not.toHaveBeenCalled();
     expect(state.requestEngine).not.toHaveBeenCalled();
     expect(state.start).not.toHaveBeenCalled();
+    expect(state.record.mock.calls).toEqual([
+      [{ event: 'enqueue', contentId: 'movie:tmdb:105', sizeBytes: 1.5 * GIB, infoHash }],
+      [{ event: 'admit-refused', contentId: 'movie:tmdb:105', infoHash, reason: 'cap-exceeded' }],
+    ]);
   });
 
   it('skips a series rental: no episode is guessed', async () => {

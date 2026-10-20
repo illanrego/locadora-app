@@ -87,6 +87,7 @@ import {
 } from './tapeQueue';
 import { readTapeSettings, type TapeSettings } from './tapeSettings';
 import { createTapeHydration, type TapeHydration, type TapeHydrationResult } from './tapeHydration';
+import { tapeDiagnostics, type TapeDiagnostics } from './tapeDiagnostics';
 
 /** Native `SOURCE_BYTES`, private in `tapeManifest.ts`. */
 const MAX_SOURCE_BYTES = 2_048;
@@ -180,6 +181,7 @@ export interface RentalTapePipelineDependencies {
   subscribeProgress?: (listener: (progress: TapeDownloadProgress) => void) => void | (() => void);
   now?: () => string;
   onProblem?: (problem: RentalTapeProblem) => void;
+  diagnostics?: Pick<TapeDiagnostics, 'record'>;
 }
 
 export interface RentalTapePipeline {
@@ -325,7 +327,9 @@ function tapeRecordFor(
   };
 }
 
-function admissionCode(reason: 'cap-exceeded' | 'count-exceeded' | 'unknown-size' | 'space-exceeded'): RentalTapeCode {
+type AdmissionCode = 'cap-exceeded' | 'count-exceeded' | 'unknown-size' | 'space-exceeded';
+
+function admissionCode(reason: AdmissionCode): AdmissionCode {
   switch (reason) {
     case 'cap-exceeded': return 'cap-exceeded';
     case 'count-exceeded': return 'count-exceeded';
@@ -508,6 +512,12 @@ export function createRentalTapePipeline(dependencies: RentalTapePipelineDepende
 
         const infoHash = winner.playbackDescriptor.infoHash.toLowerCase();
         const selected = winner;
+        dependencies.diagnostics?.record({
+          event: 'enqueue',
+          contentId: item.contentId,
+          sizeBytes,
+          infoHash,
+        });
         // Admission and the row write share one mutation so two rentals cannot
         // both pass the ceiling against the same manifest snapshot.
         const plan = await serialized(async (): Promise<{
@@ -536,6 +546,12 @@ export function createRentalTapePipeline(dependencies: RentalTapePipelineDepende
             freeBytes: null,
           });
           if (!admitted.allowed) {
+            dependencies.diagnostics?.record({
+              event: 'admit-refused',
+              contentId: item.contentId,
+              infoHash,
+              reason: admissionCode(admitted.reason),
+            });
             return { outcome: 'skipped', code: admissionCode(admitted.reason), row: null };
           }
 
@@ -600,6 +616,11 @@ export function createRentalTapePipeline(dependencies: RentalTapePipelineDepende
           removal = 'engine-unavailable';
         }
         if (removal !== 'removed') problem('media-failure', 'The tape engine could not remove the returned tape.');
+        dependencies.diagnostics?.record({
+          event: 'return',
+          infoHash: tape.infoHash,
+          removeStatus: removal,
+        });
 
         // §8: the manifest row is deleted, which also frees the admission slot.
         await dependencies.writeManifest(removeTape(manifest, tape.infoHash));
@@ -637,6 +658,7 @@ export function rentalTapePipeline(): RentalTapePipeline {
     subscribeProgress: (listener) => {
       void onTapeDownloadProgress(listener).catch(() => undefined);
     },
+    diagnostics: tapeDiagnostics(),
   });
   return runtime;
 }
@@ -689,6 +711,7 @@ export function hydrateRetainedTapes(): Promise<TapeHydrationResult> {
       // One quiet line per problem: never a modal, never an infohash or a path.
       console.warn(`[locadora] tapes: ${problem.message}`);
     },
+    diagnostics: tapeDiagnostics(),
   });
   return hydration.hydrate();
 }

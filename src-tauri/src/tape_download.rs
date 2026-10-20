@@ -1,5 +1,6 @@
 //! Native discard-only drain. Engine B owns all media storage; this module has no file I/O.
 use crate::streaming_engine::{TAPE_URL, tape_engine_ensure};
+use crate::tape_diagnostics::{TapeEvent, TapeReason, TapeState};
 use serde::Serialize;
 use std::{
     future::{Future, poll_fn},
@@ -335,9 +336,16 @@ pub async fn tape_download_start(
         &info_hash.unwrap_or_default(),
         &file_idx.unwrap_or_default(),
     )?;
+    let diagnostic_hash = progress.info_hash.clone();
     let url = progress.url();
     let download = state.start(progress)?;
-    download
+    crate::tape_diagnostics::record(
+        &app,
+        TapeEvent::DownloadStart {
+            info_hash: diagnostic_hash.clone(),
+        },
+    );
+    let result = download
         .run(
             async {
                 tape_engine_ensure(app.clone(), peer_port, max_seed_ratio)
@@ -351,7 +359,31 @@ pub async fn tape_download_start(
                 let _ = app.emit(EVENT, progress);
             },
         )
-        .await
+        .await;
+    match &result {
+        Ok(()) => crate::tape_diagnostics::record(
+            &app,
+            TapeEvent::DownloadComplete {
+                info_hash: diagnostic_hash,
+                state: TapeState::Ready,
+            },
+        ),
+        Err(error) => crate::tape_diagnostics::record(
+            &app,
+            TapeEvent::DownloadFailed {
+                info_hash: diagnostic_hash,
+                reason: match error.code {
+                    DownloadErrorCode::EngineUnavailable => TapeReason::EngineUnavailable,
+                    DownloadErrorCode::TorrentNotFound => TapeReason::TorrentNotFound,
+                    DownloadErrorCode::InvalidRequest => TapeReason::InvalidRequest,
+                    DownloadErrorCode::ReadFailed => TapeReason::ReadFailed,
+                    DownloadErrorCode::TooLarge => TapeReason::TooLarge,
+                    DownloadErrorCode::Cancelled => TapeReason::Cancelled,
+                },
+            },
+        ),
+    }
+    result
 }
 
 #[tauri::command]

@@ -12,6 +12,7 @@
 import { isTapeEngineRunning, setTapeSeedingEnabled } from '../platform/tape';
 import { pumpRentalTapes, rentalTapeQueue } from './rentalTapePipeline';
 import type { TapeQueue } from './tapeQueue';
+import { tapeDiagnostics, type TapeDiagnostics } from './tapeDiagnostics';
 
 const TAPE_COPY_LOAD = /^http:\/\/127\.0\.0\.1:11472\/[0-9a-f]{40}\/\d{1,4}$/;
 
@@ -33,6 +34,7 @@ export interface TapePlaybackWindowDependencies {
    * queue itself still never auto-starts; the app's scheduler decides.
    */
   onNetworkAvailable?: () => void;
+  diagnostics?: Pick<TapeDiagnostics, 'record'>;
 }
 
 export interface TapePlaybackWindow {
@@ -68,13 +70,18 @@ class PlaybackWindow implements TapePlaybackWindow {
 
   private transition(next: PlaybackState): Promise<void> {
     if (this.state === next) return this.settingsChain;
+    const previous = this.state;
     this.state = next;
     const seedingEnabled = next !== 'ram';
     if (seedingEnabled) {
       this.dependencies.queue.resume();
       this.dependencies.onNetworkAvailable?.();
+      if (previous === 'ram') {
+        this.dependencies.diagnostics?.record({ event: 'resume', cause: 'idle' });
+      }
     } else {
       this.dependencies.queue.pause();
+      this.dependencies.diagnostics?.record({ event: 'pause', cause: 'ram-playback' });
     }
 
     this.settingsChain = this.settingsChain.then(async () => {
@@ -103,6 +110,7 @@ const runtimeWindow = createTapePlaybackWindow({
   engineRunning: isTapeEngineRunning,
   postSeedingEnabled: setTapeSeedingEnabled,
   onNetworkAvailable: pumpRentalTapes,
+  diagnostics: tapeDiagnostics(),
 });
 
 export function notifyTapePlaybackStarted(descriptor: string): void {

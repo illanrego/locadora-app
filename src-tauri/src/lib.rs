@@ -2,6 +2,7 @@ mod commands;
 mod embedded_surface;
 mod native_locale;
 mod streaming_engine;
+mod tape_diagnostics;
 mod tape_download;
 mod tape_store;
 use tauri::Manager;
@@ -12,6 +13,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(commands::PlayerState::default())
         .manage(streaming_engine::EngineState::default())
+        .manage(tape_diagnostics::TapeDiagnosticsState::default())
         .manage(tape_download::DownloadState::default())
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -27,6 +29,8 @@ pub fn run() {
             streaming_engine::tape_engine_ensure,
             streaming_engine::tape_engine_status,
             streaming_engine::tape_engine_request,
+            tape_diagnostics::tape_diagnostics_enabled,
+            tape_diagnostics::tape_diagnostics_append,
             tape_download::tape_download_start,
             tape_download::tape_download_cancel,
             tape_store::tape_store_read,

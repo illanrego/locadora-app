@@ -57,6 +57,7 @@
 import { touchTape, type TapeManifest, type TapeState } from './tapeManifest';
 import type { TapeJobSeed, TapeQueue } from './tapeQueue';
 import type { TapeSettings } from './tapeSettings';
+import type { TapeDiagnostics, TapeDiagnosticStateCounts } from './tapeDiagnostics';
 
 /** A row whose finished file only needs its torrent re-attached. */
 const SERVABLE_STATES: readonly TapeState[] = ['ready', 'seeding'];
@@ -126,6 +127,7 @@ export interface TapeHydrationDependencies {
   queue: Pick<TapeQueue, 'enqueue'>;
   pump: () => void;
   onProblem?: (problem: TapeHydrationProblem) => void;
+  diagnostics?: Pick<TapeDiagnostics, 'record'>;
 }
 
 export interface TapeHydration {
@@ -135,6 +137,21 @@ export interface TapeHydration {
 
 function skipped(reason: TapeHydrationReason, overrides: Partial<TapeHydrationResult> = {}): TapeHydrationResult {
   return { status: 'skipped', reason, registered: 0, requeued: 0, unverified: 0, refused: 0, ...overrides };
+}
+
+function stateCounts(manifest: TapeManifest): TapeDiagnosticStateCounts {
+  const counts: TapeDiagnosticStateCounts = {
+    queued: 0,
+    resolving: 0,
+    downloading: 0,
+    ready: 0,
+    seeding: 0,
+    failed: 0,
+    returned: 0,
+    unverified: 0,
+  };
+  for (const tape of manifest.tapes) counts[tape.state] += 1;
+  return counts;
 }
 
 export function createTapeHydration(dependencies: TapeHydrationDependencies): TapeHydration {
@@ -158,14 +175,19 @@ export function createTapeHydration(dependencies: TapeHydrationDependencies): Ta
       problem('manifest-unreadable', 'Retained tapes could not be read at startup.');
       return skipped('manifest-unreadable');
     }
+    dependencies.diagnostics?.record({ event: 'hydrate-summary', stateCounts: stateCounts(manifest) });
     // Empty manifest: engine B is never started (§8, P8 guarantee).
-    if (manifest.tapes.length === 0) return skipped('manifest-empty');
+    if (manifest.tapes.length === 0) {
+      dependencies.diagnostics?.record({ event: 'hydration', registered: 0, requeued: 0, unverified: 0, refused: 0 });
+      return skipped('manifest-empty');
+    }
 
     let origin: string;
     try {
       origin = await dependencies.ensureEngine();
     } catch {
       problem('engine-unavailable', 'The tape engine did not start at startup.');
+      dependencies.diagnostics?.record({ event: 'hydration', registered: 0, requeued: 0, unverified: 0, refused: 0 });
       return skipped('engine-unavailable');
     }
 
@@ -188,6 +210,13 @@ export function createTapeHydration(dependencies: TapeHydrationDependencies): Ta
         // The engine went away mid-run: stopping beats hammering it, and the
         // rows keep the state they had (nothing is written).
         problem('engine-unavailable', 'The tape engine stopped while restarting retained tapes.');
+        dependencies.diagnostics?.record({
+          event: 'hydration',
+          registered,
+          requeued: 0,
+          unverified: 0,
+          refused,
+        });
         return skipped('engine-unavailable', { registered, refused });
       }
       if (status >= 200 && status < 300) {
@@ -258,7 +287,7 @@ export function createTapeHydration(dependencies: TapeHydrationDependencies): Ta
     }
     if (requeued > 0) dependencies.pump();
 
-    return {
+    const result: TapeHydrationResult = {
       status: 'hydrated',
       reason: null,
       registered,
@@ -266,6 +295,14 @@ export function createTapeHydration(dependencies: TapeHydrationDependencies): Ta
       unverified: unverified.length,
       refused,
     };
+    dependencies.diagnostics?.record({
+      event: 'hydration',
+      registered: result.registered,
+      requeued: result.requeued,
+      unverified: result.unverified,
+      refused: result.refused,
+    });
+    return result;
   }
 
   return {
