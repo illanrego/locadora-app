@@ -1,10 +1,88 @@
 # Implementation progress
 
-Last updated: 2026-10-19
-Current milestone: D-034 rented tapes P7 — bundled stream and subtitle defaults
-Status: P7 implemented and automated checks green; owner engine/network acceptance for P5–P7 pending
+Last updated: 2026-10-20
+Current milestone: D-034 rented tapes P8 — restart hydration and derived seeding state
+Status: P8 implemented and automated checks green; owner engine/network acceptance for P5–P8 pending
 
 ## Resume checkpoint
+
+2026-10-20 D-034 rented tapes P8 restart hydration and derived seeding state:
+- `src/rentals/tapeHydration.ts` (new, pure) is the once-per-session startup
+  step (§8 "app restart", §9 retry-once). It samples `locadora.tapes.enabled`
+  before anything else and returns without a read when it is off; reads the
+  manifest and returns without starting engine B when it is empty; then calls
+  `tape_engine_ensure()` once and POSTs `/<hash>/create` for every `ready` /
+  `seeding` row through the existing allowlisted bridge, reusing the pipeline's
+  own `tapeCreateBody` (`torrent.infoHash`, `guessFileIdx: false`,
+  `peerSearch.sources` = `dht:<hash>` + the row's trackers). That registration is
+  what makes a retained file servable from disk and seeder-able again.
+- `queued` / `resolving` / `downloading` rows are reset to `queued` (their
+  attempt died with the old process) and handed to the one runtime queue, which
+  is then pumped; `failed` rows follow the same reset, which is §9's one retry
+  per launch, and the queue's own budget makes a second failure in that launch
+  terminal (`MAX_TAPE_ATTEMPTS_PER_SESSION = 2`). A row already `queued` is
+  re-queued without a write. A `/<hash>/create` answered 408/504 means metainfo
+  cannot be re-resolved: the row becomes `unverified`, is never deleted and never
+  retried in a loop, and playback keeps falling back to the RAM path. Any other
+  non-2xx leaves the row `ready` (the file is still on disk) and counts as
+  `refused`.
+- At most one manifest write per run, taken only when a row actually changed; a
+  write failure is reported and does not stop the queue, because every job start
+  persists its own state.
+- `src/App.tsx` runs it once the shelf settles (ready *or* failed): the app is
+  ready, never before. `hydrateRetainedTapes()` in
+  `src/rentals/rentalTapePipeline.ts` wires the singleton; the queue is reached
+  lazily, so a session with only `ready` rows never builds it (and never
+  subscribes to native progress), and an empty manifest touches nothing.
+- `src/rentals/tapeDashboard.ts` derives the sharing state: `tapePresentedState`
+  presents a `ready` row as `seeding` ("compartilhando"/"sharing") when the stats
+  reply says `isSeeder` or reports a non-zero `uploaded`, and as `ready`
+  ("pronta") otherwise. `readTapeStats` parses both from the one bounded
+  `GET .../<fileIdx>/stats.json` the dashboard already made per tape, and accepts
+  `isSeeder` only as a top-level boolean (the pinned engine's `wires[].isSeeder`
+  describes the remote peer). Nothing is polled or written: no timer, no
+  manifest churn, and the manifest's `seeding` value stays reserved for a future
+  engine that emits a seeding event. `buildTapeDashboard` now takes that reading
+  map; `readTapeUploaded` stays as the number-only accessor.
+- Choices the brief left open: (a) the once-guard is spent even when the switch
+  is off, so a switch turned on mid-session hydrates at the next launch instead
+  of starting engine B minutes later, possibly during a RAM playback the P4
+  window had silenced; (b) 408/504 is the whole "metainfo unresolvable" set — the
+  engine answers 504 when `Engine.Ready` times out — while a 5xx leaves the row
+  `ready` rather than understating a file that is still there; (c) a bridge
+  failure mid-run stops the registration pass and writes nothing, so a dead
+  engine is never hammered once per row; (d) the run happens after the shelf
+  settles in either direction, so a catalogue outage cannot also kill seeding;
+  (e) the only log line is one `console.warn` per problem, carrying no infohash,
+  magnet, tracker or path; (f) registration is sequential and finishes before the
+  queue is pumped, keeping §2.1's one-network-activity rule, at the cost of a
+  mid-download tape waiting for each unresolvable `ready` row to time out.
+- Exact validation commands/results:
+  - `npx tsc -b --pretty false`: exit 0.
+  - `npx vitest run test/tapeHydration.test.ts`: 1 file, 15 tests passed.
+  - `npx vitest run test/tapeDashboard.test.tsx`: 1 file, 15 tests passed.
+  - `npm run check`: exit 0; `tsc -b` clean; Test Files 56 passed (56), Tests 443
+    passed (443) — baseline 55/423, so one new file and +20 tests; Vite built 205
+    modules with the existing chunk advisory only.
+- Mutation evidence, both restored before commit: (1) `SERVABLE_STATES` reduced to
+  `['seeding']` so hydration skipped `ready` rows — `npx vitest run
+  test/tapeHydration.test.ts` exited 1 (5 failed, 10 passed), starting with
+  "re-attaches every ready and seeding tape exactly once..." (`registered` 3 → 1);
+  restoring gave 15 passed. (2) `tapePresentedState` reduced to `return state;`
+  so the dashboard ignored the seeder signal — `npx vitest run
+  test/tapeDashboard.test.tsx` exited 1 (4 failed, 11 passed), the first row
+  reading `pronta` instead of `compartilhando`; restoring gave 15 passed.
+- No browser/GUI automation and no real download, seeding or playback was
+  performed; no manual visual verification. No push, no history rewrite, no
+  dependency, no timer, no Rust change, and no manifest, queue, admission or
+  settings contract change.
+- **Next task:** owner acceptance run for P5–P8 on a real engine and network:
+  rent two movies, let one finish and leave the other mid-download, quit the app
+  and reopen it; confirm the finished tape is re-attached (already downloaded
+  bytes are not fetched again), that it plays from disk, that the mid-download
+  tape resumes, and that the dashboard row for the finished tape reads
+  `compartilhando` once the engine reports uploads. §22 (how "measured upstream"
+  is defined for the P4 upload cap) remains the only open mechanism.
 
 2026-10-19 D-034 rented tapes P7 bundled stream and subtitle defaults (D-035):
 - `src/platform/nativeBridge.ts` replaces the single metadata default with an

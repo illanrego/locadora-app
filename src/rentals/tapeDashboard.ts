@@ -28,10 +28,20 @@ export interface TapeDashboardEntry {
   infoHash: string;
   contentId: string;
   title: string;
+  /** The presented state: `ready` may read as `seeding` (see `tapePresentedState`). */
   state: TapeState;
   sizeBytes: number;
   uploadedBytes: number | null;
   lastPlayedAt: string | null;
+}
+
+/**
+ * One best-effort engine reading per tape, from `/<hash>/<fileIdx>/stats.json`.
+ * Either field is `null` when the reply did not carry a usable figure.
+ */
+export interface TapeEngineReading {
+  uploadedBytes: number | null;
+  isSeeder: boolean | null;
 }
 
 /**
@@ -55,42 +65,78 @@ export function tapeStateLabel(state: TapeState, locale: string): string {
 }
 
 /**
- * Builds one entry per manifest row, in manifest order. The uploaded map is
+ * Builds one entry per manifest row, in manifest order. The readings map is
  * keyed by infohash and may be missing rows entirely (engine off, failed
  * request, malformed reply) — those become `null`.
  */
 export function buildTapeDashboard(
   manifest: TapeManifest,
-  uploaded: ReadonlyMap<string, number | null> = new Map(),
+  readings: ReadonlyMap<string, TapeEngineReading | null> = new Map(),
 ): TapeDashboardEntry[] {
-  return manifest.tapes.map((tape) => ({
-    infoHash: tape.infoHash,
-    contentId: tape.contentId,
-    title: tape.title,
-    state: tape.state,
-    sizeBytes: tape.sizeBytes,
-    uploadedBytes: uploaded.get(tape.infoHash) ?? null,
-    lastPlayedAt: tape.lastPlayedAt,
-  }));
+  return manifest.tapes.map((tape) => {
+    const reading = readings.get(tape.infoHash) ?? null;
+    return {
+      infoHash: tape.infoHash,
+      contentId: tape.contentId,
+      title: tape.title,
+      state: tapePresentedState(tape.state, reading),
+      sizeBytes: tape.sizeBytes,
+      uploadedBytes: reading?.uploadedBytes ?? null,
+      lastPlayedAt: tape.lastPlayedAt,
+    };
+  });
 }
 
 /**
- * Best-effort `uploaded` from a stats reply. Any malformed, negative,
- * non-finite or absent value is `null`; a bounded body keeps a hostile reply
- * from being parsed at all.
+ * P8: the seeding state is *derived*, never written.
+ *
+ * A retained tape in `ready` holds a complete file, so whether it is sharing is
+ * a fact about the engine, not about the manifest: the row reads as `seeding`
+ * ("compartilhando") when the tape reports `isSeeder`, or when it has uploaded
+ * something. A `ready` row with no uploads stays `ready` ("pronta"). Mutation is
+ * never involved — no poll loop, no timer, no manifest write — and the manifest's
+ * own `seeding` value stays reserved for a future engine that emits a seeding
+ * event. Every other state is presented exactly as stored.
  */
-export function readTapeUploaded(body: string | null | undefined): number | null {
-  if (typeof body !== 'string' || body.length === 0 || body.length > 64 * 1024) return null;
+export function tapePresentedState(
+  state: TapeState,
+  reading: TapeEngineReading | null | undefined,
+): TapeState {
+  if (state !== 'ready') return state;
+  if (reading?.isSeeder === true) return 'seeding';
+  return (reading?.uploadedBytes ?? 0) > 0 ? 'seeding' : 'ready';
+}
+
+/**
+ * Best-effort engine reading from a stats reply. Any malformed, negative,
+ * non-finite or absent value is `null`; a bounded body keeps a hostile reply
+ * from being parsed at all. `isSeeder` is only accepted as a top-level boolean:
+ * the pinned engine reports it per peer (`wires[].isSeeder`, which is about the
+ * remote peer), so a peer's flag must never be read as this tape seeding.
+ */
+export function readTapeStats(body: string | null | undefined): TapeEngineReading {
+  const none: TapeEngineReading = { uploadedBytes: null, isSeeder: null };
+  if (typeof body !== 'string' || body.length === 0 || body.length > 64 * 1024) return none;
   let parsed: unknown;
   try {
     parsed = JSON.parse(body) as unknown;
   } catch {
-    return null;
+    return none;
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-  const uploaded = (parsed as { uploaded?: unknown }).uploaded;
-  if (typeof uploaded !== 'number' || !Number.isFinite(uploaded) || uploaded < 0) return null;
-  return Math.floor(uploaded);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return none;
+  const record = parsed as { uploaded?: unknown; isSeeder?: unknown };
+  const uploaded = record.uploaded;
+  return {
+    uploadedBytes: typeof uploaded === 'number' && Number.isFinite(uploaded) && uploaded >= 0
+      ? Math.floor(uploaded)
+      : null,
+    isSeeder: typeof record.isSeeder === 'boolean' ? record.isSeeder : null,
+  };
+}
+
+/** The `uploaded` figure alone, kept for callers that only need the number. */
+export function readTapeUploaded(body: string | null | undefined): number | null {
+  return readTapeStats(body).uploadedBytes;
 }
 
 /** "850 MB" or "4,2 GB" in the active locale. */

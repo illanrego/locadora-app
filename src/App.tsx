@@ -18,6 +18,7 @@ import { readImmersiveEnabled, writeImmersiveEnabled } from './locadora/immersiv
 import { readAllSeriesProgress, readLocalSeriesEpisodes } from './locadora/localCache';
 import { episodeLabel, nextEpisode, type BoundedEpisode } from './media/seriesEpisodes';
 import { hasLocalSavedTitle, readLocalSavedCollections, setLocalSavedTitle, writeLocalSavedCollections, type SavedCollection } from './member/localSaved';
+import { hydrateRetainedTapes } from './rentals/rentalTapePipeline';
 import './styles.css';
 
 const ImmersiveShelf = lazy(() => import('./components/ImmersiveShelf'));
@@ -107,6 +108,15 @@ export default function App() {
     void fetchPage(0, controller.signal);
     return () => controller.abort();
   }, [fetchPage]);
+
+  // P8: once the app has settled (shelf ready or its request failed), re-attach
+  // the tapes kept on this device so they play from disk and seed again. One
+  // quiet, non-blocking step per session: with the master switch off or an empty
+  // manifest it starts no engine at all (`tapeHydration.ts`).
+  useEffect(() => {
+    if (status === 'loading') return;
+    void hydrateRetainedTapes();
+  }, [status]);
 
   const visiblePages = pages;
   const visibleTitles = useMemo(() => visiblePages.flatMap((page) => page.titles), [visiblePages]);

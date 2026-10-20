@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const tapePlatform = vi.hoisted(() => ({
   readTapeManifest: vi.fn(),
+  writeTapeManifest: vi.fn(),
   requestTapeEngine: vi.fn(),
   TAPE_ENGINE_ORIGIN: 'http://127.0.0.1:11472',
 }));
@@ -15,12 +16,20 @@ vi.mock('../src/platform/tape', () => tapePlatform);
 
 import { TapeDashboard } from '../src/components/TapeDashboard';
 import { normalizeDiscoveryTitle } from '../src/domain/content';
-import { tapeStateLabel, formatTapeTotal, readTapeUploaded } from '../src/rentals/tapeDashboard';
+import {
+  buildTapeDashboard,
+  formatTapeTotal,
+  readTapeStats,
+  readTapeUploaded,
+  tapePresentedState,
+  tapeStateLabel,
+} from '../src/rentals/tapeDashboard';
 import { TAPE_GIBIBYTE, TAPE_STATES, type TapeRecord, type TapeState } from '../src/rentals/tapeManifest';
 import { writeTapeSettings } from '../src/rentals/tapeSettings';
 
 const HASH_A = 'a'.repeat(40);
 const HASH_B = 'b'.repeat(40);
+const HASH_C = 'c'.repeat(40);
 
 function tape(overrides: Partial<TapeRecord> & Pick<TapeRecord, 'infoHash' | 'title' | 'state' | 'sizeBytes'>): TapeRecord {
   return {
@@ -132,6 +141,61 @@ describe('rented-tape dashboard', () => {
     expect(within(region).getAllByLabelText('upload unknown')).toHaveLength(2);
   });
 
+  it('shows "compartilhando" for a ready tape the engine reports seeding and "pronta" otherwise', async () => {
+    const seeded = {
+      version: 1 as const,
+      tapes: [
+        tape({ infoHash: HASH_A, title: 'Semeando', state: 'ready', sizeBytes: TAPE_GIBIBYTE }),
+        tape({ infoHash: HASH_B, title: 'Enviando', state: 'ready', sizeBytes: TAPE_GIBIBYTE }),
+        tape({ infoHash: HASH_C, title: 'Parada', state: 'ready', sizeBytes: TAPE_GIBIBYTE }),
+      ],
+    };
+    const before = JSON.stringify(seeded);
+    tapePlatform.readTapeManifest.mockResolvedValue(seeded);
+    tapePlatform.requestTapeEngine.mockImplementation(async (url: string) => {
+      if (url.includes(HASH_A)) {
+        return { status: 200, body: JSON.stringify({ uploaded: 0, isSeeder: true }), contentType: 'application/json' };
+      }
+      if (url.includes(HASH_B)) {
+        return { status: 200, body: JSON.stringify({ uploaded: 5 * 1024 ** 2 }), contentType: 'application/json' };
+      }
+      return { status: 200, body: JSON.stringify({ uploaded: 0, isSeeder: false }), contentType: 'application/json' };
+    });
+
+    render(<TapeDashboard locale="pt-BR" onInspect={vi.fn()} />);
+
+    const region = await screen.findByRole('region', { name: 'Fitas neste aparelho' });
+    // isSeeder, a non-zero uploaded figure, and neither.
+    expect(within(region).getByRole('row', { name: /Semeando/ })).toHaveTextContent('compartilhando');
+    expect(within(region).getByRole('row', { name: /Enviando/ })).toHaveTextContent('compartilhando');
+    expect(within(region).getByRole('row', { name: /Parada/ })).toHaveTextContent('pronta');
+
+    // Derived only: every bridge call was a stats read and the manifest was
+    // neither written nor mutated by the render.
+    expect(tapePlatform.writeTapeManifest).not.toHaveBeenCalled();
+    for (const [url, method] of tapePlatform.requestTapeEngine.mock.calls) {
+      expect(method).toBe('GET');
+      expect(url).toMatch(/\/stats\.json$/);
+    }
+    expect(JSON.stringify(seeded)).toBe(before);
+  });
+
+  it('states the sharing word in both locales', async () => {
+    tapePlatform.readTapeManifest.mockResolvedValue({
+      version: 1,
+      tapes: [tape({ infoHash: HASH_A, title: 'Seeding', state: 'ready', sizeBytes: TAPE_GIBIBYTE })],
+    });
+    tapePlatform.requestTapeEngine.mockResolvedValue({
+      status: 200,
+      body: JSON.stringify({ uploaded: 10, isSeeder: true }),
+      contentType: 'application/json',
+    });
+    render(<TapeDashboard locale="en-US" onInspect={vi.fn()} />);
+
+    const region = await screen.findByRole('region', { name: 'Tapes on this device' });
+    expect(within(region).getByRole('row', { name: /Seeding/ })).toHaveTextContent('sharing');
+  });
+
   it('states the manifest total against the configured ceiling, and a null ceiling in words', async () => {
     const { unmount } = render(<TapeDashboard locale="pt-BR" onInspect={vi.fn()} />);
     expect(await screen.findByText('4,2 GB de 6 GB')).toBeInTheDocument();
@@ -205,5 +269,51 @@ describe('tape dashboard pure helpers', () => {
     expect(readTapeUploaded('{"downloaded": 5}')).toBeNull();
     expect(readTapeUploaded('')).toBeNull();
     expect(readTapeUploaded('[]')).toBeNull();
+  });
+});
+
+describe('tape dashboard: the derived sharing state (P8)', () => {
+  it('derives `seeding` from the engine reading and never from the manifest', () => {
+    expect(tapePresentedState('ready', { uploadedBytes: 0, isSeeder: true })).toBe('seeding');
+    expect(tapePresentedState('ready', { uploadedBytes: 10, isSeeder: false })).toBe('seeding');
+    expect(tapePresentedState('ready', { uploadedBytes: 0, isSeeder: false })).toBe('ready');
+    expect(tapePresentedState('ready', { uploadedBytes: null, isSeeder: null })).toBe('ready');
+    expect(tapePresentedState('ready', null)).toBe('ready');
+    // The manifest's own `seeding` value is presented as stored: only a future
+    // engine that emits a seeding event may set it.
+    expect(tapePresentedState('seeding', null)).toBe('seeding');
+    // No other state is ever rewritten by the reading.
+    for (const state of TAPE_STATES.filter((value) => value !== 'ready')) {
+      expect(tapePresentedState(state, { uploadedBytes: 10, isSeeder: true })).toBe(state);
+    }
+  });
+
+  it('builds the entries from a reading map without mutating the manifest', () => {
+    const manifest = {
+      version: 1 as const,
+      tapes: [
+        tape({ infoHash: HASH_A, title: 'Pronta', state: 'ready', sizeBytes: TAPE_GIBIBYTE }),
+        tape({ infoHash: HASH_B, title: 'Baixando', state: 'downloading', sizeBytes: TAPE_GIBIBYTE }),
+      ],
+    };
+    const entries = buildTapeDashboard(manifest, new Map([
+      [HASH_A, { uploadedBytes: 5, isSeeder: true }],
+      [HASH_B, { uploadedBytes: 9, isSeeder: true }],
+    ]));
+
+    expect(entries.map((entry) => [entry.state, entry.uploadedBytes])).toEqual([
+      ['seeding', 5],
+      ['downloading', 9],
+    ]);
+    expect(manifest.tapes.map((row) => row.state)).toEqual(['ready', 'downloading']);
+  });
+
+  it('reads isSeeder only from the top level, never from a peer wire', () => {
+    expect(readTapeStats('{"uploaded": 0, "isSeeder": true}')).toEqual({ uploadedBytes: 0, isSeeder: true });
+    expect(readTapeStats('{"isSeeder": false}')).toEqual({ uploadedBytes: null, isSeeder: false });
+    // `wires[].isSeeder` describes the remote peer, not this tape.
+    expect(readTapeStats('{"wires": [{"isSeeder": true}]}')).toEqual({ uploadedBytes: null, isSeeder: null });
+    expect(readTapeStats('{"isSeeder": "true"}')).toEqual({ uploadedBytes: null, isSeeder: null });
+    expect(readTapeStats('not json')).toEqual({ uploadedBytes: null, isSeeder: null });
   });
 });

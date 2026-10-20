@@ -86,6 +86,7 @@ import {
   type TapeQueueEvent,
 } from './tapeQueue';
 import { readTapeSettings, type TapeSettings } from './tapeSettings';
+import { createTapeHydration, type TapeHydration, type TapeHydrationResult } from './tapeHydration';
 
 /** Native `SOURCE_BYTES`, private in `tapeManifest.ts`. */
 const MAX_SOURCE_BYTES = 2_048;
@@ -661,4 +662,33 @@ export function offerConfirmedRentalToTapes(rental: unknown, titles: readonly Di
 /** The single return hook. Also fire-and-forget, for the same reason. */
 export function releaseReturnedTape(rentalId: string): void {
   void rentalTapePipeline().release(rentalId).catch(() => undefined);
+}
+
+let hydration: TapeHydration | null = null;
+
+/**
+ * P8: the once-per-session startup hydration (§8 restart, §9 retry-once).
+ *
+ * Called after the app is ready. Fire-and-forget and silent: it never throws,
+ * blocks a render or shows an error, and with an empty manifest or the master
+ * switch off it starts no engine, reads no row list and builds no queue. The
+ * queue is reached lazily through the singleton, so a session whose tapes are
+ * all `ready` never constructs it (and never subscribes to native progress).
+ */
+export function hydrateRetainedTapes(): Promise<TapeHydrationResult> {
+  hydration ??= createTapeHydration({
+    settings: readTapeSettings,
+    readManifest: readTapeManifest,
+    writeManifest: writeTapeManifest,
+    ensureEngine: () => ensureTapeEngine(readTapeSettings()),
+    requestEngine: (url, method, body): Promise<TapeEngineResponse> => requestTapeEngine(url, method, body),
+    createBody: tapeCreateBody,
+    queue: { enqueue: (seed) => rentalTapePipeline().queue.enqueue(seed) },
+    pump: pumpRentalTapes,
+    onProblem: (problem) => {
+      // One quiet line per problem: never a modal, never an infohash or a path.
+      console.warn(`[locadora] tapes: ${problem.message}`);
+    },
+  });
+  return hydration.hydrate();
 }

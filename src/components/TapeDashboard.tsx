@@ -24,9 +24,10 @@ import {
   formatTapeBytes,
   formatTapeDate,
   formatTapeTotal,
-  readTapeUploaded,
+  readTapeStats,
   tapeStateLabel,
   type TapeDashboardEntry,
+  type TapeEngineReading,
 } from '../rentals/tapeDashboard';
 import { readTapeSettings } from '../rentals/tapeSettings';
 
@@ -40,24 +41,26 @@ const EMPTY_TITLES: readonly DiscoveryTitle[] = [];
 
 /**
  * One best-effort stats read per tape. Failures are per-tape and silent: an
- * engine that is off is the normal case, not an error the user must see.
+ * engine that is off is the normal case, not an error the user must see. The
+ * reading carries both the uploaded figure and the engine's seeder flag; the
+ * dashboard *derives* the sharing state from them and writes nothing back.
  */
-async function readUploadedFigures(
+async function readEngineReadings(
   tapes: readonly { infoHash: string; fileIdx: number }[],
-): Promise<Map<string, number | null>> {
-  const figures = await Promise.all(tapes.map(async (tape) => {
+): Promise<Map<string, TapeEngineReading | null>> {
+  const readings = await Promise.all(tapes.map(async (tape) => {
     try {
       const response = await requestTapeEngine(
         `${TAPE_ENGINE_ORIGIN}/${tape.infoHash}/${tape.fileIdx}/stats.json`,
         'GET',
       );
       if (response.status !== 200) return [tape.infoHash, null] as const;
-      return [tape.infoHash, readTapeUploaded(response.body)] as const;
+      return [tape.infoHash, readTapeStats(response.body)] as const;
     } catch {
       return [tape.infoHash, null] as const;
     }
   }));
-  return new Map(figures);
+  return new Map(readings);
 }
 
 export function TapeDashboard({ locale, onInspect, knownTitles = EMPTY_TITLES }: TapeDashboardProps) {
@@ -79,7 +82,7 @@ export function TapeDashboard({ locale, onInspect, knownTitles = EMPTY_TITLES }:
           setEntries([]);
           return;
         }
-        const uploaded = await readUploadedFigures(manifest.tapes);
+        const uploaded = await readEngineReadings(manifest.tapes);
         if (!active) return;
         setCeilingBytes(tapeCeilingBytes({ maxGb: readTapeSettings().maxGb }));
         setEntries(buildTapeDashboard(manifest, uploaded));
