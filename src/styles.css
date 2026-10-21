@@ -71,7 +71,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .browse-controls label > span, .year-machine > span, .settings-drawer legend, .language-setting > span { color: var(--yellow); font: 800 .6rem/1 "Courier New", monospace; letter-spacing: .12em; text-transform: uppercase; }
 .browse-controls select, .browse-controls input { min-height: 40px; width: 100%; border: 2px solid #3f526b; border-radius: 0; color: var(--cream); background: #101a28; }
 .browse-controls select { padding: .55rem .65rem; }
-.browse-controls .genre-picker { color: var(--blue); background: var(--paper); border-color: #f8e8bc; font-weight: 800; }
+.browse-controls .genre-picker { color: var(--blue); background: var(--paper); border-color: #f8e8bc; font-weight: 800; color-scheme: light; }
+/* The genre field is the one light-on-dark exception: keep both its closed
+   label and its open list dark-on-paper instead of inheriting the app-wide
+   dark option palette. */
+.browse-controls .genre-picker option { color: var(--blue); background: var(--paper); }
 /* The sort field hugs its longest option instead of stretching across the whole column. */
 .browse-controls .sort-picker { width: max-content; max-width: 100%; }
 .browse-controls .sort-picker select { width: auto; max-width: 100%; }

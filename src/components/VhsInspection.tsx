@@ -15,10 +15,11 @@ import { copy, type Locale } from '../locadora/catalog';
 
 const TEX_W = 1024;
 const TEX_H = 1536;
-const MIN_ZOOM = 0.62;
-// A full case is the closest permitted view: all focus modes must retain its
-// top and bottom edges instead of turning the viewport into a crop window.
-const MAX_ZOOM = 1;
+const MIN_ZOOM = 0.5;
+// The owner asked for a much closer look at the tape: zooming past 1 crops the
+// case deliberately, so the model can be read up close instead of being pinned
+// to a fit-everything view. Clipping is bounded by the camera's near plane.
+const MAX_ZOOM = 2.6;
 const ZOOM_STEP = 0.12;
 const CASE_WIDTH = 4.08;
 const CASE_HEIGHT = 6.08;
@@ -538,7 +539,9 @@ export function VhsInspection({ title, locale, onInspectClose, onCreditPerson }:
       };
       focusRef.current = focusTarget;
       zoomRef.current = (delta: number) => {
-        zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom + delta));
+        // Multiplicative so a step feels the same at every magnification — the
+        // range now reaches 2.6× and a fixed step would need twenty presses.
+        zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * (1 + delta)));
         resize();
       };
       canvas.setAttribute('aria-label', `${title.name} VHS · ${text.inspectLabel}`);
