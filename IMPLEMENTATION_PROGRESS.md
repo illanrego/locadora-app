@@ -1,10 +1,66 @@
 # Implementation progress
 
-Last updated: 2026-10-20
-Current milestone: D-034 rented tapes P10 — complete diagnostic signals and event audit
-Status: P10 implemented and automated checks green; owner engine/network acceptance for P5–P10 pending
+Last updated: 2026-10-21
+Current milestone: D-034 rented tapes P10 — UI placement and presentation follow-up complete
+Status: P10 and requested UI follow-up implemented with automated checks green; owner visual and engine/network acceptance pending
 
 ## Resume checkpoint
+
+2026-10-21 P10 UI placement and presentation follow-up:
+- Removed the Settings drawer's entire `Player:` paragraph. The native mpv
+  capability/version probe remains unchanged for playback availability and
+  `WatchFlow`; the full native banner is no longer rendered in Settings.
+  `t.development` remains live because `TitleInspection` uses it as the disabled
+  movie Watch tooltip.
+- Settings is now an opaque, isolated surface with bounded viewport height,
+  its own vertical overflow and explicit shelf/stage stacking. Normal mode
+  keeps it in the header flow; immersive mode uses a fixed, opaque panel below
+  the header actions, with a lower mobile offset for the wrapped action bar.
+- The rented-tape group in Settings now contains only the master switch and its
+  existing off-state hint. Ratio and peer-port controls, including their
+  next-start note, are intentionally hidden pending owner-approved placement;
+  all four existing `tapeSettings` keys/defaults/validation remain unchanged.
+- `Espaço para fitas (GB)` and its unchanged `0 = sem limite de espaço.` hint
+  moved into the Carteirinha rental-limit region beside the account rental
+  limit. It still merges through the local `tapeSettings` store and has no
+  member API, profile or rental-payload path. The two controls become one
+  column below 900 px.
+- Every `select` now opts into the dark native colour scheme and every option
+  has explicit cream-on-navy colours. Existing closed-control colours remain
+  scoped as before; the light plaque input retains its light scheme while its
+  select follows the global dropdown rule.
+- Choices the brief left open: (a) the moved storage control is a small exported
+  component in `TapeSettingsGroup.tsx`, keeping one local persistence helper
+  without adding a panel or route; (b) the Carteirinha uses a two-column layout
+  above 900 px and stacks below it; (c) normal Settings stays in document flow,
+  while immersive Settings is fixed at 4.6 rem (6.5 rem on small screens) so it
+  cannot be clipped by the full-viewport scene; (d) the existing navy shades
+  supply the opaque panel and option backgrounds, so no palette redesign was
+  introduced.
+- Exact validation commands/results:
+  - `npm test -- --run test/tapeSettings.test.ts
+    test/tapeSettingsControls.test.tsx test/memberPanel.test.tsx
+    test/app.test.tsx test/playerPresentation.test.ts`: exit 0; 5 files and 41
+    tests passed.
+  - `git diff --check`: exit 0 before the full gate.
+  - `npm run check`: exit 0; TypeScript clean; Test Files 57 passed (57), Tests
+    449 passed (449), baseline 57/448; Vite built 206 modules with only the
+    existing large-chunk advisory.
+- Mutation evidence, restored before the full gate: put the original `Player:`
+  paragraph back into `App.tsx`; `npx vitest run test/app.test.tsx -t "keeps
+  the settings drawer free of the native player banner"` exited 1 with 1 failed
+  and 13 skipped because the drawer contained `Player: Em desenvolvimento`.
+  After restoring the removal, the identical command exited 0 with 1 passed
+  and 13 skipped.
+- No browser/GUI automation, manual visual check, native executable rebuild,
+  Rust check, push, dependency, settings key/default/validation, member API,
+  rental payload, engine, pipeline, queue, manifest, playback or diagnostics
+  change was made. `npm run check` did complete the production frontend build.
+- **Next task:** owner visual acceptance of the opaque Settings panel in 2D and
+  immersive mode, the Carteirinha two-column/stacked rental controls and native
+  dropdown contrast; then owner first-drive diagnostics acceptance with
+  `LOCADORA_TAPE_DIAGNOSTICS=1` as recorded below. P5–P9 real engine/network
+  acceptance remains open.
 
 2026-10-20 D-034 rented tapes P10 complete diagnostics and dead-event audit:
 - `seed-observed` now originates exactly where sharing is derived: the

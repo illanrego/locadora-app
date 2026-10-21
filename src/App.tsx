@@ -441,12 +441,6 @@ export default function App() {
             >
               {locale === 'pt-BR' ? 'Quick Watch automático' : 'Automatic Quick Watch'}
             </button>
-            <p>
-              <strong>Player:</strong>{' '}
-              {nativeCapabilities?.mpv.available
-                ? `${nativeCapabilities.mpv.version ?? 'mpv'} · ${locale === 'pt-BR' ? 'pronto' : 'ready'}`
-                : t.development}
-            </p>
             <TapeSettingsGroup locale={locale} />
           </section>
         )}

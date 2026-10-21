@@ -18,6 +18,7 @@ import {
 } from '../platform/nativeBridge';
 import type { Locale } from '../locadora/catalog';
 import { TapeDashboard } from './TapeDashboard';
+import { TapeSpaceCeiling } from './TapeSettingsGroup';
 import { TitleReviews } from './TitleReviews';
 
 interface MemberPanelProps {
@@ -394,17 +395,20 @@ export function MemberPanel({ locale, onInspect, knownTitles = EMPTY_TITLES }: M
           </form>}
           <section className="member-section member-rental-limit" aria-labelledby="member-rental-limit-heading">
             <h3 id="member-rental-limit-heading">{pt ? 'Limite de aluguéis' : 'Rental limit'}</h3>
-            <form onSubmit={(event) => { event.preventDefault(); void saveRentalLimit(rentalLimitDraft); }}>
-              <label htmlFor="member-rental-limit">{pt ? 'Limite de aluguéis simultâneos' : 'Simultaneous rental limit'}</label>
-              <div>
-                <select id="member-rental-limit" value={rentalLimitDraft} disabled={busy} onChange={(event) => setRentalLimitDraft(Number(event.target.value))}>
-                  {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
-                </select>
-                <button type="submit" disabled={busy}>{pt ? 'Salvar limite' : 'Save limit'}</button>
-              </div>
-              <p className="member-privacy">{pt ? 'Vale para o aplicativo e o site. Reduzir o limite não devolve suas fitas atuais.' : 'Applies to the app and website. Lowering the limit does not return existing rentals.'}</p>
-              <p className="member-rental-limit-status" role="status" aria-live="polite">{rentalLimitStatus}</p>
-            </form>
+            <div className="member-rental-settings">
+              <form onSubmit={(event) => { event.preventDefault(); void saveRentalLimit(rentalLimitDraft); }}>
+                <label htmlFor="member-rental-limit">{pt ? 'Limite de aluguéis simultâneos' : 'Simultaneous rental limit'}</label>
+                <div>
+                  <select id="member-rental-limit" value={rentalLimitDraft} disabled={busy} onChange={(event) => setRentalLimitDraft(Number(event.target.value))}>
+                    {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+                  </select>
+                  <button type="submit" disabled={busy}>{pt ? 'Salvar limite' : 'Save limit'}</button>
+                </div>
+                <p className="member-privacy">{pt ? 'Vale para o aplicativo e o site. Reduzir o limite não devolve suas fitas atuais.' : 'Applies to the app and website. Lowering the limit does not return existing rentals.'}</p>
+                <p className="member-rental-limit-status" role="status" aria-live="polite">{rentalLimitStatus}</p>
+              </form>
+              <TapeSpaceCeiling locale={locale} />
+            </div>
           </section>
           <section className="member-summary" aria-labelledby="member-stats-heading">
             <h3 id="member-stats-heading" className="sr-only">{pt ? 'Resumo da conta' : 'Account summary'}</h3>

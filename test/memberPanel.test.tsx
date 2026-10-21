@@ -43,8 +43,10 @@ vi.mock('../src/rentals/rentalTapePipeline', () => tapes);
 
 import { MemberPanel } from '../src/components/MemberPanel';
 import { normalizeDiscoveryTitle } from '../src/domain/content';
+import { readTapeSettings } from '../src/rentals/tapeSettings';
 
 beforeEach(() => {
+  window.localStorage.clear();
   cache.readAllSeriesProgress.mockResolvedValue([]);
   cache.readLocalSeriesEpisodes.mockResolvedValue(null);
   tapePlatform.readTapeManifest.mockResolvedValue({ version: 1, tapes: [] });
@@ -356,4 +358,26 @@ it('saves the account rental limit and keeps the confirmed value on failure', as
   await user.click(screen.getByRole('button', { name: 'Save limit' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Offline');
   expect(select).toHaveValue('10');
+});
+
+it('keeps the local tape-space ceiling beside the account rental limit without calling a member API', async () => {
+  native.readMemberSession.mockResolvedValue({ configured: true, signedIn: true, user: { id: 'user-1' } });
+  native.fetchMemberState.mockResolvedValue({ profile: { userId: 'user-1', username: 'will', rentalLimit: 3 } });
+  const user = userEvent.setup();
+  render(<MemberPanel locale="pt-BR" onInspect={vi.fn()} />);
+
+  const section = await screen.findByRole('region', { name: 'Limite de aluguéis' });
+  expect(within(section).getByLabelText('Limite de aluguéis simultâneos')).toBeInTheDocument();
+  const maxGb = within(section).getByLabelText('Espaço para fitas (GB)');
+  expect(maxGb).toHaveValue(6);
+  expect(maxGb).toHaveAttribute('aria-describedby', 'tape-setting-max-gb-hint');
+  expect(within(section).getByText('0 = sem limite de espaço.')).toBeInTheDocument();
+
+  await user.clear(maxGb);
+  await user.type(maxGb, '0');
+  await user.tab();
+
+  expect(readTapeSettings().maxGb).toBe(0);
+  expect(native.updateMemberRentalLimit).not.toHaveBeenCalled();
+  expect(native.updateMemberProfile).not.toHaveBeenCalled();
 });

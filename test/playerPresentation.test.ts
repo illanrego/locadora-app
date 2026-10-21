@@ -52,4 +52,10 @@ describe('native video presentation', () => {
     expect(css.slice(fullscreenPanel, fullscreenPanel + 220)).toContain('grid-template-rows: minmax(0, 1fr)');
     expect(css).toContain('.watch-modal.player-is-fullscreen.fullscreen-idle[open] { grid-template-rows: minmax(0, 1fr); }');
   });
+  it('keeps settings opaque and scrollable above both shelves and gives every select a dark option palette', () => {
+    expect(css).toContain('select { color-scheme: dark; }');
+    expect(css).toContain('select option { color: var(--cream); background: #101a28; }');
+    expect(css).toMatch(/\.settings-drawer \{[^}]*z-index: 6;[^}]*max-height:[^}]*overflow-y: auto;[^}]*background: #203958;/);
+    expect(css).toMatch(/\.is-immersive \.settings-drawer \{[^}]*position: fixed;[^}]*z-index: 7;[^}]*overflow-y: auto;[^}]*background: #101827;/);
+  });
 });

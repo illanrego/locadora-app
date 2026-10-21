@@ -137,6 +137,20 @@ describe('accessible Locadora shelf', () => {
     expect(screen.getByRole('button', { name: 'Quick Watch automático' })).toHaveAttribute('aria-pressed', 'false');
   });
 
+  it('keeps the settings drawer free of the native player banner and exposes only the tape master switch', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Ajustes' }));
+
+    const drawer = screen.getByRole('region', { name: 'Ajustes' });
+    expect(drawer).not.toHaveTextContent(/Player:/i);
+    expect(drawer).not.toHaveTextContent(/Copyright|mpv\/MPlayer\/mplayer2/i);
+    expect(within(drawer).getByRole('checkbox', { name: 'Baixar e guardar fitas alugadas' })).toBeInTheDocument();
+    expect(within(drawer).queryByLabelText('Espaço para fitas (GB)')).not.toBeInTheDocument();
+    expect(within(drawer).queryByLabelText('Proporção de envio')).not.toBeInTheDocument();
+    expect(within(drawer).queryByLabelText('Porta de pares')).not.toBeInTheDocument();
+  });
+
   it('opens saved and favorite titles in inspection and can add them to Cesta', async () => {
     const user = userEvent.setup();
     render(<App />);
