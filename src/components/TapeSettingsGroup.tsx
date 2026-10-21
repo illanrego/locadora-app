@@ -31,7 +31,9 @@ export function TapeSettingsGroup({ locale }: TapeSettingsGroupProps) {
         <span>{pt ? 'Baixar e guardar fitas alugadas' : 'Download and keep rented tapes'}</span>
       </label>
       <p className="tape-settings-hint">
-        {pt ? 'Desligado, nada é baixado nem compartilhado.' : 'When off, nothing is downloaded or shared.'}
+        {settings.enabled
+          ? (pt ? 'Baixa e compartilha enquanto a Locadora está aberta.' : 'Downloads and shares while Locadora is open.')
+          : (pt ? 'Desligado: nada é baixado nem compartilhado.' : 'Off: nothing is downloaded or shared.')}
       </p>
       {/* Ratio and peer-port controls are intentionally hidden pending an
           owner-approved placement; their tapeSettings keys remain unchanged. */}

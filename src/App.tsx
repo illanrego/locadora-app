@@ -417,31 +417,40 @@ export default function App() {
 
         {settingsOpen && (
           <section className="settings-drawer" aria-label={t.settings}>
-            <fieldset>
-              <legend>{t.type}</legend>
-              <button type="button" aria-pressed={type === 'movie'} onClick={() => { setCreditStand(null); setType('movie'); }}>{t.movies}</button>
-              <button type="button" aria-pressed={type === 'series'} onClick={() => { setCreditStand(null); setType('series'); }}>{t.series}</button>
-            </fieldset>
-            <div className="language-setting">
-              <span>{locale === 'pt-BR' ? 'Idioma' : 'Language'}</span>
-              <button type="button" onClick={() => setLocale((value) => value === 'pt-BR' ? 'en-US' : 'pt-BR')}>
-                {locale === 'pt-BR' ? 'English' : 'Português'}
+            <header className="settings-drawer-head">
+              <h2>{t.settings}</h2>
+              <button type="button" className="settings-drawer-close"
+                aria-label={locale === 'pt-BR' ? 'Fechar ajustes' : 'Close settings'}
+                onClick={() => setSettingsOpen(false)}>×</button>
+            </header>
+            <div className="settings-drawer-body">
+              <fieldset>
+                <legend>{t.type}</legend>
+                <button type="button" aria-pressed={type === 'movie'} onClick={() => { setCreditStand(null); setType('movie'); }}>{t.movies}</button>
+                <button type="button" aria-pressed={type === 'series'} onClick={() => { setCreditStand(null); setType('series'); }}>{t.series}</button>
+              </fieldset>
+              <div className="language-setting">
+                <span>{locale === 'pt-BR' ? 'Idioma' : 'Language'}</span>
+                <button type="button" onClick={() => setLocale((value) => value === 'pt-BR' ? 'en-US' : 'pt-BR')}>
+                  {locale === 'pt-BR' ? 'English' : 'Português'}
+                </button>
+              </div>
+              <button type="button" className="settings-wide" onClick={() => setMediaSettingsOpen(true)}>
+                {locale === 'pt-BR' ? 'Fontes de mídia' : 'Media sources'}
               </button>
+              <button
+                type="button"
+                className="settings-wide"
+                aria-pressed={quickWatchEnabled}
+                onClick={() => setQuickWatchEnabled((enabled) => {
+                  writeQuickWatchEnabled(!enabled);
+                  return !enabled;
+                })}
+              >
+                {locale === 'pt-BR' ? 'Quick Watch automático' : 'Automatic Quick Watch'}
+              </button>
+              <TapeSettingsGroup locale={locale} />
             </div>
-            <button type="button" onClick={() => setMediaSettingsOpen(true)}>
-              {locale === 'pt-BR' ? 'Fontes de mídia' : 'Media sources'}
-            </button>
-            <button
-              type="button"
-              aria-pressed={quickWatchEnabled}
-              onClick={() => setQuickWatchEnabled((enabled) => {
-                writeQuickWatchEnabled(!enabled);
-                return !enabled;
-              })}
-            >
-              {locale === 'pt-BR' ? 'Quick Watch automático' : 'Automatic Quick Watch'}
-            </button>
-            <TapeSettingsGroup locale={locale} />
           </section>
         )}
       </header>

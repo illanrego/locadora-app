@@ -55,7 +55,9 @@ describe('native video presentation', () => {
   it('keeps settings opaque and scrollable above both shelves and gives every select a dark option palette', () => {
     expect(css).toContain('select { color-scheme: dark; }');
     expect(css).toContain('select option { color: var(--cream); background: #101a28; }');
-    expect(css).toMatch(/\.settings-drawer \{[^}]*z-index: 6;[^}]*max-height:[^}]*overflow-y: auto;[^}]*background: #203958;/);
-    expect(css).toMatch(/\.is-immersive \.settings-drawer \{[^}]*position: fixed;[^}]*z-index: 7;[^}]*overflow-y: auto;[^}]*background: #101827;/);
+    expect(css).toMatch(/\.settings-drawer \{[^}]*position: absolute;[^}]*z-index: 40;[^}]*max-height:[^}]*overflow-y: auto;[^}]*background: #16233a;[^}]*pointer-events: auto;/);
+    // One rule governs both modes: an immersive-only override was what turned
+    // the panel into a wide translucent band over the 3D shelf.
+    expect(css).not.toContain('.is-immersive .settings-drawer');
   });
 });
